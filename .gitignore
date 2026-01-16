@@ -69,3 +69,6 @@ build_output.txt
 Config.txt
 Cache.bin
 /docs/
+
+# WPF temporary files
+*_wpftmp.csproj
