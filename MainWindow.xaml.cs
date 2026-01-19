@@ -25,6 +25,7 @@ namespace LargeFolderFinder
     {
         private CancellationTokenSource? _cts;
         private FolderInfo? _lastScanResult;
+        private bool _isScanning = false; // 明示的なフラグ
         private DispatcherTimer? _memoryTimer;
 
         public MainWindow()
@@ -58,11 +59,28 @@ namespace LargeFolderFinder
         /// </summary>
         private void BrowseButton_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new OpenFolderDialog();
-            if (dialog.ShowDialog() == true)
+            // .NET 4.8 の WPF には OpenFolderDialog がないため、WinForms のダイアログを使用
+            using (var dialog = new System.Windows.Forms.FolderBrowserDialog())
             {
-                PathTextBox.Text = dialog.FolderName;
+                dialog.Description = LocalizationManager.Instance.GetText(LanguageKey.FolderLabel);
+                dialog.SelectedPath = PathTextBox.Text;
+                dialog.ShowNewFolderButton = false;
+
+                var window = Window.GetWindow(this);
+                var helper = new System.Windows.Interop.WindowInteropHelper(window);
+
+                if (dialog.ShowDialog(new Wpf32Window(helper.Handle)) == System.Windows.Forms.DialogResult.OK)
+                {
+                    PathTextBox.Text = dialog.SelectedPath;
+                }
             }
+        }
+
+        // WinForms のダイアログに WPF のウィンドウを親として渡すためのヘルパークラス
+        private class Wpf32Window : System.Windows.Forms.IWin32Window
+        {
+            public IntPtr Handle { get; }
+            public Wpf32Window(IntPtr handle) => Handle = handle;
         }
 
 
@@ -96,6 +114,7 @@ namespace LargeFolderFinder
             _hasShownProgressError = false;
 
             _cts = new CancellationTokenSource();
+            _isScanning = true;
             RunButton.IsEnabled = false;
             CancelButton.IsEnabled = true;
             OutputTextBox.Document.Blocks.Clear();
@@ -211,17 +230,11 @@ namespace LargeFolderFinder
 
                 var result = await Scanner.RunScan(PathTextBox.Text, thresholdBytes, totalFolders, config.MaxDepthForCount, config.UseParallelScan, config.UsePhysicalSize, progress, _cts.Token);
 
-                sw.Stop();
-                ScanProgressBar.Visibility = Visibility.Collapsed;
-                ScanProgressBar.IsIndeterminate = false;
-
-                string timeStr = FormatDuration(sw.Elapsed);
-                string finishedMsg = $"{lm.GetText(LanguageKey.FinishedStatus)} [{string.Format(lm.GetText(LanguageKey.ProcessingTime), timeStr)}]";
-
                 _lastScanResult = result;
-                StatusTextBlock.Text = finishedMsg;
-                string treeResult = new TextRange(OutputTextBox.Document.ContentStart, OutputTextBox.Document.ContentEnd).Text;
-                Logger.Log(string.Format(AppConstants.LogScanSuccess, timeStr) + Environment.NewLine + "Scan Result Tree:" + Environment.NewLine + treeResult);
+                sw.Stop();
+                string timeStr = FormatDuration(sw.Elapsed);
+                StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} [{string.Format(lm.GetText(LanguageKey.ProcessingTime), timeStr)}]";
+                Logger.Log(string.Format(AppConstants.LogScanSuccess, timeStr));
             }
             catch (OperationCanceledException)
             {
@@ -240,11 +253,14 @@ namespace LargeFolderFinder
             }
             finally
             {
+                _isScanning = false;
                 RunButton.IsEnabled = true;
                 CancelButton.IsEnabled = false;
                 _cts?.Dispose();
                 _cts = null;
-                RenderResult(); // キャンセル時や完了時にも確実に最新の状態で描画する
+                ScanProgressBar.Visibility = Visibility.Collapsed;
+                ScanProgressBar.IsIndeterminate = false;
+                RenderResult(); // フラグを false にした後に確実に描画
                 OptimizeMemory();
             }
         }
@@ -271,7 +287,7 @@ namespace LargeFolderFinder
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = Process.GetCurrentProcess().MainModule?.FileName ?? Environment.ProcessPath,
+                    FileName = Process.GetCurrentProcess().MainModule?.FileName,
                     UseShellExecute = true,
                     Verb = "runas"
                 };
@@ -673,7 +689,7 @@ namespace LargeFolderFinder
                 }
                 long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(selectedUnit));
 
-                bool isScanning = _cts != null;
+                bool isScanning = _isScanning && _cts != null;
 
                 var sb = new StringBuilder();
                 int maxLineLen = CalculateMaxLineLength(_lastScanResult, 0, true, true, thresholdBytes, isScanning, selectedUnit);
@@ -685,7 +701,7 @@ namespace LargeFolderFinder
                 int targetColumn = ((maxLineLen / tabWidth) + 1) * tabWidth;
                 bool useSpaces = SeparatorComboBox.SelectedIndex == 1;
 
-                PrintTreeRecursive(sb, _lastScanResult, "", true, true, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, selectedUnit);
+                PrintTreeRecursive(sb, _lastScanResult, indent: string.Empty, isLast: true, isRoot: true, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, selectedUnit);
 
                 OutputTextBox.Document.Blocks.Clear();
                 var paragraph = new Paragraph(new Run(sb.ToString()));
@@ -758,7 +774,17 @@ namespace LargeFolderFinder
         private void PrintTreeRecursive(StringBuilder sb, FolderInfo node, string indent, bool isLast, bool isRoot, int targetColumn, bool useSpaces, int tabWidth, long thresholdBytes, bool isScanning, AppConstants.SizeUnit unit)
         {
             if (node == null) return;
-            // 閾値未満は非表示
+
+            var lm = LocalizationManager.Instance;
+
+            // スキャン完了後、ルートフォルダ自体が閾値未満であれば、フォルダ名を出さずに NotFound メッセージのみを出す
+            if (isRoot && !isScanning && node.Size < thresholdBytes)
+            {
+                sb.Append(AppConstants.TreeLastBranch).AppendLine(lm.GetText(LanguageKey.NotFoundMessage));
+                return;
+            }
+
+            // ルート以外で閾値未満なら非表示
             if (!isRoot && node.Size < thresholdBytes) return;
 
             double sizeVal = (double)node.Size / AppConstants.GetBytesPerUnit(unit);
@@ -811,23 +837,20 @@ namespace LargeFolderFinder
             var visibleChildren = childrenCopy.Where(c => c.Size >= thresholdBytes).OrderBy(c => c.Name).ToList();
             for (int i = 0; i < visibleChildren.Count; i++)
             {
-                PrintTreeRecursive(sb, visibleChildren[i], childIndent, i == visibleChildren.Count - 1, false, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, unit);
+                PrintTreeRecursive(sb, visibleChildren[i], childIndent, isLast: i == visibleChildren.Count - 1, isRoot: false, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, unit);
             }
 
             if (isRoot)
             {
                 if (isScanning)
                 {
-                    // スキャン中メッセージを表示
-                    sb.AppendLine();
-                    string liveMsg = string.Format(LocalizationManager.Instance.GetText(LanguageKey.LiveScanningMessage), unit.ToString());
-                    sb.AppendLine(liveMsg);
+                    // スキャン中
+                    sb.AppendLine().AppendLine(string.Format(lm.GetText(LanguageKey.LiveScanningMessage), unit));
                 }
                 else if (visibleChildren.Count == 0)
                 {
-                    // スキャン完了後かつ該当なしの場合（見えている子が0件）のみ表示
-                    sb.Append(AppConstants.TreeLastBranch);
-                    sb.AppendLine(LocalizationManager.Instance.GetText(LanguageKey.NotFoundMessage));
+                    // スキャン完了しており、且つ表示すべき子フォルダが1つもない場合
+                    sb.Append(AppConstants.TreeLastBranch).AppendLine(lm.GetText(LanguageKey.NotFoundMessage));
                 }
             }
         }

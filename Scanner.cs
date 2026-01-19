@@ -92,10 +92,10 @@ namespace LargeFolderFinder
 
                 ScanRecursiveInternal(dir, thresholdBytes, totalFolders, 0, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, rootNode);
 
-                // 最終的に閾値未満の枝を剪定(表示上だけでなく実データとしても整理)
+                // 最終的に閾値未満の枝を剪定
                 PruneTree(rootNode, thresholdBytes);
 
-                return rootNode.Size >= thresholdBytes ? rootNode : null;
+                return rootNode; // 閾値に関わらずルートノードを返す
             }, token);
         }
 
