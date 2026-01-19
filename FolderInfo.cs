@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
 using YamlDotNet.Serialization;
 
 namespace LargeFolderFinder
@@ -20,7 +19,6 @@ namespace LargeFolderFinder
 
         public List<FolderInfo> Children { get; set; } = new List<FolderInfo>();
 
-        [JsonIgnore]
         [YamlIgnore]
         public FolderInfo? Parent { get; set; }
 

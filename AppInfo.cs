@@ -10,21 +10,27 @@ namespace LargeFolderFinder
         {
             get
             {
-                var title = Assembly.GetExecutingAssembly()
-                    .GetCustomAttribute<AssemblyTitleAttribute>()?
-                    .Title;
-                return !string.IsNullOrEmpty(title) ? title : "Large Folder Finder";
+                var titleAttr = (AssemblyTitleAttribute?)System.Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyTitleAttribute));
+                return titleAttr?.Title ?? "Large Folder Finder";
             }
         }
 
-        public static string Version =>
-            Assembly.GetExecutingAssembly()
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-                .InformationalVersion ?? "1.0.0";
+        public static string Version
+        {
+            get
+            {
+                var versionAttr = (AssemblyInformationalVersionAttribute?)System.Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyInformationalVersionAttribute));
+                return versionAttr?.InformationalVersion ?? "1.0.0";
+            }
+        }
 
-        public static string Copyright =>
-            Assembly.GetExecutingAssembly()
-                .GetCustomAttribute<AssemblyCopyrightAttribute>()?
-                .Copyright ?? "Copyright (C) 2026";
+        public static string Copyright
+        {
+            get
+            {
+                var copyrightAttr = (AssemblyCopyrightAttribute?)System.Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyCopyrightAttribute));
+                return copyrightAttr?.Copyright ?? "Copyright (C) 2026 Ryoma Henzan / Cat & Chocolate Laboratory";
+            }
+        }
     }
 }
