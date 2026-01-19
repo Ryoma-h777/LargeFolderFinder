@@ -7,10 +7,11 @@ using System.Windows.Media;
 using System.Windows.Documents;
 using System.Globalization;
 using System.Windows.Controls;
-using System.Text.Json;
 using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
 using YamlDotNet.Serialization;
@@ -218,10 +219,6 @@ namespace LargeFolderFinder
                 string finishedMsg = $"{lm.GetText(LanguageKey.FinishedStatus)} [{string.Format(lm.GetText(LanguageKey.ProcessingTime), timeStr)}]";
 
                 _lastScanResult = result;
-                _cts?.Dispose();
-                _cts = null;
-
-                RenderResult();
                 StatusTextBlock.Text = finishedMsg;
                 string treeResult = new TextRange(OutputTextBox.Document.ContentStart, OutputTextBox.Document.ContentEnd).Text;
                 Logger.Log(string.Format(AppConstants.LogScanSuccess, timeStr) + Environment.NewLine + "Scan Result Tree:" + Environment.NewLine + treeResult);
@@ -247,7 +244,8 @@ namespace LargeFolderFinder
                 CancelButton.IsEnabled = false;
                 _cts?.Dispose();
                 _cts = null;
-                OptimizeMemory(); // Added
+                RenderResult(); // キャンセル時や完了時にも確実に最新の状態で描画する
+                OptimizeMemory();
             }
         }
 
@@ -827,7 +825,7 @@ namespace LargeFolderFinder
                 }
                 else if (visibleChildren.Count == 0)
                 {
-                    // スキャン完了後かつ該当なしの場合のみ表示
+                    // スキャン完了後かつ該当なしの場合（見えている子が0件）のみ表示
                     sb.Append(AppConstants.TreeLastBranch);
                     sb.AppendLine(LocalizationManager.Instance.GetText(LanguageKey.NotFoundMessage));
                 }
