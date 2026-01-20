@@ -1,30 +1,57 @@
 ﻿Title: "Large Folder Finder"
-### Header (Menu) ###
+####### Header (Menu) #######
+## File
 MenuFile: "ファイル(_F)"
 MenuOpenConfig: "高度な設定を開く(_S)"
 MenuOpenLogSub: "ログを開く(_O)"
 MenuRestartAdmin: "管理者として開き直す(_A)"
 MenuExit: "終了(_X)"
+# Help
 MenuHelp: "ヘルプ(_H)"
 MenuOpenReadme: "Readme を開く(_R)"
-MenuAbout: "バージョン情報(_A)"
 MenuLicense: "ライセンス(_L)"
 MenuAppLicense: "アプリのライセンス(_A)"
+MenuAbout: "バージョン情報(_A)"
 
-### Body (ScanSettings) ###
+# Viewer (Log, Readme, License)
+ViewerCopy: "コピー"
+ViewerOpenFolder: "フォルダを開く"
+ViewerClose: "閉じる"
+# Version Modal
+AboutTitle: "バージョン情報"
+AboutMessage: "{0}\nVersion {1}\n{2}\n\n巨大なフォルダを素早く見つけるためのツールです。"
+DialogInfo: "情報"
+
+####### Scan Settings #######
+## Line 1 (Folder Browser)
 FolderLabel: "フォルダ:"
 BrowseButton: "..."
+## Line 2
+# Scan
 SearchSizeLabel: "検索サイズ: ({0})"
 SearchSizeToolTip: "このサイズ以上（またはこれと同等）のフォルダを抽出して一覧表示します。0を指定可能ですが、サイズが小さいほどスキャンに時間がかかります。"
+# FolderName<---Space--->Size
 SeparatorLabel: "空白:"
 SeparatorToolTip: "フォルダ名とサイズ({0})間のスペースを指定します。"
+# Scan Button
 ScanButton: "Scan"
 CancelButton: "Cancel"
 CancelToolTip: "キャンセルします。できないときはXボタンを押してください。"
+# Advance Setting Button
 OpenConfigToolTip: "高度な設定 (Config.txt) を開く"
+# Clipboard Copy Button
 CopyToolTip: "結果をクリップボードにコピー"
 
-### Footer (Status & Progress) ###
+## Line 3
+# Sort
+SortLabel: "ソート:"
+TargetSize: "サイズ"
+TargetName: "名前"
+TargetDate: "更新日時"
+DirectionAsc: "昇順"
+DirectionDesc: "降順"
+
+####### Footer (Status & Progress) #######
 ReadyStatus: "準備完了"
 ScanningStatus: "スキャン中..."
 CancelledStatus: "キャンセルされました"
@@ -32,6 +59,7 @@ FinishedStatus: "完了"
 NotFoundMessage: "該当するフォルダは見つかりませんでした。"
 CopyNotification: "コピーしました！"
 FolderCountStatus: "フォルダ数を確認中..."
+# time
 RemainingTimeH: "残り約{0}{1}{2}{3}"
 RemainingTimeM: "残り約{0}{1}{2}{3}"
 RemainingTimeS: "残り約{0}{1}"
@@ -42,12 +70,10 @@ UnitMinute: "分"
 UnitSecond: "秒"
 UnitMillisecond: "ミリ秒"
 UnitElapsed: "経過"
-Unknown: "不明"
+
+Unknown: "不明" # 進捗率表示用: 総数を把握していない時に表示されます。
 LabelError: "エラー: "
 UnitFolder: " フォルダ"
-AboutTitle: "バージョン情報"
-AboutMessage: "{0}\nVersion {1}\n{2}\n\n巨大なフォルダを素早く見つけるためのツールです。"
-DialogInfo: "情報"
 
 DetailLabel: "詳細:"
 LiveScanningMessage: "スキャン中…… サイズ({0})は途中結果を表示しています。"
@@ -57,7 +83,7 @@ ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0}{1}"
 TimeStatusFormat: "{0} {1}"
 
-### Error Messages ###
+####### Error Messages #######
 ConfigError: "設定ファイルを開けませんでした: "
 ReadmeError: "Readme.txt を開けませんでした: "
 ReadmeNotFound: "Readme.txt が見つかりませんでした。"
@@ -70,6 +96,3 @@ RenderErrorLabel: "描画処理エラー:"
 DebugInfoTitle: "デバッグ情報"
 MenuThirdPartyLicenses: "サードパーティライセンス(_T)"
 LicenseNotFoundError: "ライセンスファイル ({0}) が見つかりません。"
-ViewerCopy: "コピー"
-ViewerOpenFolder: "フォルダを開く"
-ViewerClose: "閉じる"

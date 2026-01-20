@@ -23,6 +23,9 @@ namespace LargeFolderFinder
         public int SeparatorIndex { get; set; } = 1; // 1: Space (デフォルト)
         public int TabWidth { get; set; } = 8;
         public AppConstants.SizeUnit Unit { get; set; } = AppConstants.SizeUnit.GB;
+        public bool IncludeFiles { get; set; } = false;
+        public AppConstants.SortTarget SortTarget { get; set; } = AppConstants.SortTarget.Size;
+        public AppConstants.SortDirection SortDirection { get; set; } = AppConstants.SortDirection.Descending;
 
         /// <summary>
         /// 設定ファイルのパスを取得

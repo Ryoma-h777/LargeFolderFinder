@@ -1,30 +1,57 @@
 ﻿Title: "Localizador de Pastas Grandes (Large Folder Finder)"
-### Header (Menu) ###
+####### Header (Menu) #######
+## File
 MenuFile: "Arquivo(_F)"
 MenuOpenConfig: "Abrir configurações avançadas(_S)"
 MenuOpenLogSub: "Abrir logs(_O)"
 MenuRestartAdmin: "Reiniciar como administrador(_A)"
 MenuExit: "Sair(_X)"
+# Help
 MenuHelp: "Ajuda(_H)"
 MenuOpenReadme: "Abrir Readme(_R)"
-MenuAbout: "Sobre(_A)"
 MenuLicense: "Licença(_L)"
 MenuAppLicense: "Licença do aplicativo(_A)"
+MenuAbout: "Sobre(_A)"
 
-### Body (ScanSettings) ###
+# Viewer (Log, Readme, License)
+ViewerCopy: "Copiar"
+ViewerOpenFolder: "Abrir pasta"
+ViewerClose: "Fechar"
+# Version Modal
+AboutTitle: "Sobre"
+AboutMessage: "{0}\nVersão {1}\n{2}\n\nUma ferramenta para encontrar rapidamente pastas grandes."
+DialogInfo: "Informação"
+
+####### Scan Settings #######
+## Line 1 (Folder Browser)
 FolderLabel: "Pasta:"
 BrowseButton: "..."
+## Line 2
+# Scan
 SearchSizeLabel: "Tamanho da pesquisa: ({0})"
 SearchSizeToolTip: "Extrai e lista as pastas maiores que este tamanho. 0 pode ser especificado, mas quanto menor o tamanho, mais demorada será a varredura."
+# FolderName<---Space--->Size
 SeparatorLabel: "Separador:"
 SeparatorToolTip: "Especifica o espaço entre o nome da pasta e o tamanho ({0})."
+# Scan Button
 ScanButton: "Escanear"
 CancelButton: "Cancelar"
 CancelToolTip: "Cancela. Se não funcionar, pressione o botão X."
+# Advance Setting Button
 OpenConfigToolTip: "Abrir configurações avançadas (Config.txt)"
-CopyToolTip: "Copiar resultados para a área de transferência"
+# Clipboard Copy Button
+CopyToolTip: "Copiar para a área de transferência"
 
-### Footer (Status & Progress) ###
+## Line 3
+# Sort
+SortLabel: "Ordenar:"
+TargetSize: "Tamanho"
+TargetName: "Nome"
+TargetDate: "Data"
+DirectionAsc: "Crescente"
+DirectionDesc: "Decrescente"
+
+####### Footer (Status & Progress) #######
 ReadyStatus: "Pronto"
 ScanningStatus: "Escaneando..."
 CancelledStatus: "Cancelado"
@@ -32,6 +59,7 @@ FinishedStatus: "Finalizado"
 NotFoundMessage: "Nenhuma pasta correspondente encontrada."
 CopyNotification: "Copiado!"
 FolderCountStatus: "Verificando o número de pastas..."
+# time
 RemainingTimeH: "Faltam cerca de {0}{1} {2}{3}"
 RemainingTimeM: "Faltam cerca de {0}{1} {2}{3}"
 RemainingTimeS: "Faltam cerca de {0}{1}"
@@ -42,12 +70,10 @@ UnitMinute: "m"
 UnitSecond: "s"
 UnitMillisecond: "ms"
 UnitElapsed: "decorrido"
-Unknown: "Desconhecido"
+
+Unknown: "Desconhecido" # Barra de progresso: exibido quando o total é desconhecido.
 LabelError: "Erro: "
 UnitFolder: " pastas"
-AboutTitle: "Sobre"
-AboutMessage: "{0}\nVersão {1}\n{2}\n\nUma ferramenta para encontrar rapidamente pastas grandes."
-DialogInfo: "Informação"
 
 DetailLabel: "Detalhes:"
 LiveScanningMessage: "Escaneando... O tamanho ({0}) mostra resultados intermediários."
@@ -57,7 +83,7 @@ ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} decorrido"
 
-### Error Messages ###
+####### Error Messages #######
 ConfigError: "Não foi possível abrir o arquivo de configuração: "
 ReadmeError: "Não foi possível abrir o Readme: "
 ReadmeNotFound: "Readme.txt não encontrado."
@@ -70,6 +96,3 @@ RenderErrorLabel: "Erro de renderização:"
 DebugInfoTitle: "Informações de depuração"
 MenuThirdPartyLicenses: "Licenças de Terceiros(_T)"
 LicenseNotFoundError: "Arquivo de licença ({0}) não encontrado."
-ViewerCopy: "Copiar"
-ViewerOpenFolder: "Abrir pasta"
-ViewerClose: "Fechar"

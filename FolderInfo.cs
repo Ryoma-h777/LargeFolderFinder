@@ -10,6 +10,10 @@ namespace LargeFolderFinder
     {
         public string Name { get; set; }
 
+        public bool IsFile { get; set; } = false;
+
+        public System.DateTime LastModified { get; set; }
+
         private long _size;
         public long Size
         {
@@ -22,10 +26,12 @@ namespace LargeFolderFinder
         [YamlIgnore]
         public FolderInfo? Parent { get; set; }
 
-        public FolderInfo(string name, long size)
+        public FolderInfo(string name, long size, bool isFile = false, System.DateTime? lastModified = null)
         {
             Name = name;
             _size = size;
+            IsFile = isFile;
+            LastModified = lastModified ?? System.DateTime.MinValue;
         }
 
         /// <summary>

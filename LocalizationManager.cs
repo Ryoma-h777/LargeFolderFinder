@@ -85,7 +85,13 @@ namespace LargeFolderFinder
         LicenseNotFoundError,
         ViewerCopy,
         ViewerOpenFolder,
-        ViewerClose
+        ViewerClose,
+        SortLabel,
+        TargetSize,
+        TargetName,
+        TargetDate,
+        DirectionAsc,
+        DirectionDesc
     }
 
     /// <summary>

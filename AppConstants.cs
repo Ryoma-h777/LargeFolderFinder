@@ -41,6 +41,18 @@ namespace LargeFolderFinder
             TB
         }
 
+        public enum SortTarget
+        {
+            Size,
+            Name,
+            Date
+        }
+        public enum SortDirection
+        {
+            Ascending,
+            Descending
+        }
+
         public static long GetBytesPerUnit(SizeUnit unit)
         {
             return unit switch

@@ -1,30 +1,57 @@
 ﻿Title: "Large Folder Finder"
-### Header (Menu) ###
+####### Header (Menu) #######
+## File
 MenuFile: "Файл(_F)"
 MenuOpenConfig: "Открыть расширенные настройки(_S)"
 MenuOpenLogSub: "Открыть журналы(_O)"
 MenuRestartAdmin: "Перезапустить от имени администратора(_A)"
 MenuExit: "Выход(_X)"
+# Help
 MenuHelp: "Справка(_H)"
 MenuOpenReadme: "Открыть Readme(_R)"
-MenuAbout: "О программе(_A)"
 MenuLicense: "Лицензия(_L)"
 MenuAppLicense: "Лицензия приложения(_A)"
+MenuAbout: "О программе(_A)"
 
-### Body (ScanSettings) ###
+# Viewer (Log, Readme, License)
+ViewerCopy: "Копировать"
+ViewerOpenFolder: "Открыть папку"
+ViewerClose: "Закрыть"
+# Version Modal
+AboutTitle: "О программе"
+AboutMessage: "{0}\nВерсия {1}\n{2}\n\nИнструмент для быстрого поиска больших папок."
+DialogInfo: "Информация"
+
+####### Scan Settings #######
+## Line 1 (Folder Browser)
 FolderLabel: "Папка:"
 BrowseButton: "..."
+## Line 2
+# Scan
 SearchSizeLabel: "Размер поиска: ({0})"
 SearchSizeToolTip: "Извлекает и перечисляет папки больше этого размера. Можно указать 0, но чем меньше размер, тем дольше длится сканирование."
+# FolderName<---Space--->Size
 SeparatorLabel: "Разделитель:"
 SeparatorToolTip: "Указывает пробел между именем папки и размером (ГБ)."
+# Scan Button
 ScanButton: "Сканировать"
 CancelButton: "Отмена"
 CancelToolTip: "Отмена. Если не работает, нажмите кнопку X."
+# Advance Setting Button
 OpenConfigToolTip: "Открыть расширенные настройки (Config.txt)"
+# Clipboard Copy Button
 CopyToolTip: "Копировать результаты в буфер обмена"
 
-### Footer (Status & Progress) ###
+## Line 3
+# Sort
+SortLabel: "Сортировка:"
+TargetSize: "Размер"
+TargetName: "Имя"
+TargetDate: "Дата изменения"
+DirectionAsc: "По возрастанию"
+DirectionDesc: "По убыванию"
+
+####### Footer (Status & Progress) #######
 ReadyStatus: "Готово"
 ScanningStatus: "Сканирование..."
 CancelledStatus: "Отменено"
@@ -32,6 +59,7 @@ FinishedStatus: "Завершено"
 NotFoundMessage: "Совпадающие папки не найдены."
 CopyNotification: "Скопировано!"
 FolderCountStatus: "Проверка количества папок..."
+# time
 RemainingTimeH: "Осталось около {0}{1} {2}{3}"
 RemainingTimeM: "Осталось около {0}{1} {2}{3}"
 RemainingTimeS: "Осталось около {0}{1}"
@@ -42,12 +70,10 @@ UnitMinute: "м"
 UnitSecond: "с"
 UnitMillisecond: "мс"
 UnitElapsed: "прошло"
-Unknown: "Неизвестно"
+
+Unknown: "Неизвестно" # Шкала прогресса: отображается, когда общее количество неизвестно.
 LabelError: "Ошибка: "
 UnitFolder: " папок"
-AboutTitle: "О программе"
-AboutMessage: "{0}\nВерсия {1}\n{2}\n\nИнструмент для быстрого поиска больших папок."
-DialogInfo: "Информация"
 
 DetailLabel: "Подробности:"
 LiveScanningMessage: "Сканирование... Размер (ГБ) показывает промежуточные результаты."
@@ -57,7 +83,7 @@ ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} прошло"
 
-### Error Messages ###
+####### Error Messages #######
 ConfigError: "Не удалось открыть файл конфигурации: "
 ReadmeError: "Не удалось открыть Readme: "
 ReadmeNotFound: "Readme.txt не найден."
@@ -70,6 +96,3 @@ RenderErrorLabel: "Ошибка отображения"
 DebugInfoTitle: "Отладочная информация"
 MenuThirdPartyLicenses: "Лицензии третьих лиц(_T)"
 LicenseNotFoundError: "Файл лицензии ({0}) не найден."
-ViewerCopy: "Копировать"
-ViewerOpenFolder: "Открыть папку"
-ViewerClose: "Закрыть"

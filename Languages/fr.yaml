@@ -1,28 +1,57 @@
 ﻿Title: "Large Folder Finder"
-### Header (Menu) ###
+####### Header (Menu) #######
+## File
 MenuFile: "Fichier(_F)"
 MenuOpenConfig: "Ouvrir les paramètres avancés(_S)"
 MenuOpenLogSub: "Ouvrir les journaux(_O)"
 MenuRestartAdmin: "Redémarrer en tant qu'administrateur(_A)"
 MenuExit: "Quitter(_X)"
+# Help
 MenuHelp: "Aide(_H)"
 MenuOpenReadme: "Lire le Readme(_R)"
-MenuAbout: "À propos(_A)"
 MenuLicense: "Licence(_L)"
 MenuAppLicense: "Licence de l'application(_A)"
+MenuAbout: "À propos(_A)"
 
-### Body (ScanSettings) ###
+# Viewer (Log, Readme, License)
+ViewerCopy: "Copier"
+ViewerOpenFolder: "Ouvrir le dossier"
+ViewerClose: "Fermer"
+# Version Modal
+AboutTitle: "À propos"
+AboutMessage: "{0}\nVersion {1}\n{2}\n\nUn outil pour trouver rapidement les dossiers volumineux."
+DialogInfo: "Information"
+
+####### Scan Settings #######
+## Line 1 (Folder Browser)
 FolderLabel: "Dossier :"
 BrowseButton: "..."
+## Line 2
+# Scan
 SearchSizeLabel: "Taille de recherche : ({0})"
 SearchSizeToolTip: "Extrait et liste les dossiers plus grands que cette taille. 0 peut être spécifié, mais plus la taille est petite, plus l'analyse est longue."
+# FolderName<---Space--->Size
 SeparatorLabel: "Séparateur :"
+SeparatorToolTip: "Spécifie l'espace entre le nom du dossier et la taille ({0})."
+# Scan Button
+ScanButton: "Scan"
 CancelButton: "Annuler"
 CancelToolTip: "Annuler. Si cela ne fonctionne pas, appuyez sur le bouton X."
+# Advance Setting Button
 OpenConfigToolTip: "Ouvrir les paramètres avancés (Config.txt)"
-CopyToolTip: "Copier les résultats dans le presse-papier"
+# Clipboard Copy Button
+CopyToolTip: "Copier dans le presse-papiers"
 
-### Footer (Status & Progress) ###
+## Line 3
+# Sort
+SortLabel: "Trier par :"
+TargetSize: "Taille"
+TargetName: "Nom"
+TargetDate: "Date"
+DirectionAsc: "Croissant"
+DirectionDesc: "Décroissant"
+
+####### Footer (Status & Progress) #######
 ReadyStatus: "Prêt"
 ScanningStatus: "Analyse en cours..."
 CancelledStatus: "Annulé"
@@ -30,6 +59,7 @@ FinishedStatus: "Terminé"
 NotFoundMessage: "Aucun dossier correspondant trouvé."
 CopyNotification: "Copié !"
 FolderCountStatus: "Vérification du nombre de dossiers..."
+# time
 RemainingTimeH: "Environ {0}{1} {2}{3} restant"
 RemainingTimeM: "Environ {0}{1} {2}{3} restant"
 RemainingTimeS: "Environ {0}{1} restant"
@@ -40,22 +70,20 @@ UnitMinute: "m"
 UnitSecond: "s"
 UnitMillisecond: "ms"
 UnitElapsed: "écoulé"
-Unknown: "Inconnu"
+
+Unknown: "Inconnu" # Barre de progression : affiché quand le total est inconnu.
 LabelError: "Erreur : "
 UnitFolder: " dossiers"
-AboutTitle: "À propos"
-AboutMessage: "{0}\nVersion {1}\n{2}\n\nUn outil pour trouver rapidement les dossiers volumineux."
-DialogInfo: "Information"
 
 DetailLabel: "Détails :"
-LiveScanningMessage: "Analyse en cours... La taille (Go) affiche des résultats intermédiaaires."
+LiveScanningMessage: "Analyse en cours... La taille (Go) affiche des résultats intermédiaires."
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} écoulé"
 
-### Error Messages ###
+####### Error Messages #######
 ConfigError: "Impossible d'ouvrir le fichier de configuration : "
 ReadmeError: "Impossible d'ouvrir le Readme : "
 ReadmeNotFound: "Readme.txt introuvable."
@@ -68,6 +96,3 @@ RenderErrorLabel: "Erreur de rendu"
 DebugInfoTitle: "Info débogage"
 MenuThirdPartyLicenses: "Licences tierces(_T)"
 LicenseNotFoundError: "Fichier de licence ({0}) introuvable."
-ViewerCopy: "Copier"
-ViewerOpenFolder: "Ouvrir le dossier"
-ViewerClose: "Fermer"

@@ -88,7 +88,7 @@ namespace LargeFolderFinder
             {
                 var dir = new DirectoryInfo(path);
                 // ルートノードを先行作成
-                var rootNode = new FolderInfo(dir.FullName, 0);
+                var rootNode = new FolderInfo(dir.FullName, 0, false, dir.LastWriteTime);
                 progressCounter.RootNode = rootNode;
 
                 ScanRecursiveInternal(dir, thresholdBytes, totalFolders, 0, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, rootNode);
@@ -151,6 +151,13 @@ namespace LargeFolderFinder
                     }
 
                     myFilesSize += size;
+
+                    // ファイルのサイズが閾値以上ならノードとして追加（表示するかはUI側で制御）
+                    if (size >= thresholdBytes)
+                    {
+                        var fileNode = new FolderInfo(f.Name, size, true, f.LastWriteTime) { Parent = currentNode };
+                        lock (currentNode.Children) { currentNode.Children.Add(fileNode); }
+                    }
                 }
             }
             catch { /* アクセス拒否は無視 */ }
@@ -168,7 +175,7 @@ namespace LargeFolderFinder
                 {
                     Parallel.ForEach(directories, new ParallelOptions { CancellationToken = token }, (subDir) =>
                     {
-                        var childNode = new FolderInfo(subDir.Name, 0) { Parent = currentNode };
+                        var childNode = new FolderInfo(subDir.Name, 0, false, subDir.LastWriteTime) { Parent = currentNode };
                         lock (currentNode.Children) { currentNode.Children.Add(childNode); }
 
                         ScanRecursiveInternal(subDir, thresholdBytes, totalFolders, currentDepth + 1, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, childNode);
@@ -178,7 +185,7 @@ namespace LargeFolderFinder
                 {
                     foreach (var subDir in directories)
                     {
-                        var childNode = new FolderInfo(subDir.Name, 0) { Parent = currentNode };
+                        var childNode = new FolderInfo(subDir.Name, 0, false, subDir.LastWriteTime) { Parent = currentNode };
                         lock (currentNode.Children) { currentNode.Children.Add(childNode); }
 
                         ScanRecursiveInternal(subDir, thresholdBytes, totalFolders, currentDepth + 1, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, childNode);
