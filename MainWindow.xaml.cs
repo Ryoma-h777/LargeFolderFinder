@@ -367,13 +367,13 @@ namespace LargeFolderFinder
             }
         }
 
-        private void MenuThirdPartyLicenses_Click(object sender, RoutedEventArgs e)
+        private void MenuAppLicense_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 var lm = LocalizationManager.Instance;
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string licensePath = Path.Combine(baseDir, AppConstants.ThirdPartyNoticesFileName);
+                string licensePath = Path.Combine(baseDir, AppConstants.LicenseDirectoryName, AppConstants.AppLicenseFileName);
 
                 if (File.Exists(licensePath))
                 {
@@ -381,7 +381,32 @@ namespace LargeFolderFinder
                 }
                 else
                 {
-                    MessageBox.Show(lm.GetText(LanguageKey.ReadmeNotFound), lm.GetText(LanguageKey.DialogInfo), MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(lm.GetText(LanguageKey.LicenseNotFoundError), lm.GetText(LanguageKey.DialogInfo), MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                var lm = LocalizationManager.Instance;
+                Logger.Log("Failed to open App License.", ex);
+                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void MenuThirdPartyLicenses_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var lm = LocalizationManager.Instance;
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string licensePath = Path.Combine(baseDir, AppConstants.LicenseDirectoryName, AppConstants.ThirdPartyNoticesFileName);
+
+                if (File.Exists(licensePath))
+                {
+                    Process.Start(new ProcessStartInfo(licensePath) { UseShellExecute = true });
+                }
+                else
+                {
+                    MessageBox.Show(lm.GetText(LanguageKey.LicenseNotFoundError), lm.GetText(LanguageKey.DialogInfo), MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
             catch (Exception ex)
@@ -609,6 +634,8 @@ namespace LargeFolderFinder
 
                 MenuHelp.Header = lm.GetText(LanguageKey.MenuHelp);
                 MenuOpenReadme.Header = lm.GetText(LanguageKey.MenuOpenReadme);
+                MenuLicense.Header = lm.GetText(LanguageKey.MenuLicense);
+                MenuAppLicense.Header = lm.GetText(LanguageKey.MenuAppLicense);
                 MenuThirdPartyLicenses.Header = lm.GetText(LanguageKey.MenuThirdPartyLicenses);
                 MenuAbout.Header = lm.GetText(LanguageKey.MenuAbout);
 

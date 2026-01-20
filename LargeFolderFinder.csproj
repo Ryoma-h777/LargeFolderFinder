@@ -29,7 +29,7 @@
 
   <ItemGroup>
 
-    <Content Include="ThirdPartyNotices.txt">
+    <Content Include="License\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
