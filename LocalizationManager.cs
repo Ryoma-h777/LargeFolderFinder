@@ -62,7 +62,6 @@ namespace LargeFolderFinder
         AboutTitle,
         AboutMessage,
         DialogInfo,
-        DialogError,
         DetailLabel,
         LiveScanningMessage,
         ScanningProgressFormat,
@@ -83,7 +82,10 @@ namespace LargeFolderFinder
         RenderErrorLabel,
         DebugInfoTitle,
         MenuThirdPartyLicenses,
-        LicenseNotFoundError
+        LicenseNotFoundError,
+        ViewerCopy,
+        ViewerOpenFolder,
+        ViewerClose
     }
 
     /// <summary>

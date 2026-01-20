@@ -19,10 +19,10 @@ UI上の「⚙」ボタンをクリックすることで、メモ帳などのテ
 設定方法はYaml形式に則り行ってください。独自でコメントを記載したい場合は、#を先頭につけてください。
 
     ▽設定可能な項目：(既定値)
-    UseParallelScan: false
+    UseParallelScan: true
         型：bool (true/false)
         説明：並列処理の有効化
-        想定値 (false): HDD(NAS)は回転する都合上並列に弱いため false に設定。SSDのみ true 推奨。
+        想定値 (true): NAS（ネットワークストレージ）で効果を発揮します。ローカルSSDは高速なため、並列化のオーバーヘッドの方が大きい場合があります。
 
     SkipFolderCount: false
         型：bool (true/false)

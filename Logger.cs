@@ -37,6 +37,8 @@ namespace LargeFolderFinder
             }
         }
 
+        public static string CurrentLogFilePath => _logFilePath;
+
         private static void CleanupOldLogs(string logsDir)
         {
             try
@@ -86,12 +88,16 @@ namespace LargeFolderFinder
                 {
                     File.AppendAllText(_logFilePath, logEntry + Environment.NewLine);
                 }
+
+                LogWritten?.Invoke();
             }
             catch
             {
                 // 無視
             }
         }
+
+        public static event Action? LogWritten;
 
         /// <summary>
         /// 現在のログファイルを開きます（DEBUG ビルド時のみ）
@@ -111,22 +117,6 @@ namespace LargeFolderFinder
                 // 無視
             }
         }
-        /// <summary>
-        /// 指定されたパスのログファイルを開きます
-        /// </summary>
-        public static void OpenSpecificLogFile(string path)
-        {
-            try
-            {
-                if (File.Exists(path))
-                {
-                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-                }
-            }
-            catch
-            {
-                // 無視
-            }
-        }
+
     }
 }

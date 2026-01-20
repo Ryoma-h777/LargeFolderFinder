@@ -19,10 +19,10 @@ Click the "⚙" button on the UI to open it immediately with a text editor like 
 Configuration must follow the YAML format. If you want to add your own comments, prefix them with #.
 
     ▽ Configurable items: (Default)
-    UseParallelScan: false
+    UseParallelScan: true
         Type: bool (true/false)
         Description: Enable parallel scanning.
-        Context (false): HDD (and NAS) are physically rotating and weak with parallel access, so set to false. Recommended "true" only for SSDs.
+        Context (true): Effective for NAS (network storage) etc. Since local SSDs are fast, the overhead of parallelization might be larger.
 
     SkipFolderCount: false
         Type: bool (true/false)

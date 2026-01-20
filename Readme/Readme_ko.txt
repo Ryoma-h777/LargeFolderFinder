@@ -19,10 +19,10 @@ UI 상의 "⚙" 버튼을 클릭하면 메모장 등의 텍스트 에디터로 �
 설정 방식은 Yaml 형식을 따라야 합니다. 직접 코멘트를 작성하고 싶은 경우, 행 앞에 #을 붙여주세요.
 
     ▽ 설정 가능한 항목: (기본값)
-    UseParallelScan: false
+    UseParallelScan: true
         형식: bool (true/false)
         설명: 병렬 스캔 활성화 여부
-        상세 (false): HDD(및 NAS)는 물리적으로 회전하는 구조상 병렬 액세스에 취약하므로 false로 설정합니다. SSD 사용 시에만 true를 권장합니다.
+        상세 (true): NAS(네트워크 스토리지) 등에서 효과를 발휘합니다. 로컬 SSD는 고속이기 때문에 병렬화의 오버헤드가 더 클 수 있습니다.
 
     SkipFolderCount: false
         형식: bool (true/false)
