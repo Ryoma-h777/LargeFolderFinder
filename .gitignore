@@ -65,8 +65,10 @@ build_err.txt
 build_errors.txt
 build_log.txt
 build_log_ascii.txt
+build_log_utf8.txt
 build_output.txt
-Config.txt
+build_result*.txt
+msbuild.log
 Cache.bin
 /docs/
 
