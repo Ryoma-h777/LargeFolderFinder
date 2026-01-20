@@ -32,8 +32,8 @@ namespace LargeFolderFinder
         {
             try
             {
-                InitializeComponent();
                 Logger.Log(AppConstants.LogAppStarted);
+                InitializeComponent();
                 InitializeLocalization();
                 LoadCache();
                 UpdateLanguageMenu();
@@ -81,7 +81,7 @@ namespace LargeFolderFinder
             catch (Exception ex)
             {
                 Logger.Log("Error in BrowseButton_Click with Ookii.Dialogs", ex);
-                MessageBox.Show($"{LocalizationManager.Instance.GetText(LanguageKey.DialogError)}\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"{LocalizationManager.Instance.GetText(LanguageKey.LabelError)}\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -91,16 +91,17 @@ namespace LargeFolderFinder
         /// </summary>
         private async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_isScanning) return;
             var lm = LocalizationManager.Instance;
 
             if (string.IsNullOrWhiteSpace(PathTextBox.Text) || !System.IO.Directory.Exists(PathTextBox.Text))
             {
-                MessageBox.Show(lm.GetText(LanguageKey.PathInvalidError), lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(lm.GetText(LanguageKey.PathInvalidError), lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
             if (!double.TryParse(ThresholdTextBox.Text, out double thresholdVal))
             {
-                MessageBox.Show(lm.GetText(LanguageKey.ThresholdInvalidError), lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(lm.GetText(LanguageKey.ThresholdInvalidError), lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
@@ -282,41 +283,18 @@ namespace LargeFolderFinder
             OpenConfigButton_Click(sender, e);
         }
 
-        private void MenuExit_Click(object sender, RoutedEventArgs e)
+        private void Input_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            Logger.Log(AppConstants.LogAppExited);
-            Application.Current.Shutdown();
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                // Move focus to avoid validation issues or ensure binding updates if any
+                // FocusManager.SetFocusedElement(this, RunButton); 
+                // However, directly clicking is usually fine.
+                ScanButton_Click(sender, e);
+            }
         }
 
-        private void MenuRestartAdmin_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = Process.GetCurrentProcess().MainModule?.FileName,
-                    UseShellExecute = true,
-                    Verb = "runas"
-                };
 
-                if (psi.FileName != null)
-                {
-                    Process.Start(psi);
-                    Application.Current.Shutdown();
-                }
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                // ユーザーがキャンセルした場合などはここに来る
-                // 何もしない
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Failed to restart as admin", ex);
-                var lm = LocalizationManager.Instance;
-                MessageBox.Show($"{lm.GetText(LanguageKey.LabelError)}{ex.Message}", lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
 
         public static bool IsAdministrator()
         {
@@ -352,18 +330,21 @@ namespace LargeFolderFinder
 
                 if (selectedPath != null)
                 {
-                    Process.Start(new ProcessStartInfo(selectedPath) { UseShellExecute = true });
+                    // Process.Start replaced with TextViewer
+                    Logger.Log($"Opened Readme: {Path.GetFileName(selectedPath)}");
+                    OpenOrActivateTextViewer(selectedPath);
                 }
                 else
                 {
-                    MessageBox.Show(lm.GetText(LanguageKey.ReadmeNotFound), lm.GetText(LanguageKey.DialogInfo), MessageBoxButton.OK, MessageBoxImage.Information);
+                    Logger.Log("Readme not found.");
+                    throw new FileNotFoundException(lm.GetText(LanguageKey.ReadmeNotFound));
                 }
             }
             catch (Exception ex)
             {
                 var lm = LocalizationManager.Instance;
                 Logger.Log(AppConstants.LogReadmeError, ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -371,24 +352,26 @@ namespace LargeFolderFinder
         {
             try
             {
+                Logger.Log($"Opened App License via menu.");
                 var lm = LocalizationManager.Instance;
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
                 string licensePath = Path.Combine(baseDir, AppConstants.LicenseDirectoryName, AppConstants.AppLicenseFileName);
 
                 if (File.Exists(licensePath))
                 {
-                    Process.Start(new ProcessStartInfo(licensePath) { UseShellExecute = true });
+                    // Process.Start replaced with TextViewer
+                    new TextViewer(licensePath).ShowDialog();
                 }
                 else
                 {
-                    MessageBox.Show(lm.GetText(LanguageKey.LicenseNotFoundError), lm.GetText(LanguageKey.DialogInfo), MessageBoxButton.OK, MessageBoxImage.Information);
+                    throw new FileNotFoundException(lm.GetText(LanguageKey.LicenseNotFoundError), licensePath);
                 }
             }
             catch (Exception ex)
             {
                 var lm = LocalizationManager.Instance;
                 Logger.Log("Failed to open App License.", ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -396,24 +379,26 @@ namespace LargeFolderFinder
         {
             try
             {
+                Logger.Log($"Opened ThirdPartyLicenses via menu.");
                 var lm = LocalizationManager.Instance;
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
                 string licensePath = Path.Combine(baseDir, AppConstants.LicenseDirectoryName, AppConstants.ThirdPartyNoticesFileName);
 
                 if (File.Exists(licensePath))
                 {
-                    Process.Start(new ProcessStartInfo(licensePath) { UseShellExecute = true });
+                    // Process.Start replaced with TextViewer
+                    new TextViewer(licensePath).ShowDialog();
                 }
                 else
                 {
-                    MessageBox.Show(lm.GetText(LanguageKey.LicenseNotFoundError), lm.GetText(LanguageKey.DialogInfo), MessageBoxButton.OK, MessageBoxImage.Information);
+                    throw new FileNotFoundException(string.Format(lm.GetText(LanguageKey.LicenseNotFoundError), Path.GetFileName(licensePath)));
                 }
             }
             catch (Exception ex)
             {
                 var lm = LocalizationManager.Instance;
                 Logger.Log(AppConstants.LogThirdPartyNoticesError, ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"{lm.GetText(LanguageKey.LicenseNotFoundError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -452,16 +437,76 @@ namespace LargeFolderFinder
         {
             if (sender is MenuItem item && item.Tag is string path)
             {
-                Logger.OpenSpecificLogFile(path);
+                if (System.IO.File.Exists(path))
+                {
+                    Logger.Log($"Opened Log: {Path.GetFileName(path)}");
+                    OpenOrActivateTextViewer(path);
+                }
             }
+        }
+
+        private void OpenOrActivateTextViewer(string path)
+        {
+            foreach (Window window in Application.Current.Windows)
+            {
+                if (window is TextViewer viewer && string.Equals(viewer.FilePath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (window.WindowState == WindowState.Minimized)
+                    {
+                        window.WindowState = WindowState.Normal;
+                    }
+                    Logger.Log($"Already Opened TextViewer for {Path.GetFileName(path)}");
+                    window.Activate();
+                    return;
+                }
+            }
+            Logger.Log($"Opened TextViewer for {Path.GetFileName(path)}");
+            new TextViewer(path).Show();
         }
 
         private void MenuAbout_Click(object sender, RoutedEventArgs e)
         {
+            Logger.Log("Opened About dialog");
             var lm = LocalizationManager.Instance;
             var format = lm.GetText(LanguageKey.AboutMessage);
             var message = string.Format(format, AppInfo.Title, AppInfo.Version, AppInfo.Copyright);
             MessageBox.Show(message, lm.GetText(LanguageKey.AboutTitle), MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuRestartAdmin_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = Process.GetCurrentProcess().MainModule?.FileName,
+                    UseShellExecute = true,
+                    Verb = "runas"
+                };
+
+                if (psi.FileName != null)
+                {
+                    Process.Start(psi);
+                    Application.Current.Shutdown();
+                }
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // ユーザーがキャンセルした場合などはここに来る
+                // 何もしない
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to restart as admin", ex);
+                var lm = LocalizationManager.Instance;
+                MessageBox.Show($"{lm.GetText(LanguageKey.LabelError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void MenuExit_Click(object sender, RoutedEventArgs e)
+        {
+            Logger.Log("Application exiting via menu...");
+            Application.Current.Shutdown();
         }
 
         private void OpenConfigButton_Click(object sender, RoutedEventArgs e)
@@ -477,13 +522,14 @@ namespace LargeFolderFinder
 
                 if (File.Exists(configPath))
                 {
+                    Logger.Log("Opened Advanced Settings (Config.txt)");
                     Process.Start(new ProcessStartInfo(configPath) { UseShellExecute = true });
                 }
             }
             catch (Exception ex)
             {
                 Logger.Log(AppConstants.LogConfigError, ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.ConfigError)}{ex.Message}", lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"{lm.GetText(LanguageKey.ConfigError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -501,7 +547,7 @@ namespace LargeFolderFinder
             {
                 var lm = LocalizationManager.Instance;
                 Logger.Log(AppConstants.LogClipboardError, ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.ClipboardError)}{ex.Message}", lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"{lm.GetText(LanguageKey.ClipboardError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

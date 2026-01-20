@@ -19,10 +19,10 @@ Fare clic sul pulsante "⚙" sull'interfaccia utente per aprirlo immediatamente 
 La configurazione deve seguire il formato YAML. Se si desidera aggiungere i propri commenti, anteporre il carattere #.
 
     ▽ Voci configurabili: (Predefinito)
-    UseParallelScan: false
+    UseParallelScan: true
         Tipo: bool (true/false)
         Descrizione: Abilita la scansione parallela.
-        Contesto (false): Gli HDD (e i NAS) sono fisicamente rotanti e deboli con l'accesso parallelo, quindi impostare su false. Consigliato "true" solo per gli SSD.
+        Contesto (true): Efficace per NAS (archiviazione di rete) ecc. Poiché gli SSD locali sono veloci, il sovraccarico della parallelizzazione potrebbe essere maggiore.
 
     SkipFolderCount: false
         Tipo: bool (true/false)

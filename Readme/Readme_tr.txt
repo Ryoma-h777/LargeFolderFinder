@@ -19,10 +19,10 @@ Not Defteri gibi bir metin düzenleyiciyle hemen açmak için kullanıcı arayü
 Yapılandırma YAML formatına uygun olmalıdır. Kendi yorumlarınızı eklemek isterseniz, başlarına # koyun.
 
     ▽ Yapılandırılabilir öğeler: (Varsayılan)
-    UseParallelScan: false
+    UseParallelScan: true
         Tür: bool (true/false)
         Açıklama: Paralel taramayı etkinleştir.
-        Bağlam (false): HDD'ler (ve NAS'lar) fiziksel olarak döndüğü için paralel erişimde zayıftır, bu nedenle false olarak ayarlayın. Yalnızca SSD'ler için "true" önerilir.
+        Bağlam (true): NAS (ağ depolama) vb. için etkilidir. Yerel SSD'ler hızlı olduğundan, paralelleştirme ek yükü daha büyük olabilir.
 
     SkipFolderCount: false
         Tür: bool (true/false)

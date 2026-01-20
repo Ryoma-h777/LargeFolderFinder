@@ -82,7 +82,8 @@
                         x:Name="ThresholdTextBox"
                         Width="60"
                         Height="25"
-                        VerticalContentAlignment="Center"/>
+                        VerticalContentAlignment="Center"
+                        KeyDown="Input_KeyDown"/>
                     <ComboBox
                         x:Name="UnitComboBox"
                         Width="50"

@@ -1,6 +1,6 @@
 # 各項目の説明はReadmeをご確認ください。/ Please refer to the Readme for explanations of each item.
 
-UseParallelScan: false
+UseParallelScan: true
 SkipFolderCount: false
 MaxDepthForCount: 3
 UsePhysicalSize: true

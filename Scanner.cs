@@ -17,6 +17,7 @@ namespace LargeFolderFinder
         public double SmoothedFoldersPerSecond = -1.0;
         public int LastReportedCount = 0;
         public DateTime LastReportTime = DateTime.MinValue;
+        public DateTime LastLogTime = DateTime.MinValue;
         public FolderInfo? RootNode; // リアルタイム表示用のルート
     }
 
@@ -122,9 +123,17 @@ namespace LargeFolderFinder
             }
 
             int currentProcessed = progressCounter.Value;
-            if (currentProcessed == 1 || currentProcessed % 50 == 0)
+
+            // 5秒間隔で更新 (最初の1回は即時更新)
+            if (currentProcessed == 1 || (DateTime.Now - progressCounter.LastReportTime).TotalSeconds >= 5.0)
             {
-                ReportProgress(currentProcessed, totalFolders, startTime, progressCounter, progress);
+                lock (progressCounter)
+                {
+                    if (currentProcessed == 1 || (DateTime.Now - progressCounter.LastReportTime).TotalSeconds >= 5.0)
+                    {
+                        ReportProgress(currentProcessed, totalFolders, startTime, progressCounter, progress, dir.FullName);
+                    }
+                }
             }
 
             long myFilesSize = 0;
@@ -228,11 +237,12 @@ namespace LargeFolderFinder
             }
         }
 
-        private static void ReportProgress(int processed, int total, DateTime startTime, ProgressCounter counter, IProgress<ScanProgress> progress)
+        private static void ReportProgress(int processed, int total, DateTime startTime, ProgressCounter counter, IProgress<ScanProgress> progress, string currentPath)
         {
             TimeSpan? estimatedRemaining = null;
             DateTime now = DateTime.Now;
 
+            // 統計情報の計算など
             if (processed >= 10 || counter.LastReportedCount > 0)
             {
                 if (counter.LastReportTime == DateTime.MinValue)
@@ -266,6 +276,20 @@ namespace LargeFolderFinder
                 {
                     estimatedRemaining = TimeSpan.FromSeconds(remaining / counter.SmoothedFoldersPerSecond);
                 }
+            }
+
+            // 20秒ごとのログ出力 (5秒ごとの更新タイミングでチェック)
+            if ((now - counter.LastLogTime).TotalSeconds >= 20.0)
+            {
+                double percent = total > 0 ? (double)processed / total * 100.0 : 0;
+                var elapsed = now - startTime;
+                string remStr = estimatedRemaining.HasValue ? estimatedRemaining.Value.ToString(@"hh\:mm\:ss") : "Unknown";
+
+                // プログレスバー相当の情報 + 現在のパス
+                string logMsg = $"Progress: {processed}/{total} ({percent:F1}%) - Elapsed: {elapsed:hh\\:mm\\:ss} - Remaining: {remStr} - Checking: {currentPath}";
+                Logger.Log(logMsg);
+
+                counter.LastLogTime = now;
             }
 
             progress?.Report(new ScanProgress

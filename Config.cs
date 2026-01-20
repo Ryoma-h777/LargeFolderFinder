@@ -11,7 +11,7 @@ namespace LargeFolderFinder
     public class Config
     {
         public int MaxDepthForCount { get; set; } = 3;
-        public bool UseParallelScan { get; set; } = false;
+        public bool UseParallelScan { get; set; } = true;
         public bool SkipFolderCount { get; set; } = false;
         public bool UsePhysicalSize { get; set; } = true;
 

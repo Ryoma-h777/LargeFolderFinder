@@ -2,6 +2,72 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+[**🇯🇵 日本語 (Japanese Version) is here**](#-large-folder-finder-japanese-version)
+
+A desktop application for Windows that rapidly searches for folders and visualizes their structure and size.
+It excels particularly in exploring network drives like NAS, helping you quickly identify the causes of disk space usage.
+
+## 🔍 Scan Result Example
+
+Extracts and lists only folders larger than the specified size (e.g., 10 GB) in a Tree format.
+
+```text
+PATH: C:\   MinSize: 10 GB
+Finished [Time: 6s]
+
+C:\                                                   378 GB
+┣$Recycle.Bin                                          39 GB
+┃ ┗S-1-5-21-3796979980-2337565616-3929222400-1001      39 GB
+┣Users                                                123 GB
+┃ ┗User                                    123 GB
+┃   ┣AppData                                           87 GB
+┃   ┃ ┗Local                                           81 GB
+┃   ┃   ┣Google                                        14 GB
+┃   ┃   ┃ ┗Chrome                                      13 GB
+┃   ┃   ┃   ┗User Data                                 13 GB
+┃   ┃   ┃     ┗Default                                 11 GB
+┃   ┃   ┣Temp                                          20 GB
+┃   ┃   ┗wsl                                           23 GB
+┃   ┃     ┗{b85b4030-fb7f-40f0-8e56-33dc627f70ae}      23 GB
+┃   ┗Downloads                                         18 GB
+┗Windows                                               45 GB
+  ┗WinSxS                                              20 GB
+```
+
+## ✨ Features
+
+- **Fast Multi-thread Scan**: Parallel processing allows for rapid scanning of drives containing a large number of files.
+- **Server Support**: Supports scanning via network (NAS).
+  - Achievement: **Scanned approx. 1TB of NAS data in 15 seconds.**
+  - Achievement: **Scanned approx. 20TB of NAS data in 30 minutes.** (Depends on file count)
+- **Advanced Customization**:
+  - Toggle parallel processing, sector size consideration, skip pre-scan counting.
+  - Adjust output format (tab/space) and units (KB, MB, GB, TB).
+- **Multilingual Support**: Automatically detects OS language settings (Supports 13 languages including English, Japanese, Chinese, etc.).
+
+## 🚀 How to Use
+
+1. **Download**: Download and unzip the latest `LargeFolderFinder.zip` from the [Releases](https://github.com/Ryoma-h777/LargeFolderFinder/releases) page.
+2. **Run**: Launch `LargeFolderFinder.exe`.
+3. **Configure**: Select the path to scan and enter the minimum size to extract (e.g., 1 GB).
+4. **Scan**: Click "Scan".
+5. **Utilize**: Copy the results using the button and use them for disk space management.
+
+## 💻 System Requirements
+
+- **OS**: Windows 10 / 11
+- **Runtime**: .NET Framework 4.8 (Standard on Windows, usually no installation required)
+
+## 📄 License
+
+This project is released under the [MIT License](LICENSE). Anyone can use it freely for free, including for commercial purposes.
+
+---
+
+<div id="japanese-version"></div>
+
+# Large Folder Finder (日本語)
+
 Windows上でフォルダーを高速に検索し、構造とサイズを視覚化するデスクトップアプリです。
 特にNASなどのネットワークドライブでの探索で活躍しており、ディスク容量の圧迫原因を素早く特定するのに役立ちます。
 
@@ -13,33 +79,34 @@ Windows上でフォルダーを高速に検索し、構造とサイズを視覚�
 PATH: C:\   MinSize: 10 GB
 完了 [処理時間: 6秒]
 
-C:\                                                        378 GB
-┣$Recycle.Bin                                              39 GB
-┃ ┗S-1-5-21-3796979980-2337565616-3929222400-1001         39 GB
-┣Users                                                    123 GB
-┃ ┗User                                       123 GB
-┃   ┣AppData                                              87 GB
-┃   ┃ ┗Local                                             81 GB
-┃   ┃   ┣Google                                          14 GB
-┃   ┃   ┃ ┗Chrome                                       13 GB
-┃   ┃   ┃   ┗User Data                                  13 GB
-┃   ┃   ┃     ┗Default                                  11 GB
-┃   ┃   ┣Temp                                            20 GB
-┃   ┃   ┗wsl                                             23 GB
-┃   ┃     ┗{b85b4030-fb7f-40f0-8e56-33dc627f70ae}        23 GB
-┃   ┗Downloads                                            18 GB
-┗Windows                                                   45 GB
-  ┗WinSxS                                                  20 GB
+C:\                                                   378 GB
+┣$Recycle.Bin                                          39 GB
+┃ ┗S-1-5-21-3796979980-2337565616-3929222400-1001      39 GB
+┣Users                                                123 GB
+┃ ┗User                                    123 GB
+┃   ┣AppData                                           87 GB
+┃   ┃ ┗Local                                           81 GB
+┃   ┃   ┣Google                                        14 GB
+┃   ┃   ┃ ┗Chrome                                      13 GB
+┃   ┃   ┃   ┗User Data                                 13 GB
+┃   ┃   ┃     ┗Default                                 11 GB
+┃   ┃   ┣Temp                                          20 GB
+┃   ┃   ┗wsl                                           23 GB
+┃   ┃     ┗{b85b4030-fb7f-40f0-8e56-33dc627f70ae}      23 GB
+┃   ┗Downloads                                         18 GB
+┗Windows                                               45 GB
+  ┗WinSxS                                              20 GB
 ```
 
 ## ✨ 特徴
 
 - **高速マルチスレッドスキャン**: 並列処理により、大量のファイルを含むドライブも迅速にスキャンします。
 - **サーバー対応**: ネットワーク経由（NAS等）のスキャンも可能です。
-  - 実績例: **26TB規模のNASを30分〜1時間でスキャン**（※ファイル数による）
+  - 実績例1: **約1TBのNAS上のデータを15秒でスキャン**
+  - 実績例2: **20TB規模のNAS上のデータを30分でスキャン**（※ファイル数による）
 - **高度なカスタマイズ**:
-  - 表示単位（GB, MB, TB / 自動切替）の選択
-  - 出力フォーマット（タブ、スペース、インデント幅）の調整
+  - 並列処理・セクタサイズの配慮・事前スキャンのスキップなど有効化/無効化
+  - 出力フォーマット（タブ、スペース）、表示単位（KB, MB, GB, TB）の調整
 - **多言語対応**: OSの言語設定を自動認識（日本語・英語・中国語など、全13言語）。
 
 ## 🚀 使い方

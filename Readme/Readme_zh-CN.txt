@@ -19,10 +19,10 @@ Large Folder Finder
 配置必须遵循 YAML 格式。如果您想添加自己的注释，请在行首加上 #。
 
     ▽ 可配置项目：(默认值)
-    UseParallelScan: false
+    UseParallelScan: true
         类型：bool (true/false)
         说明：启用并行扫描。
-        背景 (false)：HDD（及 NAS）由于物理旋转结构，在并行访问时表现较弱，因此请设为 false。仅推荐在 SSD 上设为 true。
+        背景 (true)：对 NAS（网络存储）等有效。由于本地 SSD 速度很快，并行化的开销可能会更大。
 
     SkipFolderCount: false
         类型：bool (true/false)
