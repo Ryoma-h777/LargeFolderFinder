@@ -66,4 +66,5 @@ ClipboardError: "Falha ao copiar para a área de transferência: "
 ProgressErrorLabel: "Erro de progresso:"
 RenderErrorLabel: "Erro de renderização:"
 DebugInfoTitle: "Informações de depuração"
-
+MenuThirdPartyLicenses: "Licenças de Terceiros"
+LicenseNotFoundError: "Arquivo de licença (ThirdPartyNotices.txt) não encontrado."

@@ -50,37 +50,39 @@ namespace LargeFolderFinder
             catch (Exception ex)
             {
                 Logger.Log(AppConstants.LogInitError, ex);
-                MessageBox.Show($"{LocalizationManager.Instance.GetText(LanguageKey.InitializationError)}\n{ex.Message}\n\n{LocalizationManager.Instance.GetText(LanguageKey.DetailLabel)}\n{ex.StackTrace}", LocalizationManager.Instance.GetText(LanguageKey.AboutTitle), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    $"{LocalizationManager.Instance.GetText(LanguageKey.InitializationError)}\n{ex.Message}\n\n{LocalizationManager.Instance.GetText(LanguageKey.DetailLabel)}\n{ex.StackTrace}",
+                    LocalizationManager.Instance.GetText(LanguageKey.AboutTitle),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
-        /// <summary>
-        /// フォルダ選択ボタン押下時の処理
-        /// </summary>
         private void BrowseButton_Click(object sender, RoutedEventArgs e)
         {
-            // .NET 4.8 の WPF には OpenFolderDialog がないため、WinForms のダイアログを使用
-            using (var dialog = new System.Windows.Forms.FolderBrowserDialog())
+            try
             {
-                dialog.Description = LocalizationManager.Instance.GetText(LanguageKey.FolderLabel);
-                dialog.SelectedPath = PathTextBox.Text;
-                dialog.ShowNewFolderButton = false;
+                Logger.Log(AppConstants.LogBrowseButtonClicked);
+                //#if Dotnet48 // .Net 48用の処理
+                var dialog = new Ookii.Dialogs.Wpf.VistaFolderBrowserDialog
+                {
+                    Description = LocalizationManager.Instance.GetText(LanguageKey.FolderLabel),
+                    UseDescriptionForTitle = true, // タイトルとしてDescriptionを使用
+                    SelectedPath = PathTextBox.Text // 初期ディレクトリ設定
+                };
 
-                var window = Window.GetWindow(this);
-                var helper = new System.Windows.Interop.WindowInteropHelper(window);
-
-                if (dialog.ShowDialog(new Wpf32Window(helper.Handle)) == System.Windows.Forms.DialogResult.OK)
+                if (dialog.ShowDialog() == true)
                 {
                     PathTextBox.Text = dialog.SelectedPath;
+                    Logger.Log($"Folder selected via Ookii: {dialog.SelectedPath}");
                 }
+                //#endif // Dotnet48
             }
-        }
-
-        // WinForms のダイアログに WPF のウィンドウを親として渡すためのヘルパークラス
-        private class Wpf32Window : System.Windows.Forms.IWin32Window
-        {
-            public IntPtr Handle { get; }
-            public Wpf32Window(IntPtr handle) => Handle = handle;
+            catch (Exception ex)
+            {
+                Logger.Log("Error in BrowseButton_Click with Ookii.Dialogs", ex);
+                MessageBox.Show($"{LocalizationManager.Instance.GetText(LanguageKey.DialogError)}\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
 
@@ -265,6 +267,11 @@ namespace LargeFolderFinder
             }
         }
 
+        /// <summary>
+        /// キャンセルボタン実行時処理
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
             _cts?.Cancel();
@@ -356,6 +363,31 @@ namespace LargeFolderFinder
             {
                 var lm = LocalizationManager.Instance;
                 Logger.Log(AppConstants.LogReadmeError, ex);
+                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void MenuThirdPartyLicenses_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var lm = LocalizationManager.Instance;
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string licensePath = Path.Combine(baseDir, AppConstants.ThirdPartyNoticesFileName);
+
+                if (File.Exists(licensePath))
+                {
+                    Process.Start(new ProcessStartInfo(licensePath) { UseShellExecute = true });
+                }
+                else
+                {
+                    MessageBox.Show(lm.GetText(LanguageKey.ReadmeNotFound), lm.GetText(LanguageKey.DialogInfo), MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                var lm = LocalizationManager.Instance;
+                Logger.Log(AppConstants.LogThirdPartyNoticesError, ex);
                 MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.DialogError), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -571,17 +603,20 @@ namespace LargeFolderFinder
                 MenuFile.Header = lm.GetText(LanguageKey.MenuFile);
                 MenuOpenConfig.Header = lm.GetText(LanguageKey.MenuOpenConfig);
                 MenuOpenLogSub.Header = lm.GetText(LanguageKey.MenuOpenLogSub);
-                MenuOpenLogSub.Header = lm.GetText(LanguageKey.MenuOpenLogSub);
+                MenuExit.Header = lm.GetText(LanguageKey.MenuExit);
                 MenuRestartAdmin.Header = lm.GetText(LanguageKey.MenuRestartAdmin);
                 MenuRestartAdmin.IsEnabled = !IsAdministrator(); // 管理者なら無効化
-                MenuExit.Header = lm.GetText(LanguageKey.MenuExit);
+
                 MenuHelp.Header = lm.GetText(LanguageKey.MenuHelp);
                 MenuOpenReadme.Header = lm.GetText(LanguageKey.MenuOpenReadme);
+                MenuThirdPartyLicenses.Header = lm.GetText(LanguageKey.MenuThirdPartyLicenses);
                 MenuAbout.Header = lm.GetText(LanguageKey.MenuAbout);
+
+                // Controls
+                FolderLabel.Text = lm.GetText(LanguageKey.FolderLabel);
 
                 // Labels
                 string unitStr = (UnitComboBox?.SelectedItem as AppConstants.SizeUnit? ?? AppConstants.SizeUnit.GB).ToString();
-                FolderLabel.Text = lm.GetText(LanguageKey.FolderLabel);
                 SearchSizeLabel.Text = string.Format(lm.GetText(LanguageKey.SearchSizeLabel), unitStr);
                 SearchSizeLabel.ToolTip = lm.GetText(LanguageKey.SearchSizeToolTip);
                 SeparatorLabel.Text = lm.GetText(LanguageKey.SeparatorLabel);

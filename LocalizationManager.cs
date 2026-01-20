@@ -79,7 +79,9 @@ namespace LargeFolderFinder
         ClipboardError,
         ProgressErrorLabel,
         RenderErrorLabel,
-        DebugInfoTitle
+        DebugInfoTitle,
+        MenuThirdPartyLicenses,
+        LicenseNotFoundError
     }
 
     /// <summary>

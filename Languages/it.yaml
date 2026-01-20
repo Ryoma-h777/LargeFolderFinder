@@ -66,4 +66,5 @@ ClipboardError: "Copia negli appunti fallita: "
 ProgressErrorLabel: "Errore di avanzamento:"
 RenderErrorLabel: "Errore di rendering:"
 DebugInfoTitle: "Info di debug"
-
+MenuThirdPartyLicenses: "Licenze di terze parti"
+LicenseNotFoundError: "File di licenza (ThirdPartyNotices.txt) non trovato."

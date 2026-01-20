@@ -66,4 +66,5 @@ ClipboardError: "クリップボードへのコピーに失敗しました: "
 ProgressErrorLabel: "進行状況表示エラー:"
 RenderErrorLabel: "描画処理エラー:"
 DebugInfoTitle: "デバッグ情報"
-
+MenuThirdPartyLicenses: "サードパーティライセンス"
+LicenseNotFoundError: "ライセンスファイル (ThirdPartyNotices.txt) が見つかりません。"
