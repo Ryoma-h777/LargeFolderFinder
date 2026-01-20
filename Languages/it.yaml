@@ -1,30 +1,57 @@
 ﻿Title: "Large Folder Finder"
-### Header (Menu) ###
+####### Header (Menu) #######
+## File
 MenuFile: "File(_F)"
 MenuOpenConfig: "Apri impostazioni avanzate(_S)"
 MenuOpenLogSub: "Apri log(_O)"
 MenuRestartAdmin: "Riavvia come amministratore(_A)"
 MenuExit: "Esci(_X)"
+# Help
 MenuHelp: "Aiuto(_H)"
 MenuOpenReadme: "Apri Readme(_R)"
-MenuAbout: "Informazioni(_A)"
 MenuLicense: "Licenza(_L)"
 MenuAppLicense: "Licenza app(_A)"
+MenuAbout: "Informazioni(_A)"
 
-### Body (ScanSettings) ###
+# Viewer (Log, Readme, License)
+ViewerCopy: "Copia"
+ViewerOpenFolder: "Apri cartella"
+ViewerClose: "Chiudi"
+# Version Modal
+AboutTitle: "Informazioni"
+AboutMessage: "{0}\nVersione {1}\n{2}\n\nUno strumento per trovare rapidamente cartelle di grandi dimensioni."
+DialogInfo: "Informazione"
+
+####### Scan Settings #######
+## Line 1 (Folder Browser)
 FolderLabel: "Cartella:"
 BrowseButton: "..."
+## Line 2
+# Scan
 SearchSizeLabel: "Dimensione ricerca: ({0})"
 SearchSizeToolTip: "Estrae ed elenca le cartelle più grandi di questa dimensione. È possibile specificare 0, ma minore è la dimensione, più tempo richiede la scansione."
+# FolderName<---Space--->Size
 SeparatorLabel: "Separatore:"
 SeparatorToolTip: "Specifica lo spazio tra il nome della cartella e la dimensione ({0})."
+# Scan Button
 ScanButton: "Scansiona"
 CancelButton: "Annulla"
 CancelToolTip: "Annulla. Se non funziona, premi il pulsante X."
+# Advance Setting Button
 OpenConfigToolTip: "Apri impostazioni avanzate (Config.txt)"
+# Clipboard Copy Button
 CopyToolTip: "Copia i risultati negli appunti"
 
-### Footer (Status & Progress) ###
+## Line 3
+# Sort
+SortLabel: "Ordina:"
+TargetSize: "Dimensione"
+TargetName: "Nome"
+TargetDate: "Data"
+DirectionAsc: "Crescente"
+DirectionDesc: "Decrescente"
+
+####### Footer (Status & Progress) #######
 ReadyStatus: "Pronto"
 ScanningStatus: "Scansione in corso..."
 CancelledStatus: "Annullato"
@@ -32,6 +59,7 @@ FinishedStatus: "Finito"
 NotFoundMessage: "Nessuna cartella corrispondente trovata."
 CopyNotification: "Copiato!"
 FolderCountStatus: "Verifica del numero di cartelle..."
+# time
 RemainingTimeH: "Circa {0}{1} {2}{3} rimanenti"
 RemainingTimeM: "Circa {0}{1} {2}{3} rimanenti"
 RemainingTimeS: "Circa {0}{1} rimanenti"
@@ -42,12 +70,10 @@ UnitMinute: "m"
 UnitSecond: "s"
 UnitMillisecond: "ms"
 UnitElapsed: "trascorso"
-Unknown: "Sconosciuto"
+
+Unknown: "Sconosciuto" # Barra di avanzamento: mostrato quando il totale è sconosciuto.
 LabelError: "Errore: "
 UnitFolder: " cartelle"
-AboutTitle: "Informazioni"
-AboutMessage: "{0}\nVersione {1}\n{2}\n\nUno strumento per trovare rapidamente cartelle di grandi dimensioni."
-DialogInfo: "Informazione"
 
 DetailLabel: "Dettagli:"
 LiveScanningMessage: "Scansione in corso... La dimensione ({0}) mostra risultati intermedi."
@@ -57,7 +83,7 @@ ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} trascorso"
 
-### Error Messages ###
+####### Error Messages #######
 ConfigError: "Impossibile aprire il file di configurazione: "
 ReadmeError: "Impossibile aprire il Readme: "
 ReadmeNotFound: "Readme.txt non trovato."
@@ -70,6 +96,3 @@ RenderErrorLabel: "Errore di rendering:"
 DebugInfoTitle: "Info di debug"
 MenuThirdPartyLicenses: "Licenze di terze parti(_T)"
 LicenseNotFoundError: "File di licenza ({0}) non trovato."
-ViewerCopy: "Copia"
-ViewerOpenFolder: "Apri cartella"
-ViewerClose: "Chiudi"

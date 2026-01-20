@@ -1,30 +1,57 @@
 ﻿Title: "大資料夾查找器 (Large Folder Finder)"
-### Header (Menu) ###
+####### Header (Menu) #######
+## File
 MenuFile: "檔案(_F)"
 MenuOpenConfig: "開啟進階設定(_S)"
 MenuOpenLogSub: "開啟記錄檔(_O)"
 MenuRestartAdmin: "以管理員身分重新啟動(_A)"
 MenuExit: "退出(_X)"
+# Help
 MenuHelp: "說明(_H)"
 MenuOpenReadme: "開啟 Readme(_R)"
-MenuAbout: "關於(_A)"
 MenuLicense: "授權(_L)"
 MenuAppLicense: "應用程式授權(_A)"
+MenuAbout: "關於(_A)"
 
-### Body (ScanSettings) ###
+# Viewer (Log, Readme, License)
+ViewerCopy: "複製"
+ViewerOpenFolder: "開啟資料夾"
+ViewerClose: "關閉"
+# Version Modal
+AboutTitle: "關於"
+AboutMessage: "{0}\n版本 {1}\n{2}\n\n快速查找大資料夾的工具。"
+DialogInfo: "訊息"
+
+####### Scan Settings #######
+## Line 1 (Folder Browser)
 FolderLabel: "資料夾:"
 BrowseButton: "..."
+## Line 2
+# Scan
 SearchSizeLabel: "搜尋大小: ({0})"
 SearchSizeToolTip: "提取並列出大於此大小的資料夾。可以指定 0，但大小越小，掃描所需的時間就越長。"
+# FolderName<---Space--->Size
 SeparatorLabel: "分隔符:"
 SeparatorToolTip: "指定資料夾名稱與大小 ({0}) 之間的空格。"
+# Scan Button
 ScanButton: "掃描"
 CancelButton: "取消"
 CancelToolTip: "取消。如果不起作用，請按 X 按鈕。"
+# Advance Setting Button
 OpenConfigToolTip: "開啟進階設定 (Config.txt)"
-CopyToolTip: "將結果複製到剪贴板"
+# Clipboard Copy Button
+CopyToolTip: "複製到剪貼簿"
 
-### Footer (Status & Progress) ###
+## Line 3
+# Sort
+SortLabel: "排序:"
+TargetSize: "大小"
+TargetName: "名稱"
+TargetDate: "修改日期"
+DirectionAsc: "升序"
+DirectionDesc: "降序"
+
+####### Footer (Status & Progress) #######
 ReadyStatus: "就緒"
 ScanningStatus: "正在掃描..."
 CancelledStatus: "已取消"
@@ -32,6 +59,7 @@ FinishedStatus: "已完成"
 NotFoundMessage: "未找到匹配的資料夾。"
 CopyNotification: "已複製！"
 FolderCountStatus: "正在檢查資料夾數量..."
+# time
 RemainingTimeH: "剩餘約 {0}{1} {2}{3}"
 RemainingTimeM: "剩餘約 {0}{1} {2}{3}"
 RemainingTimeS: "剩餘約 {0}{1}"
@@ -42,12 +70,10 @@ UnitMinute: "分"
 UnitSecond: "秒"
 UnitMillisecond: "毫秒"
 UnitElapsed: "已用時"
-Unknown: "未知"
+
+Unknown: "未知" # 進捗率表示用: 総数を把握していない時に表示されます。
 LabelError: "錯誤: "
 UnitFolder: " 資料夾"
-AboutTitle: "關於"
-AboutMessage: "{0}\n版本 {1}\n{2}\n\n快速查找大資料夾的工具。"
-DialogInfo: "訊息"
 
 DetailLabel: "詳細資訊:"
 LiveScanningMessage: "正在掃描... 大小 ({0}) 顯示中間結果。"
@@ -55,9 +81,9 @@ ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
-TimeStatusFormat: "{0} 已用用時"
+TimeStatusFormat: "{0} 已用時"
 
-### Error Messages ###
+####### Error Messages #######
 ConfigError: "無法開啟設定檔案: "
 ReadmeError: "無法開啟 Readme: "
 ReadmeNotFound: "找不到 Readme.txt。"
@@ -70,6 +96,3 @@ RenderErrorLabel: "繪製錯誤"
 DebugInfoTitle: "調試資訊"
 MenuThirdPartyLicenses: "第三方授權(_T)"
 LicenseNotFoundError: "找不到授權檔案 ({0})。"
-ViewerCopy: "複製"
-ViewerOpenFolder: "開啟資料夾"
-ViewerClose: "關閉"

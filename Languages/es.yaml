@@ -1,30 +1,57 @@
 ﻿Title: "Large Folder Finder"
-### Header (Menu) ###
+####### Header (Menu) #######
+## File
 MenuFile: "Archivo(_F)"
 MenuOpenConfig: "Abrir configuración avanzada(_S)"
 MenuOpenLogSub: "Abrir registros(_O)"
 MenuRestartAdmin: "Reiniciar como administrador(_A)"
 MenuExit: "Salir(_X)"
+# Help
 MenuHelp: "Ayuda(_H)"
 MenuOpenReadme: "Abrir Readme(_R)"
-MenuAbout: "Acerca de(_A)"
 MenuLicense: "Licencia(_L)"
 MenuAppLicense: "Licencia de la aplicación(_A)"
+MenuAbout: "Acerca de(_A)"
 
-### Body (ScanSettings) ###
+# Viewer (Log, Readme, License)
+ViewerCopy: "Copiar"
+ViewerOpenFolder: "Abrir carpeta"
+ViewerClose: "Cerrar"
+# Version Modal
+AboutTitle: "Acerca de"
+AboutMessage: "{0}\nVersión {1}\n{2}\n\nUna herramienta para encontrar rápidamente carpetas grandes."
+DialogInfo: "Información"
+
+####### Scan Settings #######
+## Line 1 (Folder Browser)
 FolderLabel: "Carpeta:"
 BrowseButton: "..."
+## Line 2
+# Scan
 SearchSizeLabel: "Tamaño de búsqueda: ({0})"
 SearchSizeToolTip: "Extrae y enumera las carpetas más grandes que este tamaño. Se puede especificar 0, pero cuanto más pequeño sea el tamaño, más tiempo llevará el escaneo."
+# FolderName<---Space--->Size
 SeparatorLabel: "Separador:"
 SeparatorToolTip: "Especifica el espacio entre el nombre de la carpeta y el tamaño ({0})."
+# Scan Button
 ScanButton: "Escanear"
 CancelButton: "Cancelar"
 CancelToolTip: "Cancelar. Si no funciona, presione el botón X."
+# Advance Setting Button
 OpenConfigToolTip: "Abrir configuración avanzada (Config.txt)"
-CopyToolTip: "Copiar resultados al portapapeles"
+# Clipboard Copy Button
+CopyToolTip: "Copiar al portapapeles"
 
-### Footer (Status & Progress) ###
+## Line 3
+# Sort
+SortLabel: "Ordenar:"
+TargetSize: "Tamaño"
+TargetName: "Nombre"
+TargetDate: "Fecha"
+DirectionAsc: "Ascendente"
+DirectionDesc: "Descendente"
+
+####### Footer (Status & Progress) #######
 ReadyStatus: "Listo"
 ScanningStatus: "Escaneando..."
 CancelledStatus: "Cancelado"
@@ -32,6 +59,7 @@ FinishedStatus: "Finalizado"
 NotFoundMessage: "No se encontraron carpetas que coincidan."
 CopyNotification: "¡Copiado!"
 FolderCountStatus: "Comprobando el número de carpetas..."
+# time
 RemainingTimeH: "Faltan aproximadamente {0}{1} {2}{3}"
 RemainingTimeM: "Faltan aproximadamente {0}{1} {2}{3}"
 RemainingTimeS: "Faltan aproximadamente {0}{1}"
@@ -42,12 +70,10 @@ UnitMinute: "m"
 UnitSecond: "s"
 UnitMillisecond: "ms"
 UnitElapsed: "transcurrido"
-Unknown: "Desconocido"
+
+Unknown: "Desconocido" # Barra de progreso: Se muestra cuando el total es desconocido.
 LabelError: "Error: "
 UnitFolder: " carpetas"
-AboutTitle: "Acerca de"
-AboutMessage: "{0}\nVersión {1}\n{2}\n\nUna herramienta para encontrar rápidamente carpetas grandes."
-DialogInfo: "Información"
 
 DetailLabel: "Detalles:"
 LiveScanningMessage: "Escaneando... El tamaño ({0}) muestra resultados intermedios."
@@ -57,7 +83,7 @@ ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} transcurrido"
 
-### Error Messages ###
+####### Error Messages #######
 ConfigError: "No se pudo abrir el archivo de configuración: "
 ReadmeError: "No se pudo abrir el Readme: "
 ReadmeNotFound: "Readme.txt no encontrado."
@@ -70,6 +96,3 @@ RenderErrorLabel: "Error de renderizado"
 DebugInfoTitle: "Info de depuración"
 MenuThirdPartyLicenses: "Licencias de terceros(_T)"
 LicenseNotFoundError: "Archivo de licencia ({0}) no encontrado."
-ViewerCopy: "Copiar"
-ViewerOpenFolder: "Abrir carpeta"
-ViewerClose: "Cerrar"

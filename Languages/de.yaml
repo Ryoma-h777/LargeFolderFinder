@@ -1,30 +1,57 @@
 ﻿Title: "Large Folder Finder"
-### Header (Menu) ###
+####### Header (Menu) #######
+## File
 MenuFile: "Datei(_F)"
 MenuOpenConfig: "Erweiterte Einstellungen öffnen(_S)"
 MenuOpenLogSub: "Protokolle öffnen(_O)"
 MenuRestartAdmin: "Als Administrator neu starten(_A)"
 MenuExit: "Beenden(_X)"
+# Help
 MenuHelp: "Hilfe(_H)"
 MenuOpenReadme: "Readme öffnen(_R)"
-MenuAbout: "Über(_A)"
 MenuLicense: "Lizenz(_L)"
 MenuAppLicense: "App-Lizenz(_A)"
+MenuAbout: "Über(_A)"
 
-### Body (ScanSettings) ###
+# Viewer (Log, Readme, License)
+ViewerCopy: "Kopieren"
+ViewerOpenFolder: "Ordner öffnen"
+ViewerClose: "Schließen"
+# Version Modal
+AboutTitle: "Über"
+AboutMessage: "{0}\nVersion {1}\n{2}\n\nEin Werkzeug, um große Ordner schnell zu finden."
+DialogInfo: "Information"
+
+####### Scan Settings #######
+## Line 1 (Folder Browser)
 FolderLabel: "Ordner:"
 BrowseButton: "..."
+## Line 2
+# Scan
 SearchSizeLabel: "Suchgröße: ({0})"
 SearchSizeToolTip: "Extrahiert und listet Ordner auf, die größer als diese Größe sind. 0 kann angegeben werden, aber je kleiner die Größe, desto länger dauert der Scan."
+# FolderName<---Space--->Size
 SeparatorLabel: "Trennzeichen:"
 SeparatorToolTip: "Gibt den Abstand zwischen dem Ordnernamen und der Größe ({0}) an."
+# Scan Button
 ScanButton: "Scannen"
 CancelButton: "Abbrechen"
 CancelToolTip: "Abbrechen. Wenn es nicht funktioniert, drücken Sie die X-Taste."
+# Advance Setting Button
 OpenConfigToolTip: "Erweiterte Einstellungen öffnen (Config.txt)"
+# Clipboard Copy Button
 CopyToolTip: "Ergebnisse in die Zwischenablage kopieren"
 
-### Footer (Status & Progress) ###
+## Line 3
+# Sort
+SortLabel: "Sortieren:"
+TargetSize: "Größe"
+TargetName: "Name"
+TargetDate: "Datum"
+DirectionAsc: "Aufsteigend"
+DirectionDesc: "Absteigend"
+
+####### Footer (Status & Progress) #######
 ReadyStatus: "Bereit"
 ScanningStatus: "Scannen..."
 CancelledStatus: "Abgebrochen"
@@ -32,6 +59,7 @@ FinishedStatus: "Fertig"
 NotFoundMessage: "Keine passenden Ordner gefunden."
 CopyNotification: "Kopiert!"
 FolderCountStatus: "Überprüfung der Anzahl der Ordner..."
+# time
 RemainingTimeH: "Noch etwa {0}{1} {2}{3}"
 RemainingTimeM: "Noch etwa {0}{1} {2}{3}"
 RemainingTimeS: "Noch etwa {0}{1}"
@@ -42,12 +70,10 @@ UnitMinute: "Min."
 UnitSecond: "Sek."
 UnitMillisecond: "ms"
 UnitElapsed: "vergangen"
-Unknown: "Unbekannt"
+
+Unknown: "Unbekannt" # Fortschrittsanzeige: Wird angezeigt, wenn die Gesamtzahl unbekannt ist.
 LabelError: "Fehler: "
 UnitFolder: " Ordner"
-AboutTitle: "Über"
-AboutMessage: "{0}\nVersion {1}\n{2}\n\nEin Werkzeug, um große Ordner schnell zu finden."
-DialogInfo: "Information"
 
 DetailLabel: "Details:"
 LiveScanningMessage: "Scannen... Die Größe ({0}) zeigt Zwischenergebnisse an."
@@ -57,7 +83,7 @@ ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} vergangen"
 
-### Error Messages ###
+####### Error Messages #######
 ConfigError: "Konfigurationsdatei konnte nicht geöffnet werden: "
 ReadmeError: "Readme konnte nicht geöffnet werden: "
 ReadmeNotFound: "Readme.txt nicht gefunden."
@@ -70,6 +96,3 @@ RenderErrorLabel: "Rendering-Fehler:"
 DebugInfoTitle: "Debug-Informationen"
 MenuThirdPartyLicenses: "Lizenzen von Drittanbietern(_T)"
 LicenseNotFoundError: "Lizenzdatei ({0}) nicht gefunden."
-ViewerCopy: "Kopieren"
-ViewerOpenFolder: "Ordner öffnen"
-ViewerClose: "Schließen"

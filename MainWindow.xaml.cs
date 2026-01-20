@@ -37,7 +37,7 @@ namespace LargeFolderFinder
                 InitializeLocalization();
                 LoadCache();
                 UpdateLanguageMenu();
-                InitializeUnitComboBox();
+                InitializeComboBoxes();
                 ApplyLocalization();
 
                 // 初回描画完了後にメモリを絞る
@@ -701,6 +701,33 @@ namespace LargeFolderFinder
                 CancelButton.ToolTip = lm.GetText(LanguageKey.CancelToolTip);
                 OpenConfigButton.ToolTip = lm.GetText(LanguageKey.OpenConfigToolTip);
                 CopyButton.ToolTip = lm.GetText(LanguageKey.CopyToolTip);
+                SortLabel.Text = lm.GetText(LanguageKey.SortLabel);
+
+                if (SortTargetComboBox != null)
+                {
+                    int selected = SortTargetComboBox.SelectedIndex;
+                    var options = (AppConstants.SortTarget[])Enum.GetValues(typeof(AppConstants.SortTarget));
+                    SortTargetComboBox.ItemsSource = options.Select(o => o switch
+                    {
+                        AppConstants.SortTarget.Size => lm.GetText(LanguageKey.TargetSize),
+                        AppConstants.SortTarget.Name => lm.GetText(LanguageKey.TargetName),
+                        AppConstants.SortTarget.Date => lm.GetText(LanguageKey.TargetDate),
+                        _ => o.ToString()
+                    }).ToList();
+                    SortTargetComboBox.SelectedIndex = selected >= 0 ? selected : 0;
+                }
+                if (SortDirectionComboBox != null)
+                {
+                    int selected = SortDirectionComboBox.SelectedIndex;
+                    var options = (AppConstants.SortDirection[])Enum.GetValues(typeof(AppConstants.SortDirection));
+                    SortDirectionComboBox.ItemsSource = options.Select(o => o switch
+                    {
+                        AppConstants.SortDirection.Ascending => lm.GetText(LanguageKey.DirectionAsc),
+                        AppConstants.SortDirection.Descending => lm.GetText(LanguageKey.DirectionDesc),
+                        _ => o.ToString()
+                    }).ToList();
+                    SortDirectionComboBox.SelectedIndex = selected >= 0 ? selected : 1;
+                }
 
                 // Status
                 // スキャン中に言語を切り替えた場合、ステータスを「準備完了」に戻さないようにする
@@ -736,11 +763,33 @@ namespace LargeFolderFinder
             RenderResult();
         }
 
-        private void InitializeUnitComboBox()
+        private void IncludeFilesCheckBox_Click(object sender, RoutedEventArgs e)
         {
-            if (UnitComboBox == null) return;
-            UnitComboBox.ItemsSource = Enum.GetValues(typeof(AppConstants.SizeUnit));
-            UnitComboBox.SelectedIndex = 2; // Default to GB
+            RenderResult();
+        }
+
+        private void SortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            RenderResult();
+        }
+
+        private void InitializeComboBoxes()
+        {
+            if (UnitComboBox != null)
+            {
+                UnitComboBox.ItemsSource = Enum.GetValues(typeof(AppConstants.SizeUnit));
+                UnitComboBox.SelectedIndex = 2; // Default to GB
+            }
+            if (SortTargetComboBox != null)
+            {
+                SortTargetComboBox.ItemsSource = Enum.GetValues(typeof(AppConstants.SortTarget));
+                SortTargetComboBox.SelectedIndex = 0; // Size
+            }
+            if (SortDirectionComboBox != null)
+            {
+                SortDirectionComboBox.ItemsSource = Enum.GetValues(typeof(AppConstants.SortDirection));
+                SortDirectionComboBox.SelectedIndex = 1; // Descending
+            }
         }
 
         private void UnitComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -799,8 +848,16 @@ namespace LargeFolderFinder
 
                 bool isScanning = _isScanning && _cts != null;
 
+                AppConstants.SortTarget sortTarget = SortTargetComboBox != null && SortTargetComboBox.SelectedIndex >= 0
+                    ? (AppConstants.SortTarget)Enum.GetValues(typeof(AppConstants.SortTarget)).GetValue(SortTargetComboBox.SelectedIndex)
+                    : AppConstants.SortTarget.Size;
+                AppConstants.SortDirection sortDir = SortDirectionComboBox != null && SortDirectionComboBox.SelectedIndex >= 0
+                    ? (AppConstants.SortDirection)Enum.GetValues(typeof(AppConstants.SortDirection)).GetValue(SortDirectionComboBox.SelectedIndex)
+                    : AppConstants.SortDirection.Descending;
+                bool includeFiles = IncludeFilesCheckBox.IsChecked == true;
+
                 var sb = new StringBuilder();
-                int maxLineLen = CalculateMaxLineLength(_lastScanResult, 0, true, true, thresholdBytes, isScanning, selectedUnit);
+                int maxLineLen = CalculateMaxLineLength(_lastScanResult, 0, true, true, thresholdBytes, isScanning, selectedUnit, sortTarget, sortDir, includeFiles);
                 int tabWidth = 8;
                 if (int.TryParse(TabWidthTextBox.Text, out int parsedTabWidth) && parsedTabWidth > 0)
                 {
@@ -809,7 +866,7 @@ namespace LargeFolderFinder
                 int targetColumn = ((maxLineLen / tabWidth) + 1) * tabWidth;
                 bool useSpaces = SeparatorComboBox.SelectedIndex == 1;
 
-                PrintTreeRecursive(sb, _lastScanResult, indent: string.Empty, isLast: true, isRoot: true, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, selectedUnit);
+                PrintTreeRecursive(sb, _lastScanResult, indent: string.Empty, isLast: true, isRoot: true, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, selectedUnit, sortTarget, sortDir, includeFiles);
 
                 OutputTextBox.Document.Blocks.Clear();
                 var paragraph = new Paragraph(new Run(sb.ToString()));
@@ -827,11 +884,12 @@ namespace LargeFolderFinder
             }
         }
 
-        private int CalculateMaxLineLength(FolderInfo node, int indentLen, bool isRoot, bool isLast, long thresholdBytes, bool isScanning, AppConstants.SizeUnit unit)
+        private int CalculateMaxLineLength(FolderInfo node, int indentLen, bool isRoot, bool isLast, long thresholdBytes, bool isScanning, AppConstants.SizeUnit unit, AppConstants.SortTarget sortTarget, AppConstants.SortDirection sortDir, bool includeFiles)
         {
             if (node == null) return 0;
             // 閾値未満は計算に含めない（非表示のため）
             if (!isRoot && node.Size < thresholdBytes) return 0;
+            if (!isRoot && node.IsFile && !includeFiles) return 0;
 
             // ... (rest of logic same until size part if size was included in calculation, 
             // but actually size is appended at the end. Wait, print logic appends size at the end.
@@ -868,18 +926,42 @@ namespace LargeFolderFinder
                 List<FolderInfo> childrenCopy;
                 lock (node.Children) { childrenCopy = node.Children.ToList(); }
 
-                var visibleChildren = childrenCopy.Where(c => c.Size >= thresholdBytes).OrderBy(c => c.Name).ToList();
-                for (int i = 0; i < visibleChildren.Count; i++)
+                var visibleChildren = childrenCopy.Where(c => c.Size >= thresholdBytes);
+                if (!includeFiles) { visibleChildren = visibleChildren.Where(c => !c.IsFile); }
+
+                if (sortDir == AppConstants.SortDirection.Descending)
                 {
-                    bool isChildLast = (i == visibleChildren.Count - 1);
-                    int childMax = CalculateMaxLineLength(visibleChildren[i], childIndentLen, false, isChildLast, thresholdBytes, isScanning, unit);
+                    visibleChildren = sortTarget switch
+                    {
+                        AppConstants.SortTarget.Size => visibleChildren.OrderByDescending(c => c.Size),
+                        AppConstants.SortTarget.Name => visibleChildren.OrderByDescending(c => c.Name),
+                        AppConstants.SortTarget.Date => visibleChildren.OrderByDescending(c => c.LastModified),
+                        _ => visibleChildren.OrderByDescending(c => c.Size)
+                    };
+                }
+                else
+                {
+                    visibleChildren = sortTarget switch
+                    {
+                        AppConstants.SortTarget.Size => visibleChildren.OrderBy(c => c.Size),
+                        AppConstants.SortTarget.Name => visibleChildren.OrderBy(c => c.Name),
+                        AppConstants.SortTarget.Date => visibleChildren.OrderBy(c => c.LastModified),
+                        _ => visibleChildren.OrderBy(c => c.Size)
+                    };
+                }
+
+                var visibleList = visibleChildren.ToList();
+                for (int i = 0; i < visibleList.Count; i++)
+                {
+                    bool isChildLast = (i == visibleList.Count - 1);
+                    int childMax = CalculateMaxLineLength(visibleList[i], childIndentLen, false, isChildLast, thresholdBytes, isScanning, unit, sortTarget, sortDir, includeFiles);
                     if (childMax > max) max = childMax;
                 }
             }
             return max;
         }
 
-        private void PrintTreeRecursive(StringBuilder sb, FolderInfo node, string indent, bool isLast, bool isRoot, int targetColumn, bool useSpaces, int tabWidth, long thresholdBytes, bool isScanning, AppConstants.SizeUnit unit)
+        private void PrintTreeRecursive(StringBuilder sb, FolderInfo node, string indent, bool isLast, bool isRoot, int targetColumn, bool useSpaces, int tabWidth, long thresholdBytes, bool isScanning, AppConstants.SizeUnit unit, AppConstants.SortTarget sortTarget, AppConstants.SortDirection sortDir, bool includeFiles)
         {
             if (node == null) return;
 
@@ -894,6 +976,8 @@ namespace LargeFolderFinder
 
             // ルート以外で閾値未満なら非表示
             if (!isRoot && node.Size < thresholdBytes) return;
+            // ファイルが非表示設定で、かつファイルであれば非表示
+            if (!isRoot && node.IsFile && !includeFiles) return;
 
             double sizeVal = (double)node.Size / AppConstants.GetBytesPerUnit(unit);
             var nfi = (System.Globalization.NumberFormatInfo)System.Globalization.CultureInfo.InvariantCulture.NumberFormat.Clone();
@@ -942,10 +1026,34 @@ namespace LargeFolderFinder
             List<FolderInfo> childrenCopy;
             lock (node.Children) { childrenCopy = node.Children.ToList(); }
 
-            var visibleChildren = childrenCopy.Where(c => c.Size >= thresholdBytes).OrderBy(c => c.Name).ToList();
-            for (int i = 0; i < visibleChildren.Count; i++)
+            var visibleChildren = childrenCopy.Where(c => c.Size >= thresholdBytes);
+            if (!includeFiles) { visibleChildren = visibleChildren.Where(c => !c.IsFile); }
+
+            if (sortDir == AppConstants.SortDirection.Descending)
             {
-                PrintTreeRecursive(sb, visibleChildren[i], childIndent, isLast: i == visibleChildren.Count - 1, isRoot: false, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, unit);
+                visibleChildren = sortTarget switch
+                {
+                    AppConstants.SortTarget.Size => visibleChildren.OrderByDescending(c => c.Size),
+                    AppConstants.SortTarget.Name => visibleChildren.OrderByDescending(c => c.Name),
+                    AppConstants.SortTarget.Date => visibleChildren.OrderByDescending(c => c.LastModified),
+                    _ => visibleChildren.OrderByDescending(c => c.Size)
+                };
+            }
+            else
+            {
+                visibleChildren = sortTarget switch
+                {
+                    AppConstants.SortTarget.Size => visibleChildren.OrderBy(c => c.Size),
+                    AppConstants.SortTarget.Name => visibleChildren.OrderBy(c => c.Name),
+                    AppConstants.SortTarget.Date => visibleChildren.OrderBy(c => c.LastModified),
+                    _ => visibleChildren.OrderBy(c => c.Size)
+                };
+            }
+
+            var visibleList = visibleChildren.ToList();
+            for (int i = 0; i < visibleList.Count; i++)
+            {
+                PrintTreeRecursive(sb, visibleList[i], childIndent, isLast: i == visibleList.Count - 1, isRoot: false, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, unit, sortTarget, sortDir, includeFiles);
             }
 
             if (isRoot)
@@ -955,7 +1063,7 @@ namespace LargeFolderFinder
                     // スキャン中
                     sb.AppendLine().AppendLine(string.Format(lm.GetText(LanguageKey.LiveScanningMessage), unit));
                 }
-                else if (visibleChildren.Count == 0)
+                else if (visibleList.Count == 0)
                 {
                     // スキャン完了しており、且つ表示すべき子フォルダが1つもない場合
                     sb.Append(AppConstants.TreeLastBranch).AppendLine(lm.GetText(LanguageKey.NotFoundMessage));
@@ -1022,6 +1130,15 @@ namespace LargeFolderFinder
                         SeparatorComboBox.SelectedIndex = settings.SeparatorIndex;
                     }
                     TabWidthTextBox.Text = settings.TabWidth.ToString();
+                    IncludeFilesCheckBox.IsChecked = settings.IncludeFiles;
+                    if (SortTargetComboBox != null)
+                    {
+                        SortTargetComboBox.SelectedIndex = (int)settings.SortTarget;
+                    }
+                    if (SortDirectionComboBox != null)
+                    {
+                        SortDirectionComboBox.SelectedIndex = (int)settings.SortDirection;
+                    }
                 }
                 OptimizeMemory(); // Added
                 Logger.Log(AppConstants.LogCacheLoadSuccess);
@@ -1055,7 +1172,14 @@ namespace LargeFolderFinder
                     SeparatorIndex = SeparatorComboBox.SelectedIndex,
                     TabWidth = tabWidth,
                     Language = LocalizationManager.Instance.CurrentLanguage,
-                    Unit = unit
+                    Unit = unit,
+                    IncludeFiles = IncludeFilesCheckBox.IsChecked == true,
+                    SortTarget = SortTargetComboBox != null && SortTargetComboBox.SelectedIndex >= 0
+                        ? (AppConstants.SortTarget)SortTargetComboBox.SelectedIndex
+                        : AppConstants.SortTarget.Size,
+                    SortDirection = SortDirectionComboBox != null && SortDirectionComboBox.SelectedIndex >= 0
+                        ? (AppConstants.SortDirection)SortDirectionComboBox.SelectedIndex
+                        : AppConstants.SortDirection.Descending
                 };
                 settings.Save();
                 Logger.Log(AppConstants.LogCacheSaveSuccess);

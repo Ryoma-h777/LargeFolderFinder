@@ -1,30 +1,57 @@
 ﻿Title: "Large Folder Finder"
-### Header (Menu) ###
+####### Header (Menu) #######
+## File
 MenuFile: "File(_F)"
 MenuOpenConfig: "Open Advanced Settings(_S)"
 MenuOpenLogSub: "Open Logs(_O)"
 MenuRestartAdmin: "Restart as Administrator(_A)"
 MenuExit: "Exit(_X)"
+# Help
 MenuHelp: "Help(_H)"
 MenuOpenReadme: "Open Readme(_R)"
-MenuAbout: "About(_A)"
 MenuLicense: "License(_L)"
 MenuAppLicense: "App License(_A)"
+MenuAbout: "About(_A)"
 
-### Body (ScanSettings) ###
+# Viewer (Log, Readme, License)
+ViewerCopy: "Copy"
+ViewerOpenFolder: "Open Folder"
+ViewerClose: "Close"
+# Version Modal
+AboutTitle: "About"
+AboutMessage: "{0}\nVersion {1}\n{2}\n\nA tool to quickly find large folders."
+DialogInfo: "Information"
+
+####### Scan Settings #######
+## Line 1 (Folder Browser)
 FolderLabel: "Folder:"
 BrowseButton: "..."
+## Line 2
+# Scan
 SearchSizeLabel: "Search Size: ({0})"
 SearchSizeToolTip: "Extracts and lists folders larger than this size. 0 can be specified, but the smaller the size, the longer the scan takes."
+# FolderName<---Space--->Size
 SeparatorLabel: "Separator:"
 SeparatorToolTip: "Specifies the space between the folder name and size ({0})."
+# Scan Button
 ScanButton: "Scan"
 CancelButton: "Cancel"
 CancelToolTip: "Cancel. If it doesn't work, press the X button."
+# Advance Setting Button
 OpenConfigToolTip: "Open advanced settings (Config.txt)"
-CopyToolTip: "Copy results to clipboard"
+# Clipboard Copy Button
+CopyToolTip: "Copy to clipboard"
 
-### Footer (Status & Progress) ###
+## Line 3
+# Sort
+SortLabel: "Sort:"
+TargetSize: "Size"
+TargetName: "Name"
+TargetDate: "Date"
+DirectionAsc: "Asc"
+DirectionDesc: "Desc"
+
+####### Footer (Status & Progress) #######
 ReadyStatus: "Ready"
 ScanningStatus: "Scanning..."
 CancelledStatus: "Cancelled"
@@ -32,6 +59,7 @@ FinishedStatus: "Finished"
 NotFoundMessage: "No matching folders found."
 CopyNotification: "Copied!"
 FolderCountStatus: "Checking number of folders..."
+# time
 RemainingTimeH: "About {0}{1} {2}{3} remaining"
 RemainingTimeM: "About {0}{1} {2}{3} remaining"
 RemainingTimeS: "About {0}{1} remaining"
@@ -42,12 +70,10 @@ UnitMinute: "m"
 UnitSecond: "s"
 UnitMillisecond: "ms"
 UnitElapsed: "elapsed"
-Unknown: "Unknown"
+
+Unknown: "Unknown" # Progress bar display: Shown when the total count is unknown.
 LabelError: "Error: "
 UnitFolder: " folders"
-AboutTitle: "About"
-AboutMessage: "{0}\nVersion {1}\n{2}\n\nA tool to quickly find large folders."
-DialogInfo: "Information"
 
 DetailLabel: "Details:"
 LiveScanningMessage: "Scanning... Size({0}) shows intermediate results."
@@ -57,7 +83,7 @@ ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} elapsed"
 
-### Error Messages ###
+####### Error Messages #######
 ConfigError: "Failed to open config file."
 ReadmeError: "Failed to open Readme file."
 ReadmeNotFound: "Readme file not found."
@@ -70,6 +96,3 @@ RenderErrorLabel: "Render Error"
 DebugInfoTitle: "Debug Info"
 MenuThirdPartyLicenses: "Third-Party Licenses(_T)"
 LicenseNotFoundError: "License file ({0}) not found."
-ViewerCopy: "Copy"
-ViewerOpenFolder: "Open Folder"
-ViewerClose: "Close"
