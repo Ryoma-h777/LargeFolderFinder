@@ -26,6 +26,7 @@ namespace LargeFolderFinder
         public static string GetReadmeFileName(string lang) => $"Readme_{lang}.txt";
         public const string ReadmeDirectoryName = "Readme";
         public const string ConfigFileName = "Config.txt";
+        public const string ThirdPartyNoticesFileName = "ThirdPartyNotices.txt";
         // removed BytesInGB
         public const double DefaultThreshold = 100.0;
         // removed SizeUnit
@@ -100,8 +101,12 @@ namespace LargeFolderFinder
         public const string LogScanProgressError = "Progress handler error occurred.";
         public const string LogRenderError = "RenderResult error occurred.";
         public const string LogReadmeError = "Failed to open Readme.";
+        public const string LogThirdPartyNoticesError = "Failed to open Third Party Notices.";
         public const string LogConfigError = "Failed to open config file.";
         public const string LogClipboardError = "Failed to copy to clipboard.";
         public const string LogOptimizeMemory = "Memory optimized.";
+        public const string LogBrowseButtonClicked = "Browse button clicked.";
+        public const string LogBrowseButtonClickedError = "Error in BrowseButton_Click with CommonFolderDialog";
+
     }
 }

@@ -66,4 +66,5 @@ ClipboardError: "Panoya kopyalama başarısız oldu: "
 ProgressErrorLabel: "İlerleme hatası:"
 RenderErrorLabel: "Oluşturma hatası:"
 DebugInfoTitle: "Hata ayıklama bilgisi"
-
+MenuThirdPartyLicenses: "Üçüncü Taraf Lisansları"
+LicenseNotFoundError: "Lisans dosyası (ThirdPartyNotices.txt) bulunamadı."

@@ -66,4 +66,5 @@ ClipboardError: "클립보드에 복사하지 못했습니다: "
 ProgressErrorLabel: "진행 오류:"
 RenderErrorLabel: "렌더링 오류:"
 DebugInfoTitle: "디버그 정보"
-
+MenuThirdPartyLicenses: "타사 라이선스"
+LicenseNotFoundError: "라이선스 파일(ThirdPartyNotices.txt)을 찾을 수 없습니다."

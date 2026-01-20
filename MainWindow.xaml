@@ -21,6 +21,7 @@
             </MenuItem>
             <MenuItem x:Name="MenuHelp" Header="ヘルプ(_H)">
                 <MenuItem x:Name="MenuOpenReadme" Header="Readme を開く(_R)" Click="MenuReadme_Click"/>
+                <MenuItem x:Name="MenuThirdPartyLicenses" Header="Third Party Licenses" Click="MenuThirdPartyLicenses_Click"/>
                 <Separator/>
                 <MenuItem x:Name="MenuAbout" Header="バージョン情報(_A)" Click="MenuAbout_Click"/>
             </MenuItem>

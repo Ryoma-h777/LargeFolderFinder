@@ -66,4 +66,5 @@ ClipboardError: "Kopieren in die Zwischenablage fehlgeschlagen: "
 ProgressErrorLabel: "Fortschrittsfehler:"
 RenderErrorLabel: "Rendering-Fehler:"
 DebugInfoTitle: "Debug-Informationen"
-
+MenuThirdPartyLicenses: "Lizenzen von Drittanbietern"
+LicenseNotFoundError: "Lizenzdatei (ThirdPartyNotices.txt) nicht gefunden."
