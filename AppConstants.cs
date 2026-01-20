@@ -26,6 +26,8 @@ namespace LargeFolderFinder
         public static string GetReadmeFileName(string lang) => $"Readme_{lang}.txt";
         public const string ReadmeDirectoryName = "Readme";
         public const string ConfigFileName = "Config.txt";
+        public const string LicenseDirectoryName = "License";
+        public const string AppLicenseFileName = "LICENSE.txt";
         public const string ThirdPartyNoticesFileName = "ThirdPartyNotices.txt";
         // removed BytesInGB
         public const double DefaultThreshold = 100.0;

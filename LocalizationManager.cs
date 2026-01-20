@@ -22,6 +22,8 @@ namespace LargeFolderFinder
         MenuHelp,
         MenuOpenReadme,
         MenuAbout,
+        MenuLicense,
+        MenuAppLicense,
 
         // --- Body (ScanSettings) ---
         FolderLabel,

@@ -8,6 +8,8 @@ MenuExit: "Выход(_X)"
 MenuHelp: "Справка(_H)"
 MenuOpenReadme: "Открыть Readme(_R)"
 MenuAbout: "О программе(_A)"
+MenuLicense: "Лицензия(_L)"
+MenuAppLicense: "Лицензия приложения(_A)"
 
 ### Body (ScanSettings) ###
 FolderLabel: "Папка:"
@@ -66,5 +68,5 @@ ClipboardError: "Ошибка при копировании в буфер обм
 ProgressErrorLabel: "Ошибка прогресса:"
 RenderErrorLabel: "Ошибка отображения"
 DebugInfoTitle: "Отладочная информация"
-MenuThirdPartyLicenses: "Лицензии третьих лиц"
+MenuThirdPartyLicenses: "Лицензии третьих лиц(_T)"
 LicenseNotFoundError: "Файл лицензии (ThirdPartyNotices.txt) не найден."
