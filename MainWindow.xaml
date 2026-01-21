@@ -32,16 +32,17 @@
 
         <Grid Margin="10">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/> <!-- Row 0: Path -->
+                <RowDefinition Height="Auto"/> <!-- Row 1: Scan execution -->
+                <RowDefinition Height="Auto"/> <!-- Row 2: Separator line -->
+                <RowDefinition Height="Auto"/> <!-- Row 3: Display settings -->
+                <RowDefinition Height="*"/>    <!-- Row 4: Results -->
+                <RowDefinition Height="Auto"/> <!-- Row 5: Progress -->
+                <RowDefinition Height="Auto"/> <!-- Row 6: Status -->
             </Grid.RowDefinitions>
 
-            <!-- Input Area -->
-            <Grid Grid.Row="0" Margin="0,0,0,10">
+            <!-- Row 0: Folder Path Input Area -->
+            <Grid Grid.Row="0" Margin="0,0,0,5">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -59,21 +60,22 @@
                     x:Name="BrowseButton" Grid.Column="2" Content="..." Width="30" Height="25" Margin="5,0,0,0"/>
             </Grid>
 
-            <!-- Search Settings (Row 1) -->
+            <!-- Row 1: Scan Execution Row -->
             <Grid Grid.Row="1" Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock
-                    x:Name="SearchSizeLabel"
-                    Text="検索サイズ:"
-                    VerticalAlignment="Center"
-                    Margin="0,0,5,0"
-                    ToolTip="このサイズ以上のフォルダを抽出して一覧表示します。0も指定可能ですが、小さいサイズを指定するほど探索に時間がかがかかります。"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock
+                        x:Name="SearchSizeLabel"
+                        Text="検索サイズ:"
+                        VerticalAlignment="Center"
+                        Margin="0,0,5,0"
+                        ToolTip="このサイズ以上のフォルダを抽出して一覧表示します。0も指定可能ですが、小さいサイズを指定するほど探索に時間がかがかかります。"/>
                     <TextBox
                         Text="100"
                         x:Name="ThresholdTextBox"
@@ -90,58 +92,8 @@
                         SelectionChanged="UnitComboBox_SelectionChanged"/>
                 </StackPanel>
 
-                <CheckBox
-                    x:Name="IncludeFilesCheckBox"
-                    Grid.Column="2"
-                    Content="ファイルも含める"
-                    VerticalAlignment="Center"
-                    Margin="20,0,0,0"
-                    ToolTip="チェックすると、サイズ条件を満たすファイルも一覧に表示します。"
-                    Click="IncludeFilesCheckBox_Click"/>
-            </Grid>
-
-            <!-- Display Settings & Actions (Row 2) -->
-            <Grid Grid.Row="2" Margin="0,0,0,10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock
-                        x:Name="SeparatorLabel"
-                        Text="空白:"
-                        VerticalAlignment="Center"
-                        Margin="0,0,5,0"
-                        ToolTip="フォルダ名とサイズ間のスペースを指定します。"/>
-                    <ComboBox x:Name="SeparatorComboBox" Width="70" Height="25" VerticalContentAlignment="Center" SelectedIndex="1" Margin="0,0,10,0" HorizontalAlignment="Left" SelectionChanged="SeparatorComboBox_SelectionChanged">
-                        <ComboBoxItem Content="Tab"/>
-                        <ComboBoxItem Content="Space"/>
-                    </ComboBox>
-                </StackPanel>
-
-                <StackPanel x:Name="TabWidthPanel" Grid.Column="1" Orientation="Horizontal" Visibility="Collapsed">
-                    <TextBlock Text="Tab Width:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <TextBox x:Name="TabWidthTextBox" Width="30" Height="25" VerticalContentAlignment="Center" Text="8" Margin="0,0,10,0" TextChanged="TabWidthTextBox_TextChanged"/>
-                </StackPanel>
-
-                <!-- Sorting (Merged look) -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,0,10,0">
-                    <TextBlock x:Name="SortLabel" Text="ソート:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <Border BorderBrush="#ccc" BorderThickness="1" CornerRadius="2" Background="White">
-                        <StackPanel Orientation="Horizontal">
-                            <ComboBox x:Name="SortTargetComboBox" Width="70" Height="23" BorderThickness="0" Background="Transparent" SelectionChanged="SortComboBox_SelectionChanged" VerticalContentAlignment="Center"/>
-                            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="2,4"/>
-                            <ComboBox x:Name="SortDirectionComboBox" Width="70" Height="23" BorderThickness="0" Background="Transparent" SelectionChanged="SortComboBox_SelectionChanged" VerticalContentAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <!-- Scan Buttons -->
-                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Scan Buttons & Config -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button
                         Click="ScanButton_Click"
                         x:Name="RunButton" 
@@ -158,7 +110,6 @@
                         </Button.Resources>
                     </Button>
                     
-                    <!-- Cancel Buttons -->
                     <Button
                         Click="CancelButton_Click"
                         x:Name="CancelButton" 
@@ -169,7 +120,6 @@
                         IsEnabled="False" 
                         ToolTip="キャンセルします。できないときはXボタンを押してください。"/>
 
-                    <!-- Open Settings Buttons -->
                     <Button
                         Click="OpenConfigButton_Click"
                         x:Name="OpenConfigButton" 
@@ -184,27 +134,86 @@
                         <Path Data="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.35 19.43,11.03L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.97 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.97 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11.03C4.53,11.35 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.95C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.95L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" 
                                Fill="#555" Stretch="Uniform" />
                     </Button>
-
-                    <!-- Copy Buttons -->
-                    <Button
-                        Click="CopyButton_Click"
-                        x:Name="CopyButton" 
-                        Width="25" 
-                        Height="25" 
-                        Padding="4"
-                        Margin="10,0,0,0"
-                        ToolTip="結果をクリップボードにコピー"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        VerticalAlignment="Center">
-                        <Path Data="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" 
-                               Fill="#555" Stretch="Uniform" />
-                    </Button>
                 </StackPanel>
             </Grid>
 
+            <!-- Row 2: Genre Separator -->
+            <Border Grid.Row="2" Height="1" Background="#EEE" Margin="0,0,0,5"/>
+
+            <!-- Row 3: Display Settings Row (Height 80% aim) -->
+            <Grid Grid.Row="3" Margin="0,0,0,5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Sorting -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                    <TextBlock x:Name="SortLabel" Text="ソート:" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="11"/>
+                    <Border BorderBrush="#ccc" BorderThickness="1" CornerRadius="2" Background="White" Height="20">
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox x:Name="SortTargetComboBox" Width="65" Height="18" BorderThickness="0" Background="Transparent" SelectionChanged="SortComboBox_SelectionChanged" VerticalContentAlignment="Center" FontSize="10"/>
+                            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="2,2"/>
+                            <ComboBox x:Name="SortDirectionComboBox" Width="65" Height="18" BorderThickness="0" Background="Transparent" SelectionChanged="SortComboBox_SelectionChanged" VerticalContentAlignment="Center" FontSize="10"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Include Files -->
+                <CheckBox
+                    x:Name="IncludeFilesCheckBox"
+                    Grid.Column="1"
+                    Content="ファイルも含める"
+                    VerticalAlignment="Center"
+                    Margin="0,0,15,0"
+                    FontSize="11"
+                    ToolTip="チェックすると、サイズ条件を満たすファイルも一覧に表示します。"
+                    Click="IncludeFilesCheckBox_Click"/>
+
+                <!-- Whitespace / Separator -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                    <TextBlock
+                        x:Name="SeparatorLabel"
+                        Text="空白:"
+                        VerticalAlignment="Center"
+                        Margin="0,0,5,0"
+                        FontSize="11"
+                        ToolTip="フォルダ名とサイズ間のスペースを指定します。"/>
+                    <ComboBox x:Name="SeparatorComboBox" Width="65" Height="20" VerticalContentAlignment="Center" SelectedIndex="1" SelectionChanged="SeparatorComboBox_SelectionChanged" FontSize="10">
+                        <ComboBoxItem Content="Tab"/>
+                        <ComboBoxItem Content="Space"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Tab Width -->
+                <StackPanel x:Name="TabWidthPanel" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
+                    <TextBlock Text="Tab Width:" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="11"/>
+                    <TextBox x:Name="TabWidthTextBox" Width="25" Height="20" VerticalContentAlignment="Center" Text="8" TextChanged="TabWidthTextBox_TextChanged" FontSize="10"/>
+                </StackPanel>
+
+                <!-- Copy Button -->
+                <Button
+                    Click="CopyButton_Click"
+                    x:Name="CopyButton" 
+                    Grid.Column="5"
+                    Width="20" 
+                    Height="20" 
+                    Padding="3"
+                    ToolTip="結果をクリップボードにコピー"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    VerticalAlignment="Center">
+                    <Path Data="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" 
+                           Fill="#555" Stretch="Uniform" />
+                </Button>
+            </Grid>
+
             <!-- Result TREE Output Area -->
-            <RichTextBox x:Name="OutputTextBox" Grid.Row="3" 
+            <RichTextBox x:Name="OutputTextBox" Grid.Row="4" 
                     FontFamily="MS Gothic" FontSize="12" 
                     IsReadOnly="True" 
                     UndoLimit="0"
@@ -219,10 +228,10 @@
             </RichTextBox>
 
             <!-- Progress Bar(進捗率) -->
-            <ProgressBar x:Name="ScanProgressBar" Grid.Row="4" Height="20" Margin="0,5,0,0" Visibility="Collapsed" Minimum="0" Maximum="100" Value="0"/>
+            <ProgressBar x:Name="ScanProgressBar" Grid.Row="5" Height="20" Margin="0,5,0,0" Visibility="Collapsed" Minimum="0" Maximum="100" Value="0"/>
 
             <!-- Status Bar (完了,経過時間などを表示) -->
-            <StatusBar Grid.Row="5" Margin="0,5,0,0">
+            <StatusBar Grid.Row="6" Margin="0,5,0,0">
                 <StatusBar.ItemsPanel>
                     <ItemsPanelTemplate>
                         <Grid>
