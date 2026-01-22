@@ -32,11 +32,12 @@ FolderLabel: "Dossier :"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "Taille de recherche : ({0})"
+SearchSizeLabel: "Taille minimale :"
 SearchSizeToolTip: "Extrait et liste les dossiers plus grands que cette taille. 0 peut être spécifié, mais plus la taille est petite, plus l'analyse est longue."
 # FolderName<---Space--->Size
 SeparatorLabel: "Séparateur :"
 SeparatorToolTip: "Spécifie l'espace entre le nom du dossier et la taille ({0})."
+TabWidthLabel: "Largeur :"
 # Scan Button
 ScanButton: "Scan"
 CancelButton: "Annuler"
@@ -46,7 +47,6 @@ OpenConfigToolTip: "Ouvrir les paramètres avancés (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Copier dans le presse-papiers"
 IncludeFiles: "Afficher les fichiers"
-ViewLabel: "Affichage"
 ViewLabel: "Affichage"
 
 ## Line 3
@@ -79,7 +79,7 @@ UnitMillisecond: "ms"
 UnitElapsed: "écoulé"
 
 Unknown: "Inconnu" # Barre de progression : affiché quand le total est inconnu.
-LabelError: "Erreur : "
+LabelError: "Erreur"
 UnitFolder: " dossiers"
 
 DetailLabel: "Détails :"
@@ -99,7 +99,8 @@ ThresholdInvalidError: "Taille de recherche invalide."
 InitializationError: "Une erreur s'est produite lors de l'initialisation de l'application :"
 ClipboardError: "Échec de la copie dans le presse-papier : "
 ProgressErrorLabel: "Erreur de progression :"
-RenderErrorLabel: "Erreur de rendu"
+RenderErrorLabel: "Erreur de rendu :"
+RenderingStatus: "Rendu en cours..."
 DebugInfoTitle: "Info débogage"
 MenuThirdPartyLicenses: "Licences tierces(_T)"
 LicenseNotFoundError: "Fichier de licence ({0}) introuvable."

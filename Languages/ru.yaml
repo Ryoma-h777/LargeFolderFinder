@@ -32,11 +32,12 @@ FolderLabel: "Папка:"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "Размер поиска: ({0})"
+SearchSizeLabel: "Минимальный размер:"
 SearchSizeToolTip: "Извлекает и перечисляет папки больше этого размера. Можно указать 0, но чем меньше размер, тем дольше длится сканирование."
 # FolderName<---Space--->Size
 SeparatorLabel: "Разделитель:"
-SeparatorToolTip: "Указывает пробел между именем папки и размером (ГБ)."
+SeparatorToolTip: "Указывает пробел между именем папки и размером ({0})."
+TabWidthLabel: "Ширина:"
 # Scan Button
 ScanButton: "Сканировать"
 CancelButton: "Отмена"
@@ -78,7 +79,7 @@ UnitMillisecond: "мс"
 UnitElapsed: "прошло"
 
 Unknown: "Неизвестно" # Шкала прогресса: отображается, когда общее количество неизвестно.
-LabelError: "Ошибка: "
+LabelError: "Ошибка"
 UnitFolder: " папок"
 
 DetailLabel: "Подробности:"
@@ -98,7 +99,8 @@ ThresholdInvalidError: "Недопустимый размер поиска."
 InitializationError: "Произошла ошибка во время инициализации приложения:"
 ClipboardError: "Ошибка при копировании в буфер обмена: "
 ProgressErrorLabel: "Ошибка прогресса:"
-RenderErrorLabel: "Ошибка отображения"
+RenderErrorLabel: "Ошибка отображения:"
+RenderingStatus: "Отображение..."
 DebugInfoTitle: "Отладочная информация"
 MenuThirdPartyLicenses: "Лицензии третьих лиц(_T)"
 LicenseNotFoundError: "Файл лицензии ({0}) не найден."

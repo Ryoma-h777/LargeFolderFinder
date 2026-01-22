@@ -32,11 +32,12 @@ FolderLabel: "폴더:"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "검색 크기: ({0})"
+SearchSizeLabel: "최소 크기:"
 SearchSizeToolTip: "이 크기보다 큰 폴더를 추출하여 나열합니다. 0을 지정할 수 있지만, 크기가 작을수록 스캔 시간이 오래 걸립니다."
 # FolderName<---Space--->Size
 SeparatorLabel: "구분 기호:"
 SeparatorToolTip: "폴더 이름과 크기({0}) 사이의 공백을 지정합니다."
+TabWidthLabel: "너비:"
 # Scan Button
 ScanButton: "스캔"
 CancelButton: "취소"
@@ -78,7 +79,7 @@ UnitMillisecond: "ms"
 UnitElapsed: "경과"
 
 Unknown: "알 수 없음" # 진捗率表示用: 총수를 파악하지 못했을 때 표시됩니다.
-LabelError: "오류: "
+LabelError: "오류"
 UnitFolder: " 폴더"
 
 DetailLabel: "세부 정보:"
@@ -99,6 +100,7 @@ InitializationError: "애플리케이션을 초기화하는 동안 오류가 발
 ClipboardError: "클립보드에 복사하지 못했습니다: "
 ProgressErrorLabel: "진행 오류:"
 RenderErrorLabel: "렌더링 오류:"
+RenderingStatus: "렌더링 중..."
 DebugInfoTitle: "디버그 정보"
 MenuThirdPartyLicenses: "타사 라이선스(_T)"
 LicenseNotFoundError: "라이선스 파일({0})을 찾을 수 없습니다."
