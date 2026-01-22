@@ -56,6 +56,7 @@ namespace LargeFolderFinder
             CopyButton.ToolTip = lm.GetText(LanguageKey.CopyToolTip);
 
             SearchSizeLabel.Text = lm.GetText(LanguageKey.SearchSizeLabel).Replace(" ({0})", "");
+            SearchSizeLabel.ToolTip = lm.GetText(LanguageKey.SearchSizeToolTip);
             SortLabel.Text = lm.GetText(LanguageKey.SortLabel);
             SeparatorLabel.Text = lm.GetText(LanguageKey.SeparatorLabel);
             SeparatorComboBox.ToolTip = lm.GetText(LanguageKey.SeparatorToolTip);
