@@ -11,6 +11,10 @@ MenuHelp: "Ajuda(_H)"
 MenuOpenReadme: "Abrir Readme(_R)"
 MenuLicense: "Licença(_L)"
 MenuAppLicense: "Licença do aplicativo(_A)"
+MenuView: "Exibir(_V)"
+MenuLayout: "Layout(_L)"
+MenuLayoutVertical: "Vertical(_V)"
+MenuLayoutHorizontal: "Horizontal(_H)"
 MenuAbout: "Sobre(_A)"
 
 # Viewer (Log, Readme, License)
@@ -41,6 +45,9 @@ CancelToolTip: "Cancela. Se não funcionar, pressione o botão X."
 OpenConfigToolTip: "Abrir configurações avançadas (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Copiar para a área de transferência"
+IncludeFiles: "成果物を表示" # ここは "Mostrar arquivos" にすべき
+IncludeFiles: "Mostrar arquivos"
+ViewLabel: "Exibir"
 
 ## Line 3
 # Sort

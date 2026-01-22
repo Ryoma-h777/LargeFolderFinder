@@ -21,6 +21,10 @@ ViewerClose: "Fermer"
 AboutTitle: "À propos"
 AboutMessage: "{0}\nVersion {1}\n{2}\n\nUn outil pour trouver rapidement les dossiers volumineux."
 DialogInfo: "Information"
+MenuView: "Affichage(_V)"
+MenuLayout: "Mise en page(_L)"
+MenuLayoutVertical: "Vertical(_V)"
+MenuLayoutHorizontal: "Horizontal(_H)"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
@@ -41,6 +45,9 @@ CancelToolTip: "Annuler. Si cela ne fonctionne pas, appuyez sur le bouton X."
 OpenConfigToolTip: "Ouvrir les paramètres avancés (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Copier dans le presse-papiers"
+IncludeFiles: "Afficher les fichiers"
+ViewLabel: "Affichage"
+ViewLabel: "Affichage"
 
 ## Line 3
 # Sort

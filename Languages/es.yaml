@@ -21,6 +21,10 @@ ViewerClose: "Cerrar"
 AboutTitle: "Acerca de"
 AboutMessage: "{0}\nVersión {1}\n{2}\n\nUna herramienta para encontrar rápidamente carpetas grandes."
 DialogInfo: "Información"
+MenuView: "Ver(_V)"
+MenuLayout: "Diseño(_L)"
+MenuLayoutVertical: "Vertical(_V)"
+MenuLayoutHorizontal: "Horizontal(_H)"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
@@ -41,6 +45,9 @@ CancelToolTip: "Cancelar. Si no funciona, presione el botón X."
 OpenConfigToolTip: "Abrir configuración avanzada (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Copiar al portapapeles"
+IncludeFiles: "Mostrar archivos"
+ViewLabel: "Ver"
+ViewLabel: "Ver"
 
 ## Line 3
 # Sort

@@ -21,6 +21,10 @@ ViewerClose: "关闭"
 AboutTitle: "关于"
 AboutMessage: "{0}\n版本 {1}\n{2}\n\n快速查找大文件夹的工具。"
 DialogInfo: "信息"
+MenuView: "视图(_V)"
+MenuLayout: "布局(_L)"
+MenuLayoutVertical: "垂直布局(_V)"
+MenuLayoutHorizontal: "水平布局(_H)"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
@@ -41,6 +45,8 @@ CancelToolTip: "取消。如果不起作用，请按 X 按钮。"
 OpenConfigToolTip: "打开高级设置 (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "复制到剪贴板"
+IncludeFiles: "显示文件"
+ViewLabel: "视图"
 
 ## Line 3
 # Sort

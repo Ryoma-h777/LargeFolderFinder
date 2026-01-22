@@ -21,6 +21,10 @@ ViewerClose: "Schließen"
 AboutTitle: "Über"
 AboutMessage: "{0}\nVersion {1}\n{2}\n\nEin Werkzeug, um große Ordner schnell zu finden."
 DialogInfo: "Information"
+MenuView: "Ansicht(_V)"
+MenuLayout: "Layout(_L)"
+MenuLayoutVertical: "Vertikal(_V)"
+MenuLayoutHorizontal: "Horizontal(_H)"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
@@ -41,6 +45,8 @@ CancelToolTip: "Abbrechen. Wenn es nicht funktioniert, drücken Sie die X-Taste.
 OpenConfigToolTip: "Erweiterte Einstellungen öffnen (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Ergebnisse in die Zwischenablage kopieren"
+IncludeFiles: "Dateien anzeigen"
+ViewLabel: "Ansicht"
 
 ## Line 3
 # Sort

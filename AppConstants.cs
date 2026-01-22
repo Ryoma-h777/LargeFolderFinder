@@ -35,6 +35,7 @@ namespace LargeFolderFinder
 
         public enum SizeUnit
         {
+            Byte,
             KB,
             MB,
             GB,
@@ -65,11 +66,22 @@ namespace LargeFolderFinder
             };
         }
 
+        public enum LayoutType
+        {
+            Vertical,
+            Horizontal
+        }
 
+        public enum Separator
+        {
+            Tab,
+            Space
+        }
 
         // 桁区切りとフォーマット
         public const string DigitSeparator = ",";
-        public const string SizeFormat = "{0, 10:N0} GB";
+        public const string SizeFormat = "{0, 10:N0} {1}";
+        public const int DefaultTabWidth = 8;
 
         // 罫線定数
         public const string TreeBranch = "┣";
@@ -109,14 +121,11 @@ namespace LargeFolderFinder
         public const string LogLangChangeStart = "Changing language to: {0}";
         public const string LogLangChangeSuccess = "Language changed successfully to: {0}";
         public const string LogLangChangeError = "Failed to change language.";
-        public const string LogScanStart = "Scan started. Path: {0}, Threshold: {1}GB";
+        public const string LogScanStart = "Scan started. Path: {0}, Threshold: {1}";
         public const string LogScanSuccess = "Scan finished successfully. Time: {0}";
         public const string LogScanError = "Scan error occurred.";
         public const string LogScanProgressError = "Progress handler error occurred.";
         public const string LogRenderError = "RenderResult error occurred.";
-        public const string LogReadmeError = "Failed to open Readme.";
-        public const string LogThirdPartyNoticesError = "Failed to open Third Party Notices.";
-        public const string LogConfigError = "Failed to open config file.";
         public const string LogClipboardError = "Failed to copy to clipboard.";
         public const string LogOptimizeMemory = "Memory optimized.";
         public const string LogBrowseButtonClicked = "Browse button clicked.";

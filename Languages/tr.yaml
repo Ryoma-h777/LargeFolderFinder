@@ -11,6 +11,10 @@ MenuHelp: "Yardım(_H)"
 MenuOpenReadme: "Readme'yi Aç(_R)"
 MenuLicense: "Lisans(_L)"
 MenuAppLicense: "Uygulama Lisansı(_A)"
+MenuView: "Görünüm(_V)"
+MenuLayout: "Düzen(_L)"
+MenuLayoutVertical: "Dikey(_V)"
+MenuLayoutHorizontal: "Yatay(_H)"
 MenuAbout: "Hakkında(_A)"
 
 # Viewer (Log, Readme, License)
@@ -41,6 +45,8 @@ CancelToolTip: "İptal eder. Çalışmazsa X düğmesine basın."
 OpenConfigToolTip: "Gelişmiş Ayarları Aç (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Sonuçları panoya kopyala"
+IncludeFiles: "Dosyaları göster"
+ViewLabel: "Görünüm"
 
 ## Line 3
 # Sort

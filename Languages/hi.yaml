@@ -11,6 +11,10 @@ MenuHelp: "सहायता(_H)"
 MenuOpenReadme: "Readme खोलें(_R)"
 MenuLicense: "लाइसेन्स(_L)"
 MenuAppLicense: "ऐप लाइसेन्स(_A)"
+MenuView: "देखें(_V)"
+MenuLayout: "लेआउट(_L)"
+MenuLayoutVertical: "लंबवत(_V)"
+MenuLayoutHorizontal: "क्षैतिज(_H)"
 MenuAbout: "इसके बारे में(_A)"
 
 # Viewer (Log, Readme, License)
@@ -41,6 +45,8 @@ CancelToolTip: "रद्द करें। यदि यह काम नह�
 OpenConfigToolTip: "उन्नत सेटिंग्स खोलें (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "क्लिपबोर्ड पर कॉपी करें"
+IncludeFiles: "फ़ाइलें दिखाएं"
+ViewLabel: "दृश्य"
 
 ## Line 3
 # Sort

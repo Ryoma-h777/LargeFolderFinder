@@ -20,7 +20,11 @@ ViewerClose: "Chiudi"
 # Version Modal
 AboutTitle: "Informazioni"
 AboutMessage: "{0}\nVersione {1}\n{2}\n\nUno strumento per trovare rapidamente cartelle di grandi dimensioni."
-DialogInfo: "Informazione"
+DialogInfo: "Informazioni"
+MenuView: "Visualizza(_V)"
+MenuLayout: "Layout(_L)"
+MenuLayoutVertical: "Verticale(_V)"
+MenuLayoutHorizontal: "Orizzontale(_H)"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
@@ -41,6 +45,8 @@ CancelToolTip: "Annulla. Se non funziona, premi il pulsante X."
 OpenConfigToolTip: "Apri impostazioni avanzate (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Copia i risultati negli appunti"
+IncludeFiles: "Mostra file"
+ViewLabel: "Visualizza"
 
 ## Line 3
 # Sort

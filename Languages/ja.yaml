@@ -11,6 +11,10 @@ MenuHelp: "ヘルプ(_H)"
 MenuOpenReadme: "Readme を開く(_R)"
 MenuLicense: "ライセンス(_L)"
 MenuAppLicense: "アプリのライセンス(_A)"
+MenuView: "表示(_V)"
+MenuLayout: "レイアウト(_L)"
+MenuLayoutVertical: "縦並び(_V)"
+MenuLayoutHorizontal: "横並び(_H)"
 MenuAbout: "バージョン情報(_A)"
 
 # Viewer (Log, Readme, License)
@@ -33,14 +37,17 @@ SearchSizeToolTip: "このサイズ以上（またはこれと同等）のフォ
 # FolderName<---Space--->Size
 SeparatorLabel: "空白:"
 SeparatorToolTip: "フォルダ名とサイズ({0})間のスペースを指定します。"
+TabWidthLabel: "幅:"
 # Scan Button
 ScanButton: "Scan"
 CancelButton: "Cancel"
-CancelToolTip: "キャンセルします。できないときはXボタンを押してください。"
+CancelToolTip: "キャンセルします。時間かかるときがあるので、待てないときはXボタンを押してください。"
 # Advance Setting Button
 OpenConfigToolTip: "高度な設定 (Config.txt) を開く"
 # Clipboard Copy Button
 CopyToolTip: "結果をクリップボードにコピー"
+IncludeFiles: "ファイルも表示"
+ViewLabel: "表示"
 
 ## Line 3
 # Sort
@@ -84,7 +91,7 @@ ElapsedFormat: "{0}{1}"
 TimeStatusFormat: "{0} {1}"
 
 ####### Error Messages #######
-ConfigError: "設定ファイルを開けませんでした: "
+ConfigError: "Config.txt"
 ReadmeError: "Readme.txt を開けませんでした: "
 ReadmeNotFound: "Readme.txt が見つかりませんでした。"
 PathInvalidError: "有効なフォルダを選択してください。"
@@ -93,6 +100,7 @@ InitializationError: "アプリケーションの初期化中にエラーが発�
 ClipboardError: "クリップボードへのコピーに失敗しました: "
 ProgressErrorLabel: "進行状況表示エラー:"
 RenderErrorLabel: "描画処理エラー:"
+RenderingStatus: "描画中..."
 DebugInfoTitle: "デバッグ情報"
 MenuThirdPartyLicenses: "サードパーティライセンス(_T)"
 LicenseNotFoundError: "ライセンスファイル ({0}) が見つかりません。"

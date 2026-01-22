@@ -24,9 +24,12 @@ namespace LargeFolderFinder
     public partial class MainWindow : Window
     {
         private CancellationTokenSource? _cts;
+        private CancellationTokenSource? _renderCts;
         private FolderInfo? _lastScanResult;
-        private bool _isScanning = false; // 明示的なフラグ
+        private bool _isScanning = false;
         private DispatcherTimer? _memoryTimer;
+        private IMainLayoutView? _layoutView;
+        private bool _hasShownProgressError = false;
 
         public MainWindow()
         {
@@ -35,80 +38,88 @@ namespace LargeFolderFinder
                 Logger.Log(AppConstants.LogAppStarted);
                 InitializeComponent();
                 InitializeLocalization();
-                LoadCache();
+                LoadCache(); // ここで ApplyLayout が呼ばれる
                 UpdateLanguageMenu();
-                InitializeComboBoxes();
-                ApplyLocalization();
 
                 // 初回描画完了後にメモリを絞る
                 this.ContentRendered += (s, e) => OptimizeMemory();
 
-                // アイドル時のメモリ増加（WPF の内部的な動作や Automation 等によるもの）を抑制するため、
-                // 低頻度（数分ごと）でバックグラウンドでのメモリ最適化を実行する
+                // アイドル時のメモリ最適化実行
                 InitializeMemoryTimer();
             }
             catch (Exception ex)
             {
                 Logger.Log(AppConstants.LogInitError, ex);
                 MessageBox.Show(
-                    $"{LocalizationManager.Instance.GetText(LanguageKey.InitializationError)}\n{ex.Message}\n\n{LocalizationManager.Instance.GetText(LanguageKey.DetailLabel)}\n{ex.StackTrace}",
+                    $"{LocalizationManager.Instance.GetText(LanguageKey.InitializationError)}\n" +
+                    $"{ex.Message}\n\n" +
+                    $"{LocalizationManager.Instance.GetText(LanguageKey.DetailLabel)}\n{ex.StackTrace}",
                     LocalizationManager.Instance.GetText(LanguageKey.AboutTitle),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
         }
 
-        private void BrowseButton_Click(object sender, RoutedEventArgs e)
+        internal void BrowseButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_layoutView == null) return;
             try
             {
                 Logger.Log(AppConstants.LogBrowseButtonClicked);
-                //#if Dotnet48 // .Net 48用の処理
                 var dialog = new Ookii.Dialogs.Wpf.VistaFolderBrowserDialog
                 {
                     Description = LocalizationManager.Instance.GetText(LanguageKey.FolderLabel),
-                    UseDescriptionForTitle = true, // タイトルとしてDescriptionを使用
-                    SelectedPath = PathTextBox.Text // 初期ディレクトリ設定
+                    UseDescriptionForTitle = true,
+                    SelectedPath = _layoutView.PathTextBox.Text
                 };
 
                 if (dialog.ShowDialog() == true)
                 {
-                    PathTextBox.Text = dialog.SelectedPath;
+                    _layoutView.PathTextBox.Text = dialog.SelectedPath;
                     Logger.Log($"Folder selected via Ookii: {dialog.SelectedPath}");
                 }
-                //#endif // Dotnet48
             }
             catch (Exception ex)
             {
-                Logger.Log("Error in BrowseButton_Click with Ookii.Dialogs", ex);
-                MessageBox.Show($"{LocalizationManager.Instance.GetText(LanguageKey.LabelError)}\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Logger.Log("Error in BrowseButton_Click", ex);
+                MessageBox.Show(
+                    $"{LocalizationManager.Instance.GetText(LanguageKey.LabelError)}\n{ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
-
-        /// <summary>
-        /// Scan ボタン実行時の処理
-        /// </summary>
-        private async void ScanButton_Click(object sender, RoutedEventArgs e)
+        internal async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_isScanning) return;
+            if (_isScanning || _layoutView == null) return;
             var lm = LocalizationManager.Instance;
 
-            if (string.IsNullOrWhiteSpace(PathTextBox.Text) || !System.IO.Directory.Exists(PathTextBox.Text))
+            string path = _layoutView.PathTextBox.Text;
+            if (string.IsNullOrWhiteSpace(path) || !System.IO.Directory.Exists(path))
             {
-                MessageBox.Show(lm.GetText(LanguageKey.PathInvalidError), lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    lm.GetText(LanguageKey.PathInvalidError),
+                    lm.GetText(LanguageKey.LabelError),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return;
             }
-            if (!double.TryParse(ThresholdTextBox.Text, out double thresholdVal))
+
+            if (!double.TryParse(_layoutView.SearchSizeTextBox.Text, out double thresholdVal))
             {
-                MessageBox.Show(lm.GetText(LanguageKey.ThresholdInvalidError), lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    lm.GetText(LanguageKey.ThresholdInvalidError),
+                    lm.GetText(LanguageKey.LabelError),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return;
             }
 
             AppConstants.SizeUnit selectedUnit = AppConstants.SizeUnit.GB;
-            if (UnitComboBox.SelectedItem is AppConstants.SizeUnit unit)
+            if (_layoutView.UnitComboBox.SelectedIndex >= 0)
             {
-                selectedUnit = unit;
+                selectedUnit = (AppConstants.SizeUnit)_layoutView.UnitComboBox.SelectedIndex;
             }
             long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(selectedUnit));
 
@@ -118,26 +129,19 @@ namespace LargeFolderFinder
 
             _cts = new CancellationTokenSource();
             _isScanning = true;
-            RunButton.IsEnabled = false;
-            CancelButton.IsEnabled = true;
-            OutputTextBox.Document.Blocks.Clear();
-            ScanProgressBar.Visibility = Visibility.Visible;
-            ScanProgressBar.Value = 0;
-            StatusTextBlock.Text = lm.GetText(LanguageKey.FolderCountStatus);
+            _layoutView.RunButton.IsEnabled = false;
+            _layoutView.CancelButton.IsEnabled = true;
+            _layoutView.OutputTextBox.Clear();
+            _layoutView.ScanProgressBar.Visibility = Visibility.Visible;
+            _layoutView.ScanProgressBar.Value = 0;
+            _layoutView.StatusTextBlock.Text = lm.GetText(LanguageKey.FolderCountStatus);
 
-            Logger.Log(string.Format(AppConstants.LogScanStart, PathTextBox.Text, thresholdVal + selectedUnit.ToString()));
+            Logger.Log(string.Format(AppConstants.LogScanStart, path, thresholdVal + selectedUnit.ToString()));
             var sw = Stopwatch.StartNew();
 
             try
             {
-                var scanner = new Scanner();
-
-                int totalFolders = 0;
-                if (!config.SkipFolderCount)
-                {
-                    totalFolders = await Scanner.CountFoldersAsync(PathTextBox.Text, config.MaxDepthForCount, _cts.Token);
-                }
-
+                int totalFolders = config.SkipFolderCount ? 0 : await Scanner.CountFoldersAsync(path, config.MaxDepthForCount, _cts.Token);
                 var progress = new Progress<ScanProgress>(p =>
                 {
                     try
@@ -146,66 +150,73 @@ namespace LargeFolderFinder
                         if (!config.SkipFolderCount && totalFolders > 0)
                         {
                             double percentage = (double)p.ProcessedFolders / totalFolders * 100;
-                            ScanProgressBar.Value = percentage;
+                            _layoutView.ScanProgressBar.Value = percentage;
+                            _layoutView.ScanProgressBar.IsIndeterminate = false;
 
                             string remainingStr = "";
                             if (p.EstimatedTimeRemaining.HasValue)
                             {
                                 var remaining = p.EstimatedTimeRemaining.Value;
                                 if (remaining.TotalHours >= 1)
-                                {
-                                    remainingStr = string.Format(lm.GetText(LanguageKey.RemainingTimeH),
-                                        (int)remaining.TotalHours, lm.GetText(LanguageKey.UnitHour),
-                                        remaining.Minutes, lm.GetText(LanguageKey.UnitMinute));
-                                }
+                                    remainingStr = string.Format(
+                                        lm.GetText(LanguageKey.RemainingTimeH),
+                                        (int)remaining.TotalHours,
+                                        lm.GetText(LanguageKey.UnitHour),
+                                        remaining.Minutes,
+                                        lm.GetText(LanguageKey.UnitMinute));
                                 else if (remaining.TotalMinutes >= 1)
-                                {
-                                    remainingStr = string.Format(lm.GetText(LanguageKey.RemainingTimeM),
-                                        (int)remaining.TotalMinutes, lm.GetText(LanguageKey.UnitMinute),
-                                        remaining.Seconds, lm.GetText(LanguageKey.UnitSecond));
-                                }
+                                    remainingStr = string.Format(
+                                        lm.GetText(LanguageKey.RemainingTimeM),
+                                        (int)remaining.TotalMinutes,
+                                        lm.GetText(LanguageKey.UnitMinute),
+                                        remaining.Seconds,
+                                        lm.GetText(LanguageKey.UnitSecond));
                                 else
-                                {
-                                    remainingStr = string.Format(lm.GetText(LanguageKey.RemainingTimeS),
-                                        (int)remaining.TotalSeconds, lm.GetText(LanguageKey.UnitSecond));
-                                }
+                                    remainingStr = string.Format(
+                                        lm.GetText(LanguageKey.RemainingTimeS),
+                                        (int)remaining.TotalSeconds,
+                                        lm.GetText(LanguageKey.UnitSecond));
                             }
 
-                            TimeSpan elapsedTs = sw.Elapsed;
-                            string elapsedStr = FormatDuration(elapsedTs);
-                            string totalFoldersStr = totalFolders > 0 ? totalFolders.ToString() : lm.GetText(LanguageKey.Unknown);
-                            string folderProgress = $"{p.ProcessedFolders}/{totalFoldersStr}";
-
-                            // YAML のフォーマットを使用して組み立て
+                            string elapsedStr = FormatDuration(sw.Elapsed);
+                            string folderProgress = $"{p.ProcessedFolders}/" +
+                                $"{(totalFolders > 0 ? totalFolders.ToString() : lm.GetText(LanguageKey.Unknown))}";
                             string processedPart = string.Format(lm.GetText(LanguageKey.ProcessedFolders), folderProgress);
-                            string elapsedPart = string.Format(lm.GetText(LanguageKey.ElapsedFormat), elapsedStr, lm.GetText(LanguageKey.UnitElapsed));
-
+                            string elapsedPart = string.Format(
+                                lm.GetText(LanguageKey.ElapsedFormat),
+                                elapsedStr,
+                                lm.GetText(LanguageKey.UnitElapsed));
                             string timePart = string.IsNullOrEmpty(remainingStr)
                                 ? elapsedPart
                                 : string.Format(lm.GetText(LanguageKey.TimeStatusFormat), elapsedPart, remainingStr);
-
-                            statusMsg = string.Format(lm.GetText(LanguageKey.ScanningProgressFormat),
-                                lm.GetText(LanguageKey.ScanningStatus), percentage, processedPart, timePart);
+                            statusMsg = string.Format(
+                                lm.GetText(LanguageKey.ScanningProgressFormat),
+                                lm.GetText(LanguageKey.ScanningStatus),
+                                percentage,
+                                processedPart,
+                                timePart);
                         }
                         else
                         {
-                            TimeSpan elapsedTs = sw.Elapsed;
-                            string elapsedStr = FormatDuration(elapsedTs);
+                            _layoutView.ScanProgressBar.IsIndeterminate = true;
+                            string elapsedStr = FormatDuration(sw.Elapsed);
                             string processedPart = string.Format(lm.GetText(LanguageKey.ProcessedFolders), p.ProcessedFolders);
-                            string elapsedPart = string.Format(lm.GetText(LanguageKey.ElapsedFormat), elapsedStr, lm.GetText(LanguageKey.UnitElapsed));
-
-                            // 進行不能時（総数不明）
-                            statusMsg = string.Format(lm.GetText(LanguageKey.ScanningProgressIndeterminateFormat), processedPart, elapsedPart);
-                            ScanProgressBar.IsIndeterminate = true;
+                            string elapsedPart = string.Format(
+                                lm.GetText(LanguageKey.ElapsedFormat),
+                                elapsedStr,
+                                lm.GetText(LanguageKey.UnitElapsed));
+                            statusMsg = string.Format(
+                                lm.GetText(LanguageKey.ScanningProgressIndeterminateFormat),
+                                processedPart,
+                                elapsedPart);
                         }
 
-                        StatusTextBlock.Text = statusMsg;
+                        _layoutView.StatusTextBlock.Text = statusMsg;
 
-                        // リアルタイム表示の更新
                         if (p.CurrentResult != null)
                         {
                             _lastScanResult = p.CurrentResult;
-                            RenderResult();
+                            _ = RenderResult(); // Fire and forget
                         }
                     }
                     catch (Exception ex)
@@ -213,874 +224,512 @@ namespace LargeFolderFinder
                         Logger.Log(AppConstants.LogScanProgressError, ex);
                         if (!_hasShownProgressError)
                         {
-                            var lm = LocalizationManager.Instance;
                             _hasShownProgressError = true;
-                            MessageBox.Show($"{lm.GetText(LanguageKey.ProgressErrorLabel)} {ex.Message}\n{ex.StackTrace}", lm.GetText(LanguageKey.DebugInfoTitle));
+                            MessageBox.Show($"{lm.GetText(LanguageKey.ProgressErrorLabel)} {ex.Message}", "Debug");
                         }
                     }
                 });
 
                 if (config.SkipFolderCount)
                 {
-                    StatusTextBlock.Text = lm.GetText(LanguageKey.ScanningStatus);
-                    ScanProgressBar.IsIndeterminate = true;
+                    _layoutView.StatusTextBlock.Text = lm.GetText(LanguageKey.ScanningStatus);
+                    _layoutView.ScanProgressBar.IsIndeterminate = true;
                 }
                 else
                 {
-                    StatusTextBlock.Text = string.Format(lm.GetText(LanguageKey.ScanningStatusWithCountFormat),
-                        lm.GetText(LanguageKey.ScanningStatus), totalFolders, lm.GetText(LanguageKey.UnitFolder));
+                    _layoutView.StatusTextBlock.Text = string.Format(
+                        lm.GetText(LanguageKey.ScanningStatusWithCountFormat),
+                        lm.GetText(LanguageKey.ScanningStatus),
+                        totalFolders,
+                        lm.GetText(LanguageKey.UnitFolder));
                 }
 
-                var result = await Scanner.RunScan(PathTextBox.Text, thresholdBytes, totalFolders, config.MaxDepthForCount, config.UseParallelScan, config.UsePhysicalSize, progress, _cts.Token);
+                // Scan処理を実行
+                var result = await Scanner.RunScan(
+                    path,
+                    thresholdBytes,
+                    totalFolders,
+                    config.MaxDepthForCount,
+                    config.UseParallelScan,
+                    config.UsePhysicalSize,
+                    progress,
+                    _cts.Token);
 
                 _lastScanResult = result;
+                await RenderResult();
+                // UIの描画完了を待ってから時間を止める
+                await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
                 sw.Stop();
-                string timeStr = FormatDuration(sw.Elapsed);
-                StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} [{string.Format(lm.GetText(LanguageKey.ProcessingTime), timeStr)}]";
-                Logger.Log(string.Format(AppConstants.LogScanSuccess, timeStr));
+
+                if (_layoutView != null)
+                {
+                    _layoutView.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} " +
+                        $"[{string.Format(lm.GetText(LanguageKey.ProcessingTime), FormatDuration(sw.Elapsed))}]";
+                }
+                Logger.Log(string.Format(AppConstants.LogScanSuccess, FormatDuration(sw.Elapsed)));
+
+                OptimizeMemory();
+                _cts?.Dispose();
+                _cts = null;
             }
             catch (OperationCanceledException)
             {
-                ScanProgressBar.Visibility = Visibility.Collapsed;
-                StatusTextBlock.Text = lm.GetText(LanguageKey.CancelledStatus);
+                Logger.Log("Canceled.");
+                _layoutView.StatusTextBlock.Text = lm.GetText(LanguageKey.CancelledStatus);
             }
             catch (Exception ex)
             {
                 Logger.Log(AppConstants.LogScanError, ex);
-#if DEBUG
-                Logger.OpenLogFile();
-#endif
-                ScanProgressBar.Visibility = Visibility.Collapsed;
-                StatusTextBlock.Text = lm.GetText(LanguageKey.LabelError) + ex.Message;
-                // MessageBox はログに出力されるため不要との指示により削除
+                _layoutView.StatusTextBlock.Text = lm.GetText(LanguageKey.LabelError) + ex.Message;
             }
             finally
             {
                 _isScanning = false;
-                RunButton.IsEnabled = true;
-                CancelButton.IsEnabled = false;
+                _layoutView.RunButton.IsEnabled = true;
+                _layoutView.CancelButton.IsEnabled = false;
+                _layoutView.ScanProgressBar.Visibility = Visibility.Collapsed;
+                _layoutView.ScanProgressBar.IsIndeterminate = false;
+                _ = RenderResult();
+                OptimizeMemory();
                 _cts?.Dispose();
                 _cts = null;
-                ScanProgressBar.Visibility = Visibility.Collapsed;
-                ScanProgressBar.IsIndeterminate = false;
-                RenderResult(); // フラグを false にした後に確実に描画
-                OptimizeMemory();
             }
         }
 
-        /// <summary>
-        /// キャンセルボタン実行時処理
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void CancelButton_Click(object sender, RoutedEventArgs e)
+        internal void CancelButton_Click(object sender, RoutedEventArgs e)
         {
+            Logger.Log("Canceling scan...");
             _cts?.Cancel();
         }
 
-        private void MenuConfig_Click(object sender, RoutedEventArgs e)
+        internal void CopyButton_Click(object sender, RoutedEventArgs e)
         {
-            OpenConfigButton_Click(sender, e);
-        }
-
-        private void Input_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-        {
-            if (e.Key == System.Windows.Input.Key.Enter)
-            {
-                // Move focus to avoid validation issues or ensure binding updates if any
-                // FocusManager.SetFocusedElement(this, RunButton); 
-                // However, directly clicking is usually fine.
-                ScanButton_Click(sender, e);
-            }
-        }
-
-
-
-        public static bool IsAdministrator()
-        {
-            using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent())
-            {
-                var principal = new System.Security.Principal.WindowsPrincipal(identity);
-                return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
-            }
-        }
-
-        private void MenuReadme_Click(object sender, RoutedEventArgs e)
-        {
+            if (_layoutView == null) return;
             try
             {
-                var lm = LocalizationManager.Instance;
-                string currentLang = lm.CurrentLanguage;
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string readmeDir = Path.Combine(baseDir, AppConstants.ReadmeDirectoryName);
-
-                // 優先順位: 1.現在の言語, 2.英語, 3.日本語
-                string[] targetLangs = { currentLang, "en", "ja" };
-                string? selectedPath = null;
-
-                foreach (var lang in targetLangs)
-                {
-                    string path = Path.Combine(readmeDir, AppConstants.GetReadmeFileName(lang));
-                    if (File.Exists(path))
-                    {
-                        selectedPath = path;
-                        break;
-                    }
-                }
-
-                if (selectedPath != null)
-                {
-                    // Process.Start replaced with TextViewer
-                    Logger.Log($"Opened Readme: {Path.GetFileName(selectedPath)}");
-                    OpenOrActivateTextViewer(selectedPath);
-                }
-                else
-                {
-                    Logger.Log("Readme not found.");
-                    throw new FileNotFoundException(lm.GetText(LanguageKey.ReadmeNotFound));
-                }
-            }
-            catch (Exception ex)
-            {
-                var lm = LocalizationManager.Instance;
-                Logger.Log(AppConstants.LogReadmeError, ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void MenuAppLicense_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                Logger.Log($"Opened App License via menu.");
-                var lm = LocalizationManager.Instance;
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string licensePath = Path.Combine(baseDir, AppConstants.LicenseDirectoryName, AppConstants.AppLicenseFileName);
-
-                if (File.Exists(licensePath))
-                {
-                    // Process.Start replaced with TextViewer
-                    new TextViewer(licensePath).ShowDialog();
-                }
-                else
-                {
-                    throw new FileNotFoundException(lm.GetText(LanguageKey.LicenseNotFoundError), licensePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                var lm = LocalizationManager.Instance;
-                Logger.Log("Failed to open App License.", ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void MenuThirdPartyLicenses_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                Logger.Log($"Opened ThirdPartyLicenses via menu.");
-                var lm = LocalizationManager.Instance;
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string licensePath = Path.Combine(baseDir, AppConstants.LicenseDirectoryName, AppConstants.ThirdPartyNoticesFileName);
-
-                if (File.Exists(licensePath))
-                {
-                    // Process.Start replaced with TextViewer
-                    new TextViewer(licensePath).ShowDialog();
-                }
-                else
-                {
-                    throw new FileNotFoundException(string.Format(lm.GetText(LanguageKey.LicenseNotFoundError), Path.GetFileName(licensePath)));
-                }
-            }
-            catch (Exception ex)
-            {
-                var lm = LocalizationManager.Instance;
-                Logger.Log(AppConstants.LogThirdPartyNoticesError, ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.LicenseNotFoundError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void MenuFile_SubmenuOpened(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                MenuOpenLogSub.Items.Clear();
-                string logsDir = AppConstants.LogsDirectoryPath;
-                if (System.IO.Directory.Exists(logsDir))
-                {
-                    var files = System.IO.Directory.GetFiles(logsDir, "*_Log.txt")
-                                         .Select(f => new System.IO.FileInfo(f))
-                                         .OrderByDescending(f => f.CreationTime)
-                                         .ToList();
-
-                    foreach (var file in files)
-                    {
-                        var item = new MenuItem
-                        {
-                            Header = file.Name,
-                            Tag = file.FullName
-                        };
-                        item.Click += MenuLogItem_Click;
-                        MenuOpenLogSub.Items.Add(item);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Failed to populate log menu", ex);
-            }
-        }
-
-        private void MenuLogItem_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is MenuItem item && item.Tag is string path)
-            {
-                if (System.IO.File.Exists(path))
-                {
-                    Logger.Log($"Opened Log: {Path.GetFileName(path)}");
-                    OpenOrActivateTextViewer(path);
-                }
-            }
-        }
-
-        private void OpenOrActivateTextViewer(string path)
-        {
-            foreach (Window window in Application.Current.Windows)
-            {
-                if (window is TextViewer viewer && string.Equals(viewer.FilePath, path, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (window.WindowState == WindowState.Minimized)
-                    {
-                        window.WindowState = WindowState.Normal;
-                    }
-                    Logger.Log($"Already Opened TextViewer for {Path.GetFileName(path)}");
-                    window.Activate();
-                    return;
-                }
-            }
-            Logger.Log($"Opened TextViewer for {Path.GetFileName(path)}");
-            new TextViewer(path).Show();
-        }
-
-        private void MenuAbout_Click(object sender, RoutedEventArgs e)
-        {
-            Logger.Log("Opened About dialog");
-            var lm = LocalizationManager.Instance;
-            var format = lm.GetText(LanguageKey.AboutMessage);
-            var message = string.Format(format, AppInfo.Title, AppInfo.Version, AppInfo.Copyright);
-            MessageBox.Show(message, lm.GetText(LanguageKey.AboutTitle), MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void MenuRestartAdmin_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = Process.GetCurrentProcess().MainModule?.FileName,
-                    UseShellExecute = true,
-                    Verb = "runas"
-                };
-
-                if (psi.FileName != null)
-                {
-                    Process.Start(psi);
-                    Application.Current.Shutdown();
-                }
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                // ユーザーがキャンセルした場合などはここに来る
-                // 何もしない
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Failed to restart as admin", ex);
-                var lm = LocalizationManager.Instance;
-                MessageBox.Show($"{lm.GetText(LanguageKey.LabelError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void MenuExit_Click(object sender, RoutedEventArgs e)
-        {
-            Logger.Log("Application exiting via menu...");
-            Application.Current.Shutdown();
-        }
-
-        private void OpenConfigButton_Click(object sender, RoutedEventArgs e)
-        {
-            var lm = LocalizationManager.Instance;
-            try
-            {
-                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ConfigFileName);
-                if (!File.Exists(configPath))
-                {
-                    Config.Load();
-                }
-
-                if (File.Exists(configPath))
-                {
-                    Logger.Log("Opened Advanced Settings (Config.txt)");
-                    Process.Start(new ProcessStartInfo(configPath) { UseShellExecute = true });
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log(AppConstants.LogConfigError, ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.ConfigError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void CopyButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string text = new TextRange(OutputTextBox.Document.ContentStart, OutputTextBox.Document.ContentEnd).Text;
+                string text = _layoutView.OutputTextBox.Text;
                 if (string.IsNullOrWhiteSpace(text)) return;
-
                 Clipboard.SetText(text);
                 ShowNotification(LocalizationManager.Instance.GetText(LanguageKey.CopyNotification));
             }
             catch (Exception ex)
             {
-                var lm = LocalizationManager.Instance;
                 Logger.Log(AppConstants.LogClipboardError, ex);
-                MessageBox.Show($"{lm.GetText(LanguageKey.ClipboardError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    $"{LocalizationManager.Instance.GetText(LanguageKey.ClipboardError)}{ex.Message}",
+                    "Error");
             }
         }
 
         private async void ShowNotification(string message)
         {
-            NotificationTextBlock.Text = message;
+            if (_layoutView == null) return;
+            _layoutView.NotificationTextBlock.Text = message;
             await Task.Delay(3000);
-            if (NotificationTextBlock.Text == message)
-            {
-                NotificationTextBlock.Text = "";
-            }
+            if (_layoutView.NotificationTextBlock.Text == message)
+                _layoutView.NotificationTextBlock.Text = "";
         }
 
-        /// <summary>
-        /// アプリ起動時の言語初期化
-        /// </summary>
-        private void InitializeLocalization()
+        public void ApplyLayout(AppConstants.LayoutType layoutMode)
         {
-            try
+            if (MainContentHolder == null) return;
+
+            UserControl view = layoutMode == AppConstants.LayoutType.Horizontal ?
+                (UserControl)new HorizontalLayoutView(this) :
+                (UserControl)new VerticalLayoutView(this);
+            _layoutView = (IMainLayoutView)view;
+            MainContentHolder.Content = view;
+
+            MenuLayoutVertical.IsChecked = layoutMode == AppConstants.LayoutType.Vertical;
+            MenuLayoutHorizontal.IsChecked = layoutMode == AppConstants.LayoutType.Horizontal;
+
+            InitializeComboBoxes();
+            ApplyLocalization();
+
+            var cache = CacheData.Load();
+            if (cache != null)
             {
-                Logger.Log(AppConstants.LogInitStart);
-                var settings = CacheData.Load();
-                if (settings != null && !string.IsNullOrEmpty(settings.Language))
-                {
-                    // 以前の "Japanese" 等のレガシー値が入っている場合は、ファイルがないため
-                    // LocalizationManager 側で無視される（フォールバック）か、
-                    // もしくはここで明示的に対応が必要だが、ユーザー要望により無視して
-                    // OS設定（LocalizationManagerの初期値）を優先させてもよい。
-                    // ただし、明示的に指定されている有効な言語コード(ja, en等)であれば適用する。
-                    LocalizationManager.Instance.CurrentLanguage = settings.Language;
-                }
-                else
-                {
-                    // キャッシュがない場合、または言語設定が空の場合
-                    // LocalizationManager は既に OS 設定等を元に言語を決定しているはずなので、
-                    // その値をキャッシュに保存してファイルを作成しておく。
-                    // これにより、初回起動直後から言語設定がファイルに反映された状態になる。
-                    var defaultSettings = new CacheData
-                    {
-                        Language = LocalizationManager.Instance.CurrentLanguage
-                    };
-                    defaultSettings.Save();
-                }
-                Logger.Log(AppConstants.LogInitSuccess);
+                _layoutView.PathTextBox.Text = cache.LastFolderPath;
+                _layoutView.SearchSizeTextBox.Text = cache.LastThresholdGB.ToString();
+                _layoutView.UnitComboBox.SelectedIndex = (int)cache.Unit;
+                _layoutView.SortComboBox.SelectedIndex = (int)cache.SortTarget;
+                _layoutView.SortDirectionComboBox.SelectedIndex = (int)cache.SortDirection;
+                _layoutView.IncludeFilesCheckBox.IsChecked = cache.IncludeFiles;
+                _layoutView.SeparatorComboBox.SelectedIndex = (int)cache.SeparatorIndex;
+                _layoutView.TabWidthTextBox.Text = cache.TabWidth.ToString();
             }
-            catch (Exception ex)
-            {
-                Logger.Log(AppConstants.LogInitError, ex);
-            }
-        }
-
-        /// <summary>
-        /// 言語切替メニュークリック時
-        /// </summary>
-        private void MenuLanguage_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (sender is MenuItem menuItem && menuItem.Tag is string lang)
-                {
-                    Logger.Log(string.Format(AppConstants.LogLangChangeStart, lang));
-                    LocalizationManager.Instance.CurrentLanguage = lang;
-                    SaveCache();
-                    ApplyLocalization();
-
-                    if (_lastScanResult != null)
-                    {
-                        RenderResult();
-                    }
-                    OptimizeMemory(); // Added
-                    Logger.Log(string.Format(AppConstants.LogLangChangeSuccess, lang));
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log(AppConstants.LogLangChangeError, ex);
-            }
-        }
-
-        /// <summary>
-        /// Config.txt に基づいて言語メニューを動的に更新する
-        /// </summary>
-        private void UpdateLanguageMenu()
-        {
-            try
-            {
-                if (MenuLanguage == null) return;
-                Logger.Log(AppConstants.LogUpdateMenuStart);
-
-                MenuLanguage.Items.Clear();
-                var languages = LocalizationManager.Instance.GetAvailableLanguages();
-
-                foreach (var lang in languages)
-                {
-                    var item = new MenuItem
-                    {
-                        Header = lang.MenuText,
-                        Tag = lang.Code
-                    };
-                    item.Click += MenuLanguage_Click;
-                    MenuLanguage.Items.Add(item);
-                }
-                Logger.Log(AppConstants.LogUpdateMenuSuccess);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log(AppConstants.LogUpdateMenuError, ex);
-            }
-        }
-
-        /// <summary>
-        /// ローカライズを UI に適用する
-        /// </summary>
-        private void ApplyLocalization()
-        {
-            try
-            {
-                Logger.Log(AppConstants.LogApplyLocStart);
-                var lm = LocalizationManager.Instance;
-
-                this.Title = lm.GetText(LanguageKey.Title);
-
-                // Menu
-                MenuFile.Header = lm.GetText(LanguageKey.MenuFile);
-                MenuOpenConfig.Header = lm.GetText(LanguageKey.MenuOpenConfig);
-                MenuOpenLogSub.Header = lm.GetText(LanguageKey.MenuOpenLogSub);
-                MenuExit.Header = lm.GetText(LanguageKey.MenuExit);
-                MenuRestartAdmin.Header = lm.GetText(LanguageKey.MenuRestartAdmin);
-                MenuRestartAdmin.IsEnabled = !IsAdministrator(); // 管理者なら無効化
-
-                MenuHelp.Header = lm.GetText(LanguageKey.MenuHelp);
-                MenuOpenReadme.Header = lm.GetText(LanguageKey.MenuOpenReadme);
-                MenuLicense.Header = lm.GetText(LanguageKey.MenuLicense);
-                MenuAppLicense.Header = lm.GetText(LanguageKey.MenuAppLicense);
-                MenuThirdPartyLicenses.Header = lm.GetText(LanguageKey.MenuThirdPartyLicenses);
-                MenuAbout.Header = lm.GetText(LanguageKey.MenuAbout);
-
-                // Controls
-                FolderLabel.Text = lm.GetText(LanguageKey.FolderLabel);
-
-                // Labels
-                string unitStr = (UnitComboBox?.SelectedItem as AppConstants.SizeUnit? ?? AppConstants.SizeUnit.GB).ToString();
-                SearchSizeLabel.Text = string.Format(lm.GetText(LanguageKey.SearchSizeLabel), unitStr);
-                SearchSizeLabel.ToolTip = lm.GetText(LanguageKey.SearchSizeToolTip);
-                SeparatorLabel.Text = lm.GetText(LanguageKey.SeparatorLabel);
-                SeparatorLabel.ToolTip = string.Format(lm.GetText(LanguageKey.SeparatorToolTip), unitStr);
-
-                // Buttons
-                RunButton.Content = lm.GetText(LanguageKey.ScanButton);
-                CancelButton.Content = lm.GetText(LanguageKey.CancelButton);
-                CancelButton.ToolTip = lm.GetText(LanguageKey.CancelToolTip);
-                OpenConfigButton.ToolTip = lm.GetText(LanguageKey.OpenConfigToolTip);
-                CopyButton.ToolTip = lm.GetText(LanguageKey.CopyToolTip);
-                SortLabel.Text = lm.GetText(LanguageKey.SortLabel);
-
-                if (SortTargetComboBox != null)
-                {
-                    int selected = SortTargetComboBox.SelectedIndex;
-                    var options = (AppConstants.SortTarget[])Enum.GetValues(typeof(AppConstants.SortTarget));
-                    SortTargetComboBox.ItemsSource = options.Select(o => o switch
-                    {
-                        AppConstants.SortTarget.Size => lm.GetText(LanguageKey.TargetSize),
-                        AppConstants.SortTarget.Name => lm.GetText(LanguageKey.TargetName),
-                        AppConstants.SortTarget.Date => lm.GetText(LanguageKey.TargetDate),
-                        _ => o.ToString()
-                    }).ToList();
-                    SortTargetComboBox.SelectedIndex = selected >= 0 ? selected : 0;
-                }
-                if (SortDirectionComboBox != null)
-                {
-                    int selected = SortDirectionComboBox.SelectedIndex;
-                    var options = (AppConstants.SortDirection[])Enum.GetValues(typeof(AppConstants.SortDirection));
-                    SortDirectionComboBox.ItemsSource = options.Select(o => o switch
-                    {
-                        AppConstants.SortDirection.Ascending => lm.GetText(LanguageKey.DirectionAsc),
-                        AppConstants.SortDirection.Descending => lm.GetText(LanguageKey.DirectionDesc),
-                        _ => o.ToString()
-                    }).ToList();
-                    SortDirectionComboBox.SelectedIndex = selected >= 0 ? selected : 1;
-                }
-
-                // Status
-                // スキャン中に言語を切り替えた場合、ステータスを「準備完了」に戻さないようにする
-                if (_cts == null)
-                {
-                    StatusTextBlock.Text = lm.GetText(LanguageKey.ReadyStatus);
-                }
-                else
-                {
-                    StatusTextBlock.Text = lm.GetText(LanguageKey.ScanningStatus);
-                }
-                Logger.Log(AppConstants.LogApplyLocSuccess);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log(AppConstants.LogApplyLocError, ex);
-            }
-        }
-
-        private void SeparatorComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (SeparatorComboBox == null || TabWidthPanel == null) return;
-            bool isTabMode = SeparatorComboBox.SelectedIndex == 0;
-            TabWidthPanel.Visibility = isTabMode ? Visibility.Visible : Visibility.Collapsed;
-            RenderResult();
-        }
-
-        /// <summary>
-        /// タブ幅変更時の処理
-        /// </summary>
-        private void TabWidthTextBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            RenderResult();
-        }
-
-        private void IncludeFilesCheckBox_Click(object sender, RoutedEventArgs e)
-        {
-            RenderResult();
-        }
-
-        private void SortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            RenderResult();
         }
 
         private void InitializeComboBoxes()
         {
-            if (UnitComboBox != null)
+            if (_layoutView == null) return;
+
+            _layoutView.UnitComboBox.Items.Clear();
+            foreach (var u in Enum.GetNames(typeof(AppConstants.SizeUnit)))
+                _layoutView.UnitComboBox.Items.Add(u);
+
+            _layoutView.SortComboBox.Items.Clear();
+            _layoutView.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetSize));
+            _layoutView.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetName));
+            _layoutView.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetDate));
+
+            _layoutView.SortDirectionComboBox.Items.Clear();
+            _layoutView.SortDirectionComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.DirectionAsc));
+            _layoutView.SortDirectionComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.DirectionDesc));
+
+            _layoutView.SeparatorComboBox.Items.Clear();
+            _layoutView.SeparatorComboBox.Items.Add("Tab");
+            _layoutView.SeparatorComboBox.Items.Add("Space");
+
+            _layoutView.SeparatorComboBox.SelectionChanged += (s, e) =>
             {
-                UnitComboBox.ItemsSource = Enum.GetValues(typeof(AppConstants.SizeUnit));
-                UnitComboBox.SelectedIndex = 2; // Default to GB
-            }
-            if (SortTargetComboBox != null)
-            {
-                SortTargetComboBox.ItemsSource = Enum.GetValues(typeof(AppConstants.SortTarget));
-                SortTargetComboBox.SelectedIndex = 0; // Size
-            }
-            if (SortDirectionComboBox != null)
-            {
-                SortDirectionComboBox.ItemsSource = Enum.GetValues(typeof(AppConstants.SortDirection));
-                SortDirectionComboBox.SelectedIndex = 1; // Descending
-            }
+                _layoutView.TabWidthArea.Visibility = _layoutView.SeparatorComboBox.SelectedIndex == (int)AppConstants.Separator.Tab
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                _ = RenderResult();
+            };
+
+            // Re-bind other events if needed
+            // Re-bind other events if needed
+            _layoutView.SearchSizeTextBox.TextChanged += (s, e) => { _ = RenderResult(); };
+            _layoutView.UnitComboBox.SelectionChanged += (s, e) => { _ = RenderResult(); };
+            _layoutView.SortComboBox.SelectionChanged += (s, e) => { _ = RenderResult(); };
+            _layoutView.SortDirectionComboBox.SelectionChanged += (s, e) => { _ = RenderResult(); };
+            _layoutView.IncludeFilesCheckBox.Click += (s, e) => { _ = RenderResult(); };
+            _layoutView.TabWidthTextBox.TextChanged += (s, e) => { _ = RenderResult(); };
         }
 
-        private void UnitComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void ApplyLocalization()
         {
-            if (UnitComboBox == null || ThresholdTextBox == null) return;
-
-            // 単位変更時に数値を変換する (例: 1 GB -> 1024 MB)
-            // 初期化時など RemovedItems が空の場合はスキップ
-            if (e.RemovedItems.Count > 0 && e.RemovedItems[0] is AppConstants.SizeUnit oldUnit &&
-                e.AddedItems.Count > 0 && e.AddedItems[0] is AppConstants.SizeUnit newUnit)
-            {
-                if (double.TryParse(ThresholdTextBox.Text, out double currentVal))
-                {
-                    long oldBytes = AppConstants.GetBytesPerUnit(oldUnit);
-                    long newBytes = AppConstants.GetBytesPerUnit(newUnit);
-
-                    // バイト数で計算してから新しい単位に戻す
-                    double totalBytes = currentVal * oldBytes;
-                    double newValue = totalBytes / newBytes;
-
-                    // 小数点以下の表示制御（必要に応じて）
-                    // 単純な ToString() でも多くの場合は問題ないが、読みやすさのために調整
-                    ThresholdTextBox.Text = newValue.ToString();
-                }
-            }
-
-            ApplyLocalization();
-            RenderResult();
+            Logger.Log(AppConstants.LogApplyLocStart);
+            var lm = LocalizationManager.Instance;
+            this.Title = lm.GetText(LanguageKey.Title);
+            MenuFile.Header = lm.GetText(LanguageKey.MenuFile);
+            MenuOpenConfig.Header = lm.GetText(LanguageKey.MenuOpenConfig);
+            MenuOpenLogSub.Header = lm.GetText(LanguageKey.MenuOpenLogSub);
+            MenuExit.Header = lm.GetText(LanguageKey.MenuExit);
+            MenuRestartAdmin.Header = lm.GetText(LanguageKey.MenuRestartAdmin);
+            MenuHelp.Header = lm.GetText(LanguageKey.MenuHelp);
+            MenuOpenReadme.Header = lm.GetText(LanguageKey.MenuOpenReadme);
+            MenuAbout.Header = lm.GetText(LanguageKey.MenuAbout);
+            MenuLicense.Header = lm.GetText(LanguageKey.MenuLicense);
+            MenuAppLicense.Header = lm.GetText(LanguageKey.MenuAppLicense);
+            MenuThirdPartyLicenses.Header = lm.GetText(LanguageKey.MenuThirdPartyLicenses);
+            MenuView.Header = lm.GetText(LanguageKey.MenuView);
+            MenuLayout.Header = lm.GetText(LanguageKey.MenuLayout);
+            MenuLayoutVertical.Header = lm.GetText(LanguageKey.MenuLayoutVertical);
+            MenuLayoutHorizontal.Header = lm.GetText(LanguageKey.MenuLayoutHorizontal);
+            _layoutView?.ApplyLocalization(lm);
+            Logger.Log(AppConstants.LogApplyLocSuccess);
         }
 
-        private static bool _hasShownProgressError = false;
-
-        private void RenderResult()
+        private async Task RenderResult()
         {
+            if (_lastScanResult == null || _layoutView == null) return;
             try
             {
-                if (_lastScanResult == null || OutputTextBox == null || SeparatorComboBox == null || UnitComboBox == null)
+                // UI入力の取得（メインスレッド）
+                if (!double.TryParse(_layoutView.SearchSizeTextBox.Text, out double thresholdVal)) return;
+
+                AppConstants.SizeUnit unit = (AppConstants.SizeUnit)_layoutView.UnitComboBox.SelectedIndex;
+                long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(unit));
+                bool includeFiles = _layoutView.IncludeFilesCheckBox.IsChecked == true;
+                var sortTarget = (AppConstants.SortTarget)_layoutView.SortComboBox.SelectedIndex;
+                var sortDirection = (AppConstants.SortDirection)_layoutView.SortDirectionComboBox.SelectedIndex;
+                bool useSpaces = _layoutView.SeparatorComboBox.SelectedIndex == (int)AppConstants.Separator.Space;
+
+                int tabWidth = AppConstants.DefaultTabWidth;
+                int.TryParse(_layoutView.TabWidthTextBox.Text, out tabWidth);
+
+                // 前回の処理をキャンセル
+                _renderCts?.Cancel();
+                _renderCts = new CancellationTokenSource();
+                var token = _renderCts.Token;
+
+                // UIフェードバック開始
+                System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+                string originalStatus = _layoutView.StatusTextBlock.Text;
+                _layoutView.StatusTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.RenderingStatus);
+
+                try
                 {
-                    if (OutputTextBox != null)
+                    // バックグラウンドでレイアウト計算と文字列生成を実行
+                    string resultText = await Task.Run(() =>
                     {
-                        OutputTextBox.Document.Blocks.Clear();
+                        if (token.IsCancellationRequested) return "";
+
+                        // 1. フィルタリングとソートの結果をキャッシュ（一貫性確保と高速化）
+                        var filterCache = new Dictionary<FolderInfo, List<FolderInfo>>();
+                        BuildFilterCache(_lastScanResult, filterCache, thresholdBytes, includeFiles, sortTarget, sortDirection, token);
+
+                        if (token.IsCancellationRequested) return "";
+
+                        // 2. 最大行長の計算（ソート順序非依存・キャッシュ利用）
+                        int maxLineLen = CalculateMaxLineLength(
+                            _lastScanResult,
+                            filterCache, // キャッシュを使用
+                            0,
+                            true,
+                            true,
+                            thresholdBytes,
+                            includeFiles);
+
+                        if (token.IsCancellationRequested) return "";
+
+                        int targetColumn = ((maxLineLen / tabWidth) + 1) * tabWidth;
+                        var sb = new StringBuilder();
+
+                        // 3. 文字列の生成（ソート順序依存・キャッシュ利用）
+                        PrintTreeRecursive(
+                            sb,
+                            _lastScanResult,
+                            filterCache, // キャッシュを使用
+                            "",
+                            true,
+                            true,
+                            targetColumn,
+                            useSpaces,
+                            tabWidth,
+                            thresholdBytes,
+                            unit,
+                            includeFiles);
+
+                        return sb.ToString();
+                    }, token);
+
+                    if (!token.IsCancellationRequested)
+                    {
+                        _layoutView.OutputTextBox.Text = resultText;
                     }
-                    return;
                 }
-
-                var lm = LocalizationManager.Instance;
-                double thresholdVal = 0;
-                double.TryParse(ThresholdTextBox.Text, out thresholdVal);
-
-                AppConstants.SizeUnit selectedUnit = AppConstants.SizeUnit.GB;
-                if (UnitComboBox.SelectedItem is AppConstants.SizeUnit unit)
+                finally
                 {
-                    selectedUnit = unit;
-                }
-                long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(selectedUnit));
-
-                bool isScanning = _isScanning && _cts != null;
-
-                AppConstants.SortTarget sortTarget = SortTargetComboBox != null && SortTargetComboBox.SelectedIndex >= 0
-                    ? (AppConstants.SortTarget)Enum.GetValues(typeof(AppConstants.SortTarget)).GetValue(SortTargetComboBox.SelectedIndex)
-                    : AppConstants.SortTarget.Size;
-                AppConstants.SortDirection sortDir = SortDirectionComboBox != null && SortDirectionComboBox.SelectedIndex >= 0
-                    ? (AppConstants.SortDirection)Enum.GetValues(typeof(AppConstants.SortDirection)).GetValue(SortDirectionComboBox.SelectedIndex)
-                    : AppConstants.SortDirection.Descending;
-                bool includeFiles = IncludeFilesCheckBox.IsChecked == true;
-
-                var sb = new StringBuilder();
-                int maxLineLen = CalculateMaxLineLength(_lastScanResult, 0, true, true, thresholdBytes, isScanning, selectedUnit, sortTarget, sortDir, includeFiles);
-                int tabWidth = 8;
-                if (int.TryParse(TabWidthTextBox.Text, out int parsedTabWidth) && parsedTabWidth > 0)
-                {
-                    tabWidth = parsedTabWidth;
-                }
-                int targetColumn = ((maxLineLen / tabWidth) + 1) * tabWidth;
-                bool useSpaces = SeparatorComboBox.SelectedIndex == 1;
-
-                PrintTreeRecursive(sb, _lastScanResult, indent: string.Empty, isLast: true, isRoot: true, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, selectedUnit, sortTarget, sortDir, includeFiles);
-
-                OutputTextBox.Document.Blocks.Clear();
-                var paragraph = new Paragraph(new Run(sb.ToString()));
-                OutputTextBox.Document.Blocks.Add(paragraph);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log(AppConstants.LogRenderError, ex);
-                if (!_hasShownProgressError)
-                {
-                    var lm = LocalizationManager.Instance;
-                    _hasShownProgressError = true;
-                    MessageBox.Show($"{lm.GetText(LanguageKey.RenderErrorLabel)} {ex.Message}\n{ex.StackTrace}", lm.GetText(LanguageKey.DebugInfoTitle));
+                    // UIフェードバック終了
+                    System.Windows.Input.Mouse.OverrideCursor = null;
+                    // キャンセルされていない場合のみステータスを戻す（キャンセルされた場合は「キャンセル」などが表示される可能性があるため...
+                    // 実際にはRenderResult自体がキャンセルされるわけではなく内部のタスクがキャンセルされる。
+                    // 新しいRenderResultが走っている場合は、そちらがステータスを上書きしているはずなので、
+                    // ここで戻すべきかどうかは微妙だが、_renderCtsが自分のものであれば戻す、などの制御が必要。
+                    // しかし単純化のため、完了時はとりあえず元に戻す。
+                    if (!token.IsCancellationRequested)
+                    {
+                        _layoutView.StatusTextBlock.Text = originalStatus;
+                    }
                 }
             }
+            catch (OperationCanceledException) { /* Ignored */ }
+            catch (Exception ex) { Logger.Log("Render error", ex); }
         }
 
-        private int CalculateMaxLineLength(FolderInfo node, int indentLen, bool isRoot, bool isLast, long thresholdBytes, bool isScanning, AppConstants.SizeUnit unit, AppConstants.SortTarget sortTarget, AppConstants.SortDirection sortDir, bool includeFiles)
+        private int CalculateMaxLineLength(
+            FolderInfo node,
+            Dictionary<FolderInfo, List<FolderInfo>> filterCache,
+            int indentLen,
+            bool isRoot,
+            bool isLast,
+            long thresholdBytes,
+            bool includeFiles)
         {
-            if (node == null) return 0;
-            // 閾値未満は計算に含めない（非表示のため）
-            if (!isRoot && node.Size < thresholdBytes) return 0;
-            if (!isRoot && node.IsFile && !includeFiles) return 0;
+            if (node == null ||
+                (!isRoot && node.Size < thresholdBytes) ||
+                (!isRoot && node.IsFile && !includeFiles)) return 0;
 
-            // ... (rest of logic same until size part if size was included in calculation, 
-            // but actually size is appended at the end. Wait, print logic appends size at the end.
-            // CalculateMaxLineLength calculates string width of the NAME part + indentation?
-            // Let's check original.
-            // Original: currentLen = indentLen + prefixLen + GetStringWidth(node.Name);
-            // It seems it calculates UP TO the name. The tab calculation happens after name.
-            // But wait, "targetColumn" is calculated from maxLineLen.
-            // So maxLineLen IS the max length of the name part.
-            // So CalculateMaxLineLength DOES NOT depend on Unit directly for the calculation, 
-            // BUT it filters children based on thresholdBytes.
-            // So I just need to update the recursive call signature.
-
-            int prefixLen = 0;
-            if (!isRoot)
-            {
-                string branch = isLast ? AppConstants.TreeLastBranch : AppConstants.TreeBranch;
-                prefixLen = GetStringWidth(branch);
-            }
+            int prefixLen = isRoot ? 0 : GetStringWidth(isLast ? AppConstants.TreeLastBranch : AppConstants.TreeBranch);
             int currentLen = indentLen + prefixLen + GetStringWidth(node.Name);
             int max = currentLen;
 
-            int childIndentLen = indentLen;
-            if (!isRoot)
-            {
-                string indentPart = isLast
-                    ? AppConstants.TreeSpace + AppConstants.TreeSpace
-                    : AppConstants.TreeVertical + AppConstants.TreeSpace;
-                childIndentLen += GetStringWidth(indentPart);
-            }
+            // インデント幅の統一: Lastの場合もスペース3つ分（TreeSpace=1, TreeVertical=2相当だが、ここではスペース3つ）にする
+            // TreeVertical(2) + TreeSpace(1) = 3
+            // TreeSpace(1) + TreeSpace(1) + TreeSpace(1) = 3
+            int childIndentLen = indentLen + (isRoot
+                ? 0
+                : GetStringWidth(isLast
+                    ? AppConstants.TreeSpace + AppConstants.TreeSpace + AppConstants.TreeSpace
+                    : AppConstants.TreeVertical + AppConstants.TreeSpace));
 
             if (node.Children != null)
             {
-                List<FolderInfo> childrenCopy;
-                lock (node.Children) { childrenCopy = node.Children.ToList(); }
-
-                var visibleChildren = childrenCopy.Where(c => c.Size >= thresholdBytes);
-                if (!includeFiles) { visibleChildren = visibleChildren.Where(c => !c.IsFile); }
-
-                if (sortDir == AppConstants.SortDirection.Descending)
+                // キャッシュからフィルタリング済みリストを取得（ソートは行長計算に関係ないが、フィルタリング結果は必要）
+                List<FolderInfo>? list = null;
+                if (filterCache.TryGetValue(node, out var cachedList))
                 {
-                    visibleChildren = sortTarget switch
-                    {
-                        AppConstants.SortTarget.Size => visibleChildren.OrderByDescending(c => c.Size),
-                        AppConstants.SortTarget.Name => visibleChildren.OrderByDescending(c => c.Name),
-                        AppConstants.SortTarget.Date => visibleChildren.OrderByDescending(c => c.LastModified),
-                        _ => visibleChildren.OrderByDescending(c => c.Size)
-                    };
+                    list = cachedList;
                 }
                 else
                 {
-                    visibleChildren = sortTarget switch
+                    // キャッシュが無い場合のフォールバック（通常発生しないはずだが安全のため）
+                    lock (node.Children)
                     {
-                        AppConstants.SortTarget.Size => visibleChildren.OrderBy(c => c.Size),
-                        AppConstants.SortTarget.Name => visibleChildren.OrderBy(c => c.Name),
-                        AppConstants.SortTarget.Date => visibleChildren.OrderBy(c => c.LastModified),
-                        _ => visibleChildren.OrderBy(c => c.Size)
-                    };
+                        list = node.Children.Where(c => c.Size >= thresholdBytes && (includeFiles || !c.IsFile)).ToList();
+                    }
                 }
 
-                var visibleList = visibleChildren.ToList();
-                for (int i = 0; i < visibleList.Count; i++)
+                if (list != null)
                 {
-                    bool isChildLast = (i == visibleList.Count - 1);
-                    int childMax = CalculateMaxLineLength(visibleList[i], childIndentLen, false, isChildLast, thresholdBytes, isScanning, unit, sortTarget, sortDir, includeFiles);
-                    if (childMax > max) max = childMax;
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        int childMax = CalculateMaxLineLength(
+                            list[i],
+                            filterCache,
+                            childIndentLen,
+                            isRoot: false,
+                            isLast: i == list.Count - 1,
+                            thresholdBytes,
+                            includeFiles);
+                        if (childMax > max) max = childMax;
+                    }
                 }
             }
             return max;
         }
 
-        private void PrintTreeRecursive(StringBuilder sb, FolderInfo node, string indent, bool isLast, bool isRoot, int targetColumn, bool useSpaces, int tabWidth, long thresholdBytes, bool isScanning, AppConstants.SizeUnit unit, AppConstants.SortTarget sortTarget, AppConstants.SortDirection sortDir, bool includeFiles)
+        private void PrintTreeRecursive(
+            StringBuilder sb,
+            FolderInfo node,
+            Dictionary<FolderInfo, List<FolderInfo>> filterCache,
+            string indent,
+            bool isLast,
+            bool isRoot,
+            int targetColumn,
+            bool useSpaces,
+            int tabWidth,
+            long thresholdBytes,
+            AppConstants.SizeUnit unit,
+            bool includeFiles)
         {
-            if (node == null) return;
+            if (node == null ||
+                (!isRoot && node.Size < thresholdBytes) ||
+                (!isRoot && node.IsFile && !includeFiles))
+                return;
 
-            var lm = LocalizationManager.Instance;
-
-            // スキャン完了後、ルートフォルダ自体が閾値未満であれば、フォルダ名を出さずに NotFound メッセージのみを出す
-            if (isRoot && !isScanning && node.Size < thresholdBytes)
+            if (isRoot && node.Size < thresholdBytes)
             {
-                sb.Append(AppConstants.TreeLastBranch).AppendLine(lm.GetText(LanguageKey.NotFoundMessage));
+                sb.Append(AppConstants.TreeLastBranch).AppendLine(LocalizationManager.Instance.GetText(LanguageKey.NotFoundMessage));
                 return;
             }
 
-            // ルート以外で閾値未満なら非表示
-            if (!isRoot && node.Size < thresholdBytes) return;
-            // ファイルが非表示設定で、かつファイルであれば非表示
-            if (!isRoot && node.IsFile && !includeFiles) return;
+            string sizeStr = $"{(double)node.Size / AppConstants.GetBytesPerUnit(unit):N0} {unit}".PadLeft(AppConstants.BaseSizeLength);
+            string line = isRoot
+                ? node.Name
+                : indent + (isLast ? AppConstants.TreeLastBranch : AppConstants.TreeBranch) + node.Name;
+            sb.Append(line);
 
-            double sizeVal = (double)node.Size / AppConstants.GetBytesPerUnit(unit);
-            var nfi = (System.Globalization.NumberFormatInfo)System.Globalization.CultureInfo.InvariantCulture.NumberFormat.Clone();
-            nfi.NumberGroupSeparator = AppConstants.DigitSeparator;
-            nfi.NumberDecimalDigits = 0;
-
-            string sizeNum = sizeVal.ToString("N0", nfi);
-            string sizeStr = $"{sizeNum} {unit.ToString()}".PadLeft(AppConstants.BaseSizeLength);
-
-            string lineContent = isRoot ?
-                node.Name :
-                indent + (isLast ? AppConstants.TreeLastBranch : AppConstants.TreeBranch) + node.Name;
-
-            sb.Append(lineContent);
-            int currentLen = GetStringWidth(lineContent);
-
-            if (useSpaces)
+            int curLen = GetStringWidth(line);
+            while (curLen < targetColumn)
             {
-                while (currentLen < targetColumn)
-                {
-                    int nextTab = ((currentLen / tabWidth) + 1) * tabWidth;
-                    int spacesNeeded = nextTab - currentLen;
-                    sb.Append(AppConstants.TreeSpace[0], spacesNeeded);
-                    currentLen = nextTab;
-                }
-            }
-            else
-            {
-                while (currentLen < targetColumn)
-                {
+                if (useSpaces)
+                    sb.Append(' ');
+                else
                     sb.Append('\t');
-                    int nextTab = ((currentLen / tabWidth) + 1) * tabWidth;
-                    currentLen = nextTab;
+                curLen += (useSpaces ? 1 : tabWidth - (curLen % tabWidth));
+            }
+
+            sb.Append(sizeStr).AppendLine();
+
+            if (node.Children != null)
+            {
+                // キャッシュからソート済みリストを取得
+                List<FolderInfo>? list = null;
+                if (filterCache.TryGetValue(node, out var cachedList))
+                {
+                    list = cachedList;
                 }
-            }
-
-            sb.Append(sizeStr);
-            sb.AppendLine();
-
-            string childIndent = indent;
-            if (!isRoot)
-            {
-                childIndent += (isLast ? AppConstants.TreeSpace + AppConstants.TreeSpace : AppConstants.TreeVertical + AppConstants.TreeSpace);
-            }
-
-            List<FolderInfo> childrenCopy;
-            lock (node.Children) { childrenCopy = node.Children.ToList(); }
-
-            var visibleChildren = childrenCopy.Where(c => c.Size >= thresholdBytes);
-            if (!includeFiles) { visibleChildren = visibleChildren.Where(c => !c.IsFile); }
-
-            if (sortDir == AppConstants.SortDirection.Descending)
-            {
-                visibleChildren = sortTarget switch
+                else
                 {
-                    AppConstants.SortTarget.Size => visibleChildren.OrderByDescending(c => c.Size),
-                    AppConstants.SortTarget.Name => visibleChildren.OrderByDescending(c => c.Name),
-                    AppConstants.SortTarget.Date => visibleChildren.OrderByDescending(c => c.LastModified),
-                    _ => visibleChildren.OrderByDescending(c => c.Size)
-                };
-            }
-            else
-            {
-                visibleChildren = sortTarget switch
-                {
-                    AppConstants.SortTarget.Size => visibleChildren.OrderBy(c => c.Size),
-                    AppConstants.SortTarget.Name => visibleChildren.OrderBy(c => c.Name),
-                    AppConstants.SortTarget.Date => visibleChildren.OrderBy(c => c.LastModified),
-                    _ => visibleChildren.OrderBy(c => c.Size)
-                };
-            }
-
-            var visibleList = visibleChildren.ToList();
-            for (int i = 0; i < visibleList.Count; i++)
-            {
-                PrintTreeRecursive(sb, visibleList[i], childIndent, isLast: i == visibleList.Count - 1, isRoot: false, targetColumn, useSpaces, tabWidth, thresholdBytes, isScanning, unit, sortTarget, sortDir, includeFiles);
-            }
-
-            if (isRoot)
-            {
-                if (isScanning)
-                {
-                    // スキャン中
-                    sb.AppendLine().AppendLine(string.Format(lm.GetText(LanguageKey.LiveScanningMessage), unit));
+                    // フォールバック（通常は呼ばれない）
+                    lock (node.Children)
+                    {
+                        list = node.Children.Where(c => c.Size >= thresholdBytes && (includeFiles || !c.IsFile)).ToList();
+                    }
                 }
-                else if (visibleList.Count == 0)
+
+                if (list != null)
                 {
-                    // スキャン完了しており、且つ表示すべき子フォルダが1つもない場合
-                    sb.Append(AppConstants.TreeLastBranch).AppendLine(lm.GetText(LanguageKey.NotFoundMessage));
+                    // インデント幅の統一: Lastの場合もスペース3つ分
+                    string childIndent = indent + (isRoot
+                        ? ""
+                        : (isLast
+                            ? AppConstants.TreeSpace + AppConstants.TreeSpace + AppConstants.TreeSpace
+                            : AppConstants.TreeVertical + AppConstants.TreeSpace));
+
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        PrintTreeRecursive(
+                            sb,
+                            node: list[i],
+                            filterCache,
+                            childIndent,
+                            isLast: i == list.Count - 1,
+                            isRoot: false,
+                            targetColumn,
+                            useSpaces,
+                            tabWidth,
+                            thresholdBytes,
+                            unit,
+                            includeFiles);
+                    }
                 }
             }
         }
 
-        private int GetStringWidth(string s)
+        private void BuildFilterCache(
+            FolderInfo node,
+            Dictionary<FolderInfo, List<FolderInfo>> cache,
+            long thresholdBytes,
+            bool includeFiles,
+            AppConstants.SortTarget sortTarget,
+            AppConstants.SortDirection sortDirection,
+            CancellationToken token)
+        {
+            if (token.IsCancellationRequested || node == null) return;
+
+            if (node.Children != null)
+            {
+                List<FolderInfo> visible;
+                lock (node.Children)
+                {
+                    // フィルタリング
+                    var query = node.Children.Where(c => c.Size >= thresholdBytes && (includeFiles || !c.IsFile));
+
+                    // ソート
+                    switch (sortTarget)
+                    {
+                        case AppConstants.SortTarget.Size:
+                            query = sortDirection == AppConstants.SortDirection.Ascending
+                                ? query.OrderBy(c => c.Size)
+                                : query.OrderByDescending(c => c.Size);
+                            break;
+                        case AppConstants.SortTarget.Name:
+                            query = sortDirection == AppConstants.SortDirection.Ascending
+                                ? query.OrderBy(c => c.Name)
+                                : query.OrderByDescending(c => c.Name);
+                            break;
+                        case AppConstants.SortTarget.Date:
+                            query = sortDirection == AppConstants.SortDirection.Ascending
+                                ? query.OrderBy(c => c.LastModified)
+                                : query.OrderByDescending(c => c.LastModified);
+                            break;
+                    }
+                    visible = query.ToList();
+                }
+
+                cache[node] = visible;
+
+                // 再帰的にキャッシュ構築（可視要素のみ）
+                foreach (var child in visible)
+                {
+                    BuildFilterCache(child, cache, thresholdBytes, includeFiles, sortTarget, sortDirection, token);
+                }
+            }
+        }
+
+        private int GetStringWidth(string str)
         {
             int width = 0;
-            foreach (char c in s)
+            foreach (char c in str)
             {
-                width += ((c >= 0x00 && c < 0x81)
-                 || (c == 0xf8f0)
-                 || (c >= 0xff61 && c < 0xffa0)
-                 || (c >= 0xf8f1 && c < 0xf8f4))
-                    ? 1 : 2;
+                // 半角(1):全角(2)
+                width += (c < 0x81 || (c >= 0xff61 && c < 0xffa0)) ? 1 : 2;
             }
             return width;
         }
@@ -1088,59 +737,27 @@ namespace LargeFolderFinder
         private string FormatDuration(TimeSpan ts)
         {
             var lm = LocalizationManager.Instance;
-            if (ts.TotalHours >= 1)
+            return ts switch
             {
-                return $"{(int)ts.TotalHours}{lm.GetText(LanguageKey.UnitHour)}{ts.Minutes}{lm.GetText(LanguageKey.UnitMinute)}{ts.Seconds}{lm.GetText(LanguageKey.UnitSecond)}";
-            }
-            else if (ts.TotalMinutes >= 1)
-            {
-                return $"{(int)ts.TotalMinutes}{lm.GetText(LanguageKey.UnitMinute)}{ts.Seconds}{lm.GetText(LanguageKey.UnitSecond)}";
-            }
-            else if (ts.TotalSeconds >= 1)
-            {
-                return $"{(int)ts.TotalSeconds}{lm.GetText(LanguageKey.UnitSecond)}";
-            }
-            else
-            {
-                return $"{ts.Milliseconds}{lm.GetText(LanguageKey.UnitMillisecond)}";
-            }
+                TimeSpan t when t.TotalHours > 1 => $"{(int)ts.TotalHours}{lm.GetText(LanguageKey.UnitHour)}{ts.Minutes}{lm.GetText(LanguageKey.UnitMinute)}",
+                TimeSpan t when t.TotalMinutes > 1 => $"{(int)ts.TotalMinutes}{lm.GetText(LanguageKey.UnitMinute)}{ts.Seconds}{lm.GetText(LanguageKey.UnitSecond)}",
+                TimeSpan t when t.TotalSeconds > 1 => $"{(int)ts.TotalSeconds}{lm.GetText(LanguageKey.UnitSecond)}",
+                _ => $"{ts.Milliseconds}{lm.GetText(LanguageKey.UnitMillisecond)}"
+            };
+        }
+
+        private void InitializeLocalization()
+        {
+            /* Handled in CTOR and LoadCache */
         }
 
         private void LoadCache()
         {
+            Logger.Log(AppConstants.LogCacheLoadStart);
             try
             {
-                Logger.Log(AppConstants.LogCacheLoadStart);
-                var settings = CacheData.Load();
-                if (settings != null)
-                {
-                    if (!string.IsNullOrWhiteSpace(settings.LastFolderPath))
-                    {
-                        PathTextBox.Text = settings.LastFolderPath;
-                    }
-                    ThresholdTextBox.Text = settings.LastThresholdGB.ToString();
-
-                    if (UnitComboBox != null)
-                    {
-                        UnitComboBox.SelectedItem = settings.Unit;
-                    }
-
-                    if (settings.SeparatorIndex >= 0 && settings.SeparatorIndex < SeparatorComboBox.Items.Count)
-                    {
-                        SeparatorComboBox.SelectedIndex = settings.SeparatorIndex;
-                    }
-                    TabWidthTextBox.Text = settings.TabWidth.ToString();
-                    IncludeFilesCheckBox.IsChecked = settings.IncludeFiles;
-                    if (SortTargetComboBox != null)
-                    {
-                        SortTargetComboBox.SelectedIndex = (int)settings.SortTarget;
-                    }
-                    if (SortDirectionComboBox != null)
-                    {
-                        SortDirectionComboBox.SelectedIndex = (int)settings.SortDirection;
-                    }
-                }
-                OptimizeMemory(); // Added
+                var c = CacheData.Load();
+                ApplyLayout(c?.LayoutMode ?? AppConstants.LayoutType.Vertical);
                 Logger.Log(AppConstants.LogCacheLoadSuccess);
             }
             catch (Exception ex)
@@ -1151,37 +768,32 @@ namespace LargeFolderFinder
 
         private void SaveCache()
         {
+            if (_layoutView == null)
+            {
+                return;
+            }
+
+            Logger.Log(AppConstants.LogCacheSaveStart);
             try
             {
-                Logger.Log(AppConstants.LogCacheSaveStart);
-                double threshold = AppConstants.DefaultThreshold;
-                double.TryParse(ThresholdTextBox.Text, out threshold);
-                int tabWidth = 8;
-                int.TryParse(TabWidthTextBox.Text, out tabWidth);
+                double.TryParse(_layoutView.SearchSizeTextBox.Text, out double th);
+                int.TryParse(_layoutView.TabWidthTextBox.Text, out int tw);
 
-                AppConstants.SizeUnit unit = AppConstants.SizeUnit.GB;
-                if (UnitComboBox.SelectedItem is AppConstants.SizeUnit selected)
+                new CacheData
                 {
-                    unit = selected;
-                }
-
-                var settings = new CacheData
-                {
-                    LastFolderPath = PathTextBox.Text,
-                    LastThresholdGB = threshold,
-                    SeparatorIndex = SeparatorComboBox.SelectedIndex,
-                    TabWidth = tabWidth,
+                    LastFolderPath = _layoutView.PathTextBox.Text,
+                    LastThresholdGB = th,
+                    SeparatorIndex = _layoutView.SeparatorComboBox.SelectedIndex,
+                    TabWidth = tw,
                     Language = LocalizationManager.Instance.CurrentLanguage,
-                    Unit = unit,
-                    IncludeFiles = IncludeFilesCheckBox.IsChecked == true,
-                    SortTarget = SortTargetComboBox != null && SortTargetComboBox.SelectedIndex >= 0
-                        ? (AppConstants.SortTarget)SortTargetComboBox.SelectedIndex
-                        : AppConstants.SortTarget.Size,
-                    SortDirection = SortDirectionComboBox != null && SortDirectionComboBox.SelectedIndex >= 0
-                        ? (AppConstants.SortDirection)SortDirectionComboBox.SelectedIndex
-                        : AppConstants.SortDirection.Descending
-                };
-                settings.Save();
+                    Unit = (AppConstants.SizeUnit)_layoutView.UnitComboBox.SelectedIndex,
+                    IncludeFiles = _layoutView.IncludeFilesCheckBox.IsChecked == true,
+                    SortTarget = (AppConstants.SortTarget)_layoutView.SortComboBox.SelectedIndex,
+                    SortDirection = (AppConstants.SortDirection)_layoutView.SortDirectionComboBox.SelectedIndex,
+                    LayoutMode = MenuLayoutHorizontal.IsChecked
+                        ? AppConstants.LayoutType.Horizontal
+                        : AppConstants.LayoutType.Vertical
+                }.Save();
                 Logger.Log(AppConstants.LogCacheSaveSuccess);
             }
             catch (Exception ex)
@@ -1190,44 +802,258 @@ namespace LargeFolderFinder
             }
         }
 
-        #region Helper Methods (Memory Optimization)
+        private void UpdateLanguageMenu()
+        {
+            Logger.Log(AppConstants.LogUpdateMenuStart);
+            MenuLanguage.Items.Clear();
+            foreach (var l in LocalizationManager.Instance.GetAvailableLanguages())
+            {
+                var item = new MenuItem
+                {
+                    Header = l.MenuText,
+                    Tag = l.Code
+                };
+                item.Click += (s, e) =>
+                {
+                    Logger.Log(string.Format(AppConstants.LogLangChangeStart, item.Tag));
+                    LocalizationManager.Instance.CurrentLanguage = (string)item.Tag;
+                    SaveCache();
+                    ApplyLocalization();
+                    if (_lastScanResult != null)
+                    {
+                        _ = RenderResult();
+                    }
+                    Logger.Log(string.Format(AppConstants.LogLangChangeSuccess, item.Tag));
+                };
+                MenuLanguage.Items.Add(item);
+            }
+            Logger.Log(AppConstants.LogUpdateMenuSuccess);
+        }
 
-        /// <summary>
-        /// 不要なメモリを解放し、OS に返却します。
-        /// </summary>
+        private void MenuFile_SubmenuOpened(object sender, RoutedEventArgs e)
+        {
+            MenuOpenLogSub.Items.Clear();
+            var logsDir = AppConstants.LogsDirectoryPath;
+            if (Directory.Exists(logsDir))
+            {
+                var logFiles = Directory.GetFiles(logsDir, "*_Log.txt")
+                    .Select(p => new FileInfo(p))
+                    .OrderByDescending(p => p.CreationTime);
+                foreach (var f in logFiles)
+                {
+                    var item = new MenuItem { Header = f.Name, Tag = f.FullName };
+                    item.Click += (s, ev) => OpenOrActivateTextViewer((string)item.Tag);
+                    MenuOpenLogSub.Items.Add(item);
+                }
+            }
+        }
+        internal void MenuConfig_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ConfigFileName);
+                if (File.Exists(path))
+                {
+                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                    Logger.Log(Path.GetFileName(path));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Error opening...", ex);
+                var lm = LocalizationManager.Instance;
+                MessageBox.Show(
+                    $"{lm.GetText(LanguageKey.ConfigError)}\n{ex.Message}",
+                    lm.GetText(LanguageKey.LabelError),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+        private void MenuReadme_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string langCode = LocalizationManager.Instance.CurrentLanguage;
+                if (string.IsNullOrEmpty(langCode)) langCode = "en";
+
+                // 言語コードだけでマッチ (例: ja, en)
+                string filename = AppConstants.GetReadmeFileName(langCode);
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ReadmeDirectoryName, filename);
+
+                if (!File.Exists(path))
+                {
+                    // フォールバック: 英語
+                    path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ReadmeDirectoryName, AppConstants.GetReadmeFileName("en"));
+                }
+
+                if (File.Exists(path))
+                {
+                    OpenOrActivateTextViewer(path);
+                    Logger.Log($"Opened {Path.GetFileName(path)}");
+                }
+                else
+                {
+                    var lm = LocalizationManager.Instance;
+                    MessageBox.Show(
+                        $"{lm.GetText(LanguageKey.ReadmeNotFound)}\n{path}",
+                        lm.GetText(LanguageKey.LabelError),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error opening...", ex);
+                var lm = LocalizationManager.Instance;
+                MessageBox.Show(
+                    $"{lm.GetText(LanguageKey.ReadmeError)}\n{ex.Message}",
+                    lm.GetText(LanguageKey.LabelError),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+        private void MenuAbout_Click(object sender, RoutedEventArgs e)
+        {
+            var lm = LocalizationManager.Instance;
+            MessageBox.Show(
+                string.Format(lm.GetText(LanguageKey.AboutMessage), AppInfo.Title, AppInfo.Version, AppInfo.Copyright),
+                lm.GetText(LanguageKey.AboutTitle)
+            );
+        }
+        private void MenuExit_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
+        }
+        private void MenuRestartAdmin_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = Process.GetCurrentProcess().MainModule?.FileName,
+                    UseShellExecute = true,
+                    Verb = "runas"
+                };
+                if (psi.FileName != null)
+                {
+                    Process.Start(psi);
+                    Application.Current.Shutdown();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Error restarting as admin", ex);
+            }
+        }
+        private void MenuLayoutVertical_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyLayout(AppConstants.LayoutType.Vertical);
+        }
+        private void MenuLayoutHorizontal_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyLayout(AppConstants.LayoutType.Horizontal);
+        }
+        private void OpenOrActivateTextViewer(string path)
+        {
+            foreach (Window w in Application.Current.Windows)
+            {
+                if (w is TextViewer v && string.Equals(v.FilePath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    w.Activate();
+                    return;
+                }
+            }
+            new TextViewer(path).Show();
+        }
+
         private void OptimizeMemory()
         {
             try
             {
-                // 管理メモリの強制回収
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
+                GC.Collect();
                 GC.WaitForPendingFinalizers();
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
-
-                // ワーキングセットの最小化を OS に要求
-                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-                {
-                    using (var process = System.Diagnostics.Process.GetCurrentProcess())
-                    {
-                        LargeFolderFinder.Win32.SetProcessWorkingSetSize(process.Handle, -1, -1);
-                    }
-                }
-                Logger.Log(AppConstants.LogOptimizeMemory);
+                GC.Collect();
+                Win32.SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, -1, -1);
             }
-            catch
+            catch (Exception ex)
             {
-                // エラーは無視
+                Logger.Log("Error optimizing memory", ex);
             }
+            Logger.Log(AppConstants.LogOptimizeMemory);
         }
 
         private void InitializeMemoryTimer()
         {
-            _memoryTimer = new DispatcherTimer(DispatcherPriority.Background);
-            _memoryTimer.Interval = TimeSpan.FromMinutes(AppConstants.MemoryOptimizeIntervalMinutes);
+            _memoryTimer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromMinutes(AppConstants.MemoryOptimizeIntervalMinutes)
+            };
             _memoryTimer.Tick += (s, e) => OptimizeMemory();
             _memoryTimer.Start();
         }
 
-        #endregion
+        private void MenuAppLicense_Click(object sender, RoutedEventArgs e)
+        {
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.LicenseDirectoryName, AppConstants.AppLicenseFileName);
+            try
+            {
+                if (File.Exists(path))
+                {
+                    OpenOrActivateTextViewer(path);
+                    Logger.Log($"Opened {Path.GetFileName(path)}");
+                }
+                else
+                {
+                    var lm = LocalizationManager.Instance;
+                    MessageBox.Show(
+                        lm.GetText(LanguageKey.LicenseNotFoundError),
+                        lm.GetText(LanguageKey.LabelError),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error opening... {path}", ex);
+                var lm = LocalizationManager.Instance;
+                MessageBox.Show(
+                    $"{lm.GetText(LanguageKey.LabelError)}\n{ex.Message}",
+                    lm.GetText(LanguageKey.LabelError),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        private void MenuThirdPartyLicenses_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.LicenseDirectoryName, AppConstants.ThirdPartyNoticesFileName);
+                if (File.Exists(path))
+                {
+                    OpenOrActivateTextViewer(path);
+                    Logger.Log($"Opened {Path.GetFileName(path)}");
+                }
+                else
+                {
+                    var lm = LocalizationManager.Instance;
+                    MessageBox.Show(
+                        $"{lm.GetText(LanguageKey.LicenseNotFoundError)}\n{path}",
+                        lm.GetText(LanguageKey.LabelError),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error opening...", ex);
+                var lm = LocalizationManager.Instance;
+                MessageBox.Show(
+                    $"{lm.GetText(LanguageKey.LabelError)}\n{ex.Message}",
+                    lm.GetText(LanguageKey.LabelError),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
     }
 }
