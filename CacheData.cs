@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -6,42 +7,35 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace LargeFolderFinder
 {
     /// <summary>
-    /// アプリケーション設定を管理するクラス (Cache.yaml)
+    /// Search session data including parameters and results
     /// </summary>
-    public class CacheData
+    public class SearchSession
     {
-        /// <summary>
-        /// 最後に選択されたフォルダパス
-        /// </summary>
-        public string LastFolderPath { get; set; } = "";
-
-        /// <summary>
-        /// 言語設定
-        /// </summary>
-        public string Language { get; set; } = "";
-
-        /// <summary>
-        /// レイアウト設定 (Vertical / Horizontal)
-        /// </summary>
-        public AppConstants.LayoutType LayoutMode { get; set; } = AppConstants.LayoutType.Vertical;
-        public double LastThresholdGB { get; set; } = AppConstants.DefaultThreshold;
-        public int SeparatorIndex { get; set; } = 1; // 1: Space (デフォルト)
-        public int TabWidth { get; set; } = 8;
+        public string Path { get; set; } = "";
+        public double Threshold { get; set; } = AppConstants.DefaultThreshold;
         public AppConstants.SizeUnit Unit { get; set; } = AppConstants.SizeUnit.GB;
         public bool IncludeFiles { get; set; } = false;
         public AppConstants.SortTarget SortTarget { get; set; } = AppConstants.SortTarget.Size;
         public AppConstants.SortDirection SortDirection { get; set; } = AppConstants.SortDirection.Descending;
+        public int SeparatorIndex { get; set; } = 1; // 1: Space (default)
+        public int TabWidth { get; set; } = AppConstants.DefaultTabWidth;
+        public FolderInfo? Result { get; set; }
+    }
 
-        /// <summary>
-        /// 設定ファイルのパスを取得
-        /// </summary>
+    /// <summary>
+    /// Application settings management class (Cache.txt)
+    /// </summary>
+    public class CacheData
+    {
+        public string Language { get; set; } = "";
+        public AppConstants.LayoutType LayoutMode { get; set; } = AppConstants.LayoutType.Vertical;
+
+        public List<SearchSession> Sessions { get; set; } = new List<SearchSession>();
+        public int SelectedIndex { get; set; } = 0;
+
         private static string SettingsFilePath =>
             Path.Combine(AppConstants.AppDataDirectory, AppConstants.CacheFileName);
 
-        /// <summary>
-        /// 設定ファイルから設定を読み込む
-        /// </summary>
-        /// <returns>読み込まれた設定。失敗した場合はnull</returns>
         public static CacheData? Load()
         {
             try
@@ -53,20 +47,18 @@ namespace LargeFolderFinder
                         var deserializer = new DeserializerBuilder()
                             .WithNamingConvention(PascalCaseNamingConvention.Instance)
                             .Build();
+
                         return deserializer.Deserialize<CacheData>(reader);
                     }
                 }
             }
             catch (Exception)
             {
-                // 読み込みエラーは無視
+                // Ignore load errors
             }
             return null;
         }
 
-        /// <summary>
-        /// 設定をファイルに保存する
-        /// </summary>
         public void Save()
         {
             try
@@ -81,9 +73,9 @@ namespace LargeFolderFinder
                 string yaml = serializer.Serialize(this);
                 File.WriteAllText(SettingsFilePath, yaml);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // 保存エラーは無視
+                Logger.Log("Failed Save Cache.", ex);
             }
         }
     }

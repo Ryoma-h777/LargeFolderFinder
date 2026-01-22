@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
 using YamlDotNet.Serialization;
+using System.Windows.Controls.Primitives;
 
 namespace LargeFolderFinder
 {
@@ -124,7 +125,7 @@ namespace LargeFolderFinder
             long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(selectedUnit));
 
             var config = Config.Load();
-            SaveCache();
+            SaveCache(); // 検索履歴の保存
             _hasShownProgressError = false;
 
             _cts = new CancellationTokenSource();
@@ -268,6 +269,8 @@ namespace LargeFolderFinder
                 }
                 Logger.Log(string.Format(AppConstants.LogScanSuccess, FormatDuration(sw.Elapsed)));
 
+                SaveCache(); // 検索結果の保存
+
                 OptimizeMemory();
                 _cts?.Dispose();
                 _cts = null;
@@ -347,16 +350,20 @@ namespace LargeFolderFinder
             ApplyLocalization();
 
             var cache = CacheData.Load();
-            if (cache != null)
+            if (cache != null && cache.Sessions.Count > 0)
             {
-                _layoutView.PathTextBox.Text = cache.LastFolderPath;
-                _layoutView.SearchSizeTextBox.Text = cache.LastThresholdGB.ToString();
-                _layoutView.UnitComboBox.SelectedIndex = (int)cache.Unit;
-                _layoutView.SortComboBox.SelectedIndex = (int)cache.SortTarget;
-                _layoutView.SortDirectionComboBox.SelectedIndex = (int)cache.SortDirection;
-                _layoutView.IncludeFilesCheckBox.IsChecked = cache.IncludeFiles;
-                _layoutView.SeparatorComboBox.SelectedIndex = (int)cache.SeparatorIndex;
-                _layoutView.TabWidthTextBox.Text = cache.TabWidth.ToString();
+                int idx = cache.SelectedIndex;
+                if (idx < 0 || idx >= cache.Sessions.Count) idx = 0;
+                var session = cache.Sessions[idx];
+
+                _layoutView.PathTextBox.Text = session.Path;
+                _layoutView.SearchSizeTextBox.Text = session.Threshold.ToString();
+                _layoutView.UnitComboBox.SelectedIndex = (int)session.Unit;
+                _layoutView.SortComboBox.SelectedIndex = (int)session.SortTarget;
+                _layoutView.SortDirectionComboBox.SelectedIndex = (int)session.SortDirection;
+                _layoutView.IncludeFilesCheckBox.IsChecked = session.IncludeFiles;
+                _layoutView.SeparatorComboBox.SelectedIndex = session.SeparatorIndex;
+                _layoutView.TabWidthTextBox.Text = session.TabWidth.ToString();
             }
         }
 
@@ -401,7 +408,9 @@ namespace LargeFolderFinder
 
         private void ApplyLocalization()
         {
+#if DEBUG
             Logger.Log(AppConstants.LogApplyLocStart);
+#endif
             var lm = LocalizationManager.Instance;
             this.Title = lm.GetText(LanguageKey.Title);
             MenuFile.Header = lm.GetText(LanguageKey.MenuFile);
@@ -419,6 +428,7 @@ namespace LargeFolderFinder
             MenuLayout.Header = lm.GetText(LanguageKey.MenuLayout);
             MenuLayoutVertical.Header = lm.GetText(LanguageKey.MenuLayoutVertical);
             MenuLayoutHorizontal.Header = lm.GetText(LanguageKey.MenuLayoutHorizontal);
+
             _layoutView?.ApplyLocalization(lm);
             Logger.Log(AppConstants.LogApplyLocSuccess);
         }
@@ -758,6 +768,19 @@ namespace LargeFolderFinder
             {
                 var c = CacheData.Load();
                 ApplyLayout(c?.LayoutMode ?? AppConstants.LayoutType.Vertical);
+
+                if (c != null && c.Sessions.Count > 0)
+                {
+                    int idx = c.SelectedIndex;
+                    if (idx < 0 || idx >= c.Sessions.Count) idx = 0;
+                    var session = c.Sessions[idx];
+                    if (session.Result != null)
+                    {
+                        _lastScanResult = session.Result;
+                        // Initial render
+                        _ = RenderResult();
+                    }
+                }
                 Logger.Log(AppConstants.LogCacheLoadSuccess);
             }
             catch (Exception ex)
@@ -779,21 +802,38 @@ namespace LargeFolderFinder
                 double.TryParse(_layoutView.SearchSizeTextBox.Text, out double th);
                 int.TryParse(_layoutView.TabWidthTextBox.Text, out int tw);
 
-                new CacheData
+                var cache = CacheData.Load() ?? new CacheData();
+                cache.Language = LocalizationManager.Instance.CurrentLanguage;
+                cache.LayoutMode = MenuLayoutHorizontal.IsChecked
+                        ? AppConstants.LayoutType.Horizontal
+                        : AppConstants.LayoutType.Vertical;
+
+                var session = new SearchSession
                 {
-                    LastFolderPath = _layoutView.PathTextBox.Text,
-                    LastThresholdGB = th,
+                    Path = _layoutView.PathTextBox.Text,
+                    Threshold = th,
                     SeparatorIndex = _layoutView.SeparatorComboBox.SelectedIndex,
                     TabWidth = tw,
-                    Language = LocalizationManager.Instance.CurrentLanguage,
                     Unit = (AppConstants.SizeUnit)_layoutView.UnitComboBox.SelectedIndex,
                     IncludeFiles = _layoutView.IncludeFilesCheckBox.IsChecked == true,
                     SortTarget = (AppConstants.SortTarget)_layoutView.SortComboBox.SelectedIndex,
                     SortDirection = (AppConstants.SortDirection)_layoutView.SortDirectionComboBox.SelectedIndex,
-                    LayoutMode = MenuLayoutHorizontal.IsChecked
-                        ? AppConstants.LayoutType.Horizontal
-                        : AppConstants.LayoutType.Vertical
-                }.Save();
+                    Result = _lastScanResult
+                };
+
+                if (cache.Sessions.Count == 0)
+                {
+                    cache.Sessions.Add(session);
+                    cache.SelectedIndex = 0;
+                }
+                else
+                {
+                    if (cache.SelectedIndex < 0 || cache.SelectedIndex >= cache.Sessions.Count)
+                        cache.SelectedIndex = 0;
+                    cache.Sessions[cache.SelectedIndex] = session;
+                }
+
+                cache.Save();
                 Logger.Log(AppConstants.LogCacheSaveSuccess);
             }
             catch (Exception ex)
@@ -804,47 +844,64 @@ namespace LargeFolderFinder
 
         private void UpdateLanguageMenu()
         {
-            Logger.Log(AppConstants.LogUpdateMenuStart);
-            MenuLanguage.Items.Clear();
-            foreach (var l in LocalizationManager.Instance.GetAvailableLanguages())
+            try
             {
-                var item = new MenuItem
+                Logger.Log(AppConstants.LogUpdateMenuStart);
+                MenuLanguage.Items.Clear();
+                foreach (var l in LocalizationManager.Instance.GetAvailableLanguages())
                 {
-                    Header = l.MenuText,
-                    Tag = l.Code
-                };
-                item.Click += (s, e) =>
-                {
-                    Logger.Log(string.Format(AppConstants.LogLangChangeStart, item.Tag));
-                    LocalizationManager.Instance.CurrentLanguage = (string)item.Tag;
-                    SaveCache();
-                    ApplyLocalization();
-                    if (_lastScanResult != null)
+                    var item = new MenuItem
                     {
-                        _ = RenderResult();
-                    }
-                    Logger.Log(string.Format(AppConstants.LogLangChangeSuccess, item.Tag));
-                };
-                MenuLanguage.Items.Add(item);
+                        Header = l.MenuText,
+                        Tag = l.Code
+                    };
+                    item.Click += (s, e) =>
+                    {
+                        Logger.Log(string.Format(AppConstants.LogLangChangeStart, item.Tag));
+                        LocalizationManager.Instance.CurrentLanguage = (string)item.Tag;
+                        SaveCache();
+                        ApplyLocalization();
+                        if (_lastScanResult != null)
+                        {
+                            _ = RenderResult();
+                        }
+                    };
+                    MenuLanguage.Items.Add(item);
+                }
+                Logger.Log(AppConstants.LogUpdateMenuSuccess);
             }
-            Logger.Log(AppConstants.LogUpdateMenuSuccess);
+            catch (Exception ex)
+            {
+                Logger.Log(AppConstants.LogUpdateMenuError, ex);
+            }
         }
 
-        private void MenuFile_SubmenuOpened(object sender, RoutedEventArgs e)
+        private void MenuView_SubmenuOpened(object sender, RoutedEventArgs e)
         {
-            MenuOpenLogSub.Items.Clear();
-            var logsDir = AppConstants.LogsDirectoryPath;
-            if (Directory.Exists(logsDir))
+            if (e.OriginalSource != sender) return;
+            try
             {
-                var logFiles = Directory.GetFiles(logsDir, "*_Log.txt")
-                    .Select(p => new FileInfo(p))
-                    .OrderByDescending(p => p.CreationTime);
-                foreach (var f in logFiles)
+#if DEBUG
+                Logger.Log("MenuView_SubmenuOpened");
+#endif
+                MenuOpenLogSub.Items.Clear();
+                var logsDir = AppConstants.LogsDirectoryPath;
+                if (Directory.Exists(logsDir))
                 {
-                    var item = new MenuItem { Header = f.Name, Tag = f.FullName };
-                    item.Click += (s, ev) => OpenOrActivateTextViewer((string)item.Tag);
-                    MenuOpenLogSub.Items.Add(item);
+                    var logFiles = Directory.GetFiles(logsDir, "*_Log.txt")
+                        .Select(p => new FileInfo(p))
+                        .OrderByDescending(p => p.CreationTime);
+                    foreach (var f in logFiles)
+                    {
+                        var item = new MenuItem { Header = f.Name, Tag = f.FullName };
+                        item.Click += (s, ev) => OpenOrActivateTextViewer((string)item.Tag);
+                        MenuOpenLogSub.Items.Add(item);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Error Menu/Log/... view failed", ex);
             }
         }
         internal void MenuConfig_Click(object sender, RoutedEventArgs e)

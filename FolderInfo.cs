@@ -26,6 +26,12 @@ namespace LargeFolderFinder
         [YamlIgnore]
         public FolderInfo? Parent { get; set; }
 
+        public FolderInfo()
+        {
+            Name = "";
+            LastModified = System.DateTime.MinValue;
+        }
+
         public FolderInfo(string name, long size, bool isFile = false, System.DateTime? lastModified = null)
         {
             Name = name;

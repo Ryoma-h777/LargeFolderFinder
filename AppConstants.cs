@@ -119,8 +119,6 @@ namespace LargeFolderFinder
         public const string LogUpdateMenuSuccess = "Language menu updated successfully.";
         public const string LogUpdateMenuError = "Failed to update language menu.";
         public const string LogLangChangeStart = "Changing language to: {0}";
-        public const string LogLangChangeSuccess = "Language changed successfully to: {0}";
-        public const string LogLangChangeError = "Failed to change language.";
         public const string LogScanStart = "Scan started. Path: {0}, Threshold: {1}";
         public const string LogScanSuccess = "Scan finished successfully. Time: {0}";
         public const string LogScanError = "Scan error occurred.";
@@ -129,7 +127,6 @@ namespace LargeFolderFinder
         public const string LogClipboardError = "Failed to copy to clipboard.";
         public const string LogOptimizeMemory = "Memory optimized.";
         public const string LogBrowseButtonClicked = "Browse button clicked.";
-        public const string LogBrowseButtonClickedError = "Error in BrowseButton_Click with CommonFolderDialog";
 
     }
 }
