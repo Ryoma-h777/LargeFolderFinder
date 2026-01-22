@@ -24,6 +24,10 @@ namespace LargeFolderFinder
         MenuAbout,
         MenuLicense,
         MenuAppLicense,
+        MenuView,
+        MenuLayout,
+        MenuLayoutVertical,
+        MenuLayoutHorizontal,
 
         // --- Body (ScanSettings) ---
         FolderLabel,
@@ -37,7 +41,10 @@ namespace LargeFolderFinder
         CancelToolTip,
         OpenConfigToolTip,
         CopyToolTip,
-
+        IncludeFiles,
+        ViewLabel,
+        MinSizeLabel,
+        TabWidthLabel,
         // --- Footer (Status & Progress) ---
         ReadyStatus,
         ScanningStatus,
@@ -80,6 +87,7 @@ namespace LargeFolderFinder
         ClipboardError,
         ProgressErrorLabel,
         RenderErrorLabel,
+        RenderingStatus,
         DebugInfoTitle,
         MenuThirdPartyLicenses,
         LicenseNotFoundError,

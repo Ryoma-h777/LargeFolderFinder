@@ -1,0 +1,124 @@
+<UserControl x:Class="LargeFolderFinder.VerticalLayoutView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:LargeFolderFinder"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="400">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Settings Area -->
+            <RowDefinition Height="*"/>    <!-- Results Area -->
+            <RowDefinition Height="Auto"/> <!-- Footer -->
+        </Grid.RowDefinitions>
+
+        <!-- Settings Area -->
+        <Grid Grid.Row="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Row 0: Path -->
+                <RowDefinition Height="Auto"/> <!-- Row 1: Scan execution (Size) -->
+                <RowDefinition Height="Auto"/> <!-- Row 2: Separator line -->
+                <RowDefinition Height="Auto"/> <!-- Row 3: Display settings -->
+            </Grid.RowDefinitions>
+
+            <!-- Row 0: Folder Path Input Area -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="pathTextBox" Grid.Column="0" Height="26" VerticalContentAlignment="Center" Margin="0,0,5,0" KeyDown="Input_KeyDown" />
+                <Button x:Name="browseButton" Grid.Column="1" Content="..." Width="40" Height="26" Click="BrowseButton_Click" />
+            </Grid>
+
+            <!-- Row 1: Scan Execution and Size Settings -->
+            <Grid Grid.Row="1" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Left: Size Threshold Input -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock x:Name="searchSizeLabel" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBox x:Name="searchSizeTextBox" Width="60" Height="26" VerticalContentAlignment="Center" Text="1" Margin="0,0,5,0" KeyDown="Input_KeyDown"/>
+                    <ComboBox x:Name="unitComboBox" Width="60" Height="26" VerticalContentAlignment="Center">
+                    </ComboBox>
+                </StackPanel>
+                <!-- Right: Scan/Cancel buttons -->
+                <Button x:Name="runButton" Grid.Column="1" ToolTip="Scan" Width="80" Height="30" FontWeight="Bold" Background="#0078D7" Foreground="White" Margin="10,0,5,0" Click="ScanButton_Click">
+                    <Path Data="{StaticResource RunIconGeometry}" Fill="White" Stretch="Uniform" Margin="6" />
+                </Button>
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="cancelButton" Width="80" Height="30" IsEnabled="False" Margin="5,0,0,0" Click="CancelButton_Click" ToolTip="Cancel">
+                        <Path Data="{StaticResource StopIconGeometry}" Fill="#444" Stretch="Uniform" Margin="9" />
+                    </Button>
+                    <Button x:Name="configButton" Width="30" Height="30" Margin="5,0,0,0" Click="MenuConfig_Click" ToolTip="Settings">
+                        <Path Data="{StaticResource ConfigIconGeometry}" Fill="#444" Stretch="Uniform" Margin="6" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Row 2: Genre Separator -->
+            <Border Grid.Row="2" Height="1" Background="#EEE" Margin="0,0,0,5"/>
+
+            <!-- Row 3: Display Settings Row -->
+            <Grid Grid.Row="3" Margin="0,0,0,5">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="viewHeaderLabel" Text="表示" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock x:Name="sortLabel" Text="ソート:" VerticalAlignment="Center" Margin="0,0,5,0" />
+                    <ComboBox x:Name="sortComboBox" Width="100" Height="24" VerticalContentAlignment="Center" SelectedIndex="0" Margin="0,0,5,0">
+                        <ComboBoxItem>Size</ComboBoxItem>
+                        <ComboBoxItem>Name</ComboBoxItem>
+                    </ComboBox>
+                    <ComboBox x:Name="sortDirectionComboBox" Width="80" Height="24" VerticalContentAlignment="Center" SelectedIndex="1" Margin="0,0,15,0">
+                        <ComboBoxItem>Asc</ComboBoxItem>
+                        <ComboBoxItem>Desc</ComboBoxItem>
+                    </ComboBox>
+                    <!-- Toggle File Visibility -->
+                    <StackPanel x:Name="includeFilesPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                        <TextBlock x:Name="includeFilesLabel" Text="ファイルも表示" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                        <CheckBox x:Name="includeFilesCheckBox" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <!-- Separator Option -->
+                    <TextBlock x:Name="separatorLabel" Text="空白:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <ComboBox x:Name="separatorComboBox" Width="60" Height="24" VerticalContentAlignment="Center" SelectedIndex="0" Margin="0,0,15,0">
+                        <ComboBoxItem>Tab</ComboBoxItem>
+                        <ComboBoxItem>Space</ComboBoxItem>
+                    </ComboBox>
+                    <!-- Tab Width (Only visible in Tab mode) -->
+                    <StackPanel x:Name="tabWidthArea" Orientation="Horizontal" Visibility="Visible">
+                        <TextBlock x:Name="tabWidthLabel" Text="幅:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="tabWidthTextBox" Width="30" Height="24" VerticalContentAlignment="Center" Text="4" />
+                    </StackPanel>
+                </StackPanel>
+                
+                <Button x:Name="copyButton" HorizontalAlignment="Right" Width="24" Height="24" VerticalAlignment="Center" Click="CopyButton_Click" ToolTip="Copy">
+                    <Path Data="{StaticResource CopyIconGeometry}" Fill="#444" Stretch="Uniform" Margin="4" />
+                </Button>
+            </Grid>
+        </Grid>
+
+        <!-- Results Area -->
+        <Grid Grid.Row="1">
+            <TextBox x:Name="outputTextBox" 
+                TextWrapping="NoWrap" 
+                AcceptsReturn="True" 
+                IsReadOnly="True" 
+                ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                ScrollViewer.VerticalScrollBarVisibility="Auto" 
+                FontFamily="MS Gothic"
+                FontSize="12" />
+        </Grid>
+
+        <!-- Footer (Status & Progress) -->
+        <StackPanel Grid.Row="2" Margin="0,5,0,0">
+            <ProgressBar x:Name="scanProgressBar" Height="4" Margin="0,0,0,2" Visibility="Collapsed" />
+            <Grid>
+                <TextBlock x:Name="statusTextBlock" Text="準備完了" Foreground="Gray" FontSize="11" />
+                <TextBlock x:Name="notificationTextBlock" HorizontalAlignment="Right" Foreground="#0078D7" FontSize="11" />
+            </Grid>
+        </StackPanel>
+    </Grid>
+</UserControl>

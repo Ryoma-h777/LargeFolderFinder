@@ -11,6 +11,10 @@ MenuHelp: "Справка(_H)"
 MenuOpenReadme: "Открыть Readme(_R)"
 MenuLicense: "Лицензия(_L)"
 MenuAppLicense: "Лицензия приложения(_A)"
+MenuView: "Вид(_V)"
+MenuLayout: "Макет(_L)"
+MenuLayoutVertical: "Вертикальный(_V)"
+MenuLayoutHorizontal: "Горизонтальный(_H)"
 MenuAbout: "О программе(_A)"
 
 # Viewer (Log, Readme, License)
@@ -41,6 +45,8 @@ CancelToolTip: "Отмена. Если не работает, нажмите к�
 OpenConfigToolTip: "Открыть расширенные настройки (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Копировать результаты в буфер обмена"
+IncludeFiles: "Показать файлы"
+ViewLabel: "Вид"
 
 ## Line 3
 # Sort

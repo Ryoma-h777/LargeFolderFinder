@@ -11,9 +11,15 @@ MenuHelp: "Help(_H)"
 MenuOpenReadme: "Open Readme(_R)"
 MenuLicense: "License(_L)"
 MenuAppLicense: "App License(_A)"
-MenuAbout: "About(_A)"
+AboutTitle: "About"
+AboutMessage: "{0}\nVersion {1}\n{2}\n\nA tool to quickly find large folders."
+DialogInfo: "Information"
+MenuView: "View(_V)"
+MenuLayout: "Layout(_L)"
+MenuLayoutVertical: "Vertical(_V)"
+MenuLayoutHorizontal: "Horizontal(_H)"
 
-# Viewer (Log, Readme, License)
+####### Scan Settings #######
 ViewerCopy: "Copy"
 ViewerOpenFolder: "Open Folder"
 ViewerClose: "Close"
@@ -40,7 +46,9 @@ CancelToolTip: "Cancel. If it doesn't work, press the X button."
 # Advance Setting Button
 OpenConfigToolTip: "Open advanced settings (Config.txt)"
 # Clipboard Copy Button
-CopyToolTip: "Copy to clipboard"
+CopyToolTip: "Copy result to clipboard"
+IncludeFiles: "Show Files"
+ViewLabel: "View"
 
 ## Line 3
 # Sort

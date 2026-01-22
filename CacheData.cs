@@ -19,6 +19,11 @@ namespace LargeFolderFinder
         /// 言語設定
         /// </summary>
         public string Language { get; set; } = "";
+
+        /// <summary>
+        /// レイアウト設定 (Vertical / Horizontal)
+        /// </summary>
+        public AppConstants.LayoutType LayoutMode { get; set; } = AppConstants.LayoutType.Vertical;
         public double LastThresholdGB { get; set; } = AppConstants.DefaultThreshold;
         public int SeparatorIndex { get; set; } = 1; // 1: Space (デフォルト)
         public int TabWidth { get; set; } = 8;

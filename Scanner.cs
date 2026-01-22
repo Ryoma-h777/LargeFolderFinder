@@ -239,8 +239,6 @@ namespace LargeFolderFinder
                         PruneTree(child, thresholdBytes);
                     }
                 }
-                // 名前順にソート（最終結果用）
-                node.Children = node.Children.OrderBy(c => c.Name).ToList();
             }
         }
 
