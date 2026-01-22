@@ -756,6 +756,12 @@ namespace LargeFolderFinder
             };
         }
 
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            base.OnClosing(e);
+            SaveCache();
+        }
+
         private void InitializeLocalization()
         {
             /* Handled in CTOR and LoadCache */
@@ -768,6 +774,25 @@ namespace LargeFolderFinder
             {
                 var c = CacheData.Load();
                 ApplyLayout(c?.LayoutMode ?? AppConstants.LayoutType.Vertical);
+
+                if (c != null)
+                {
+                    // Restore Window Position/Size
+                    if (!double.IsNaN(c.WindowTop) && !double.IsNaN(c.WindowLeft) &&
+                        !double.IsNaN(c.WindowWidth) && !double.IsNaN(c.WindowHeight))
+                    {
+                        this.Top = c.WindowTop;
+                        this.Left = c.WindowLeft;
+                        this.Width = c.WindowWidth;
+                        this.Height = c.WindowHeight;
+                    }
+
+                    // Restore WindowState
+                    if (c.WindowState == (int)WindowState.Maximized)
+                    {
+                        this.WindowState = WindowState.Maximized;
+                    }
+                }
 
                 if (c != null && c.Sessions.Count > 0)
                 {
@@ -807,6 +832,26 @@ namespace LargeFolderFinder
                 cache.LayoutMode = MenuLayoutHorizontal.IsChecked
                         ? AppConstants.LayoutType.Horizontal
                         : AppConstants.LayoutType.Vertical;
+
+                // Save Window Geometry
+                if (this.WindowState == WindowState.Maximized)
+                {
+                    cache.WindowTop = this.RestoreBounds.Top;
+                    cache.WindowLeft = this.RestoreBounds.Left;
+                    cache.WindowWidth = this.RestoreBounds.Width;
+                    cache.WindowHeight = this.RestoreBounds.Height;
+                    cache.WindowState = (int)WindowState.Maximized;
+                }
+                else
+                {
+                    // Normal or Minimized (treat Minimized as Normal using RestoreBounds)
+                    var rect = this.WindowState == WindowState.Minimized ? this.RestoreBounds : new Rect(this.Left, this.Top, this.Width, this.Height);
+                    cache.WindowTop = rect.Top;
+                    cache.WindowLeft = rect.Left;
+                    cache.WindowWidth = rect.Width;
+                    cache.WindowHeight = rect.Height;
+                    cache.WindowState = (int)WindowState.Normal;
+                }
 
                 var session = new SearchSession
                 {
