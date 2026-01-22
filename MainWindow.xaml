@@ -13,18 +13,18 @@
         <!-- Menu Bar (Common) -->
         <Menu DockPanel.Dock="Top">
             <MenuItem x:Name="MenuFile" Header="ファイル(_F)" SubmenuOpened="MenuFile_SubmenuOpened">
-                <MenuItem x:Name="MenuLanguage" Header="Language(_L)"/>
-                <MenuItem x:Name="MenuOpenConfig" Header="設定を開く(_S)" Click="MenuConfig_Click"/>
-                <MenuItem x:Name="MenuOpenLogSub" Header="ログを開く(_O)"/>
-                <Separator/>
                 <MenuItem x:Name="MenuRestartAdmin" Header="管理者として開き直す(_A)" Click="MenuRestartAdmin_Click"/>
+                <Separator/>
                 <MenuItem x:Name="MenuExit" Header="終了(_X)" Click="MenuExit_Click"/>
             </MenuItem>
             <MenuItem x:Name="MenuView" Header="表示(_V)">
+                <MenuItem x:Name="MenuLanguage" Header="Language(_L)"/>
                 <MenuItem x:Name="MenuLayout" Header="レイアウト(_L)">
                     <MenuItem x:Name="MenuLayoutVertical" Header="縦並び(_V)" Click="MenuLayoutVertical_Click" IsCheckable="True"/>
                     <MenuItem x:Name="MenuLayoutHorizontal" Header="横並び(_H)" Click="MenuLayoutHorizontal_Click" IsCheckable="True"/>
                 </MenuItem>
+                <MenuItem x:Name="MenuOpenConfig" Header="設定を開く(_S)" Click="MenuConfig_Click"/>
+                <MenuItem x:Name="MenuOpenLogSub" Header="ログを開く(_O)"/>
             </MenuItem>
             <MenuItem x:Name="MenuHelp" Header="ヘルプ(_H)">
                 <MenuItem x:Name="MenuOpenReadme" Header="Readme を開く(_R)" Click="MenuReadme_Click"/>

@@ -78,19 +78,19 @@
                     </ComboBox>
                     <!-- Toggle File Visibility -->
                     <StackPanel x:Name="includeFilesPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
-                        <TextBlock x:Name="includeFilesLabel" Text="ファイルも表示" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                        <TextBlock x:Name="includeFilesLabel" Text="View Files" VerticalAlignment="Center" Margin="0,0,3,0"/>
                         <CheckBox x:Name="includeFilesCheckBox" VerticalAlignment="Center"/>
                     </StackPanel>
                     <!-- Separator Option -->
-                    <TextBlock x:Name="separatorLabel" Text="空白:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock x:Name="separatorLabel" Text="Space:" VerticalAlignment="Center" Margin="0,0,5,0"/>
                     <ComboBox x:Name="separatorComboBox" Width="60" Height="24" VerticalContentAlignment="Center" SelectedIndex="0" Margin="0,0,15,0">
                         <ComboBoxItem>Tab</ComboBoxItem>
                         <ComboBoxItem>Space</ComboBoxItem>
                     </ComboBox>
                     <!-- Tab Width (Only visible in Tab mode) -->
                     <StackPanel x:Name="tabWidthArea" Orientation="Horizontal" Visibility="Visible">
-                        <TextBlock x:Name="tabWidthLabel" Text="幅:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                        <TextBox x:Name="tabWidthTextBox" Width="30" Height="24" VerticalContentAlignment="Center" Text="4" />
+                        <TextBlock x:Name="tabWidthLabel" Text="Width:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="tabWidthTextBox" Width="30" Height="24" VerticalContentAlignment="Center" Text="8" />
                     </StackPanel>
                 </StackPanel>
                 
@@ -116,7 +116,7 @@
         <StackPanel Grid.Row="2" Margin="0,5,0,0">
             <ProgressBar x:Name="scanProgressBar" Height="4" Margin="0,0,0,2" Visibility="Collapsed" />
             <Grid>
-                <TextBlock x:Name="statusTextBlock" Text="準備完了" Foreground="Gray" FontSize="11" />
+                <TextBlock x:Name="statusTextBlock" Text="Ready." Foreground="Gray" FontSize="11" />
                 <TextBlock x:Name="notificationTextBlock" HorizontalAlignment="Right" Foreground="#0078D7" FontSize="11" />
             </Grid>
         </StackPanel>

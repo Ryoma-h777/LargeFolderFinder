@@ -9,6 +9,7 @@ namespace LargeFolderFinder
         ComboBox UnitComboBox { get; }
         Button RunButton { get; }
         Button CancelButton { get; }
+        Button CopyButton { get; }
         Button ConfigButton { get; }
         TextBox OutputTextBox { get; }
         ProgressBar ScanProgressBar { get; }

@@ -32,6 +32,7 @@ namespace LargeFolderFinder
         public Button RunButton => runButton;
         public Button CancelButton => cancelButton;
         public Button ConfigButton => configButton;
+        public Button CopyButton => copyButton;
         public TextBox OutputTextBox => outputTextBox;
         public ProgressBar ScanProgressBar => scanProgressBar;
         public TextBlock StatusTextBlock => statusTextBlock;
