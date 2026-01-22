@@ -32,11 +32,12 @@ FolderLabel: "Cartella:"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "Dimensione ricerca: ({0})"
+SearchSizeLabel: "Dimensione minima:"
 SearchSizeToolTip: "Estrae ed elenca le cartelle più grandi di questa dimensione. È possibile specificare 0, ma minore è la dimensione, più tempo richiede la scansione."
 # FolderName<---Space--->Size
 SeparatorLabel: "Separatore:"
 SeparatorToolTip: "Specifica lo spazio tra il nome della cartella e la dimensione ({0})."
+TabWidthLabel: "Larghezza:"
 # Scan Button
 ScanButton: "Scansiona"
 CancelButton: "Annulla"
@@ -78,7 +79,7 @@ UnitMillisecond: "ms"
 UnitElapsed: "trascorso"
 
 Unknown: "Sconosciuto" # Barra di avanzamento: mostrato quando il totale è sconosciuto.
-LabelError: "Errore: "
+LabelError: "Errore"
 UnitFolder: " cartelle"
 
 DetailLabel: "Dettagli:"
@@ -99,6 +100,7 @@ InitializationError: "Si è verificato un errore durante l'inizializzazione dell
 ClipboardError: "Copia negli appunti fallita: "
 ProgressErrorLabel: "Errore di avanzamento:"
 RenderErrorLabel: "Errore di rendering:"
+RenderingStatus: "Rendering in corso..."
 DebugInfoTitle: "Info di debug"
 MenuThirdPartyLicenses: "Licenze di terze parti(_T)"
 LicenseNotFoundError: "File di licenza ({0}) non trovato."

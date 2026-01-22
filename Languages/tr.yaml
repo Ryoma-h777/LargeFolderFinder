@@ -32,11 +32,12 @@ FolderLabel: "Klasör:"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "Arama Boyutu: ({0})"
+SearchSizeLabel: "Minimum Boyut:"
 SearchSizeToolTip: "Bu boyuttan büyük klasörleri ayıklar ve listeler. 0 belirtilebilir, ancak boyut ne kadar küçükse tarama o kadar uzun sürer."
 # FolderName<---Space--->Size
 SeparatorLabel: "Ayırıcı:"
 SeparatorToolTip: "Klasör adı ile boyut ({0}) arasındaki boşluğu belirtir."
+TabWidthLabel: "Genişlik:"
 # Scan Button
 ScanButton: "Tara"
 CancelButton: "İptal Et"
@@ -78,7 +79,7 @@ UnitMillisecond: "ms"
 UnitElapsed: "geçti"
 
 Unknown: "Bilinmiyor" # İlerleme çubuğu ekranı: Toplam sayı bilinmediğinde gösterilir.
-LabelError: "Hata: "
+LabelError: "Hata"
 UnitFolder: " klasör"
 
 DetailLabel: "Ayrıntılar:"
@@ -99,6 +100,7 @@ InitializationError: "Uygulama başlatılırken bir hata oluştu:"
 ClipboardError: "Panoya kopyalama başarısız oldu: "
 ProgressErrorLabel: "İlerleme hatası:"
 RenderErrorLabel: "Oluşturma hatası:"
+RenderingStatus: "Oluşturuluyor..."
 DebugInfoTitle: "Hata ayıklama bilgisi"
 MenuThirdPartyLicenses: "Üçüncü Taraf Lisansları(_T)"
 LicenseNotFoundError: "Lisans dosyası ({0}) bulunamadı."

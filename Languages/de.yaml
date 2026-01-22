@@ -32,11 +32,12 @@ FolderLabel: "Ordner:"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "Suchgröße: ({0})"
+SearchSizeLabel: "Mindestgröße:"
 SearchSizeToolTip: "Extrahiert und listet Ordner auf, die größer als diese Größe sind. 0 kann angegeben werden, aber je kleiner die Größe, desto länger dauert der Scan."
 # FolderName<---Space--->Size
 SeparatorLabel: "Trennzeichen:"
 SeparatorToolTip: "Gibt den Abstand zwischen dem Ordnernamen und der Größe ({0}) an."
+TabWidthLabel: "Breite:"
 # Scan Button
 ScanButton: "Scannen"
 CancelButton: "Abbrechen"
@@ -78,7 +79,7 @@ UnitMillisecond: "ms"
 UnitElapsed: "vergangen"
 
 Unknown: "Unbekannt" # Fortschrittsanzeige: Wird angezeigt, wenn die Gesamtzahl unbekannt ist.
-LabelError: "Fehler: "
+LabelError: "Fehler"
 UnitFolder: " Ordner"
 
 DetailLabel: "Details:"
@@ -99,6 +100,7 @@ InitializationError: "Bei der Initialisierung der Anwendung ist ein Fehler aufge
 ClipboardError: "Kopieren in die Zwischenablage fehlgeschlagen: "
 ProgressErrorLabel: "Fortschrittsfehler:"
 RenderErrorLabel: "Rendering-Fehler:"
+RenderingStatus: "Rendern..."
 DebugInfoTitle: "Debug-Informationen"
 MenuThirdPartyLicenses: "Lizenzen von Drittanbietern(_T)"
 LicenseNotFoundError: "Lizenzdatei ({0}) nicht gefunden."

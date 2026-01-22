@@ -32,11 +32,12 @@ FolderLabel: "Carpeta:"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "Tamaño de búsqueda: ({0})"
+SearchSizeLabel: "Tamaño mínimo:"
 SearchSizeToolTip: "Extrae y enumera las carpetas más grandes que este tamaño. Se puede especificar 0, pero cuanto más pequeño sea el tamaño, más tiempo llevará el escaneo."
 # FolderName<---Space--->Size
 SeparatorLabel: "Separador:"
 SeparatorToolTip: "Especifica el espacio entre el nombre de la carpeta y el tamaño ({0})."
+TabWidthLabel: "Ancho:"
 # Scan Button
 ScanButton: "Escanear"
 CancelButton: "Cancelar"
@@ -46,7 +47,6 @@ OpenConfigToolTip: "Abrir configuración avanzada (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Copiar al portapapeles"
 IncludeFiles: "Mostrar archivos"
-ViewLabel: "Ver"
 ViewLabel: "Ver"
 
 ## Line 3
@@ -79,7 +79,7 @@ UnitMillisecond: "ms"
 UnitElapsed: "transcurrido"
 
 Unknown: "Desconocido" # Barra de progreso: Se muestra cuando el total es desconocido.
-LabelError: "Error: "
+LabelError: "Error"
 UnitFolder: " carpetas"
 
 DetailLabel: "Detalles:"
@@ -99,7 +99,8 @@ ThresholdInvalidError: "Tamaño de búsqueda no válido."
 InitializationError: "Ocurrió un error durante la inicialización de la aplicación:"
 ClipboardError: "Error al copiar al portapapeles: "
 ProgressErrorLabel: "Error de progreso:"
-RenderErrorLabel: "Error de renderizado"
+RenderErrorLabel: "Error de renderizado:"
+RenderingStatus: "Renderizando..."
 DebugInfoTitle: "Info de depuración"
 MenuThirdPartyLicenses: "Licencias de terceros(_T)"
 LicenseNotFoundError: "Archivo de licencia ({0}) no encontrado."

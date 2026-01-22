@@ -32,11 +32,12 @@ FolderLabel: "資料夾:"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "搜尋大小: ({0})"
+SearchSizeLabel: "最小大小:"
 SearchSizeToolTip: "提取並列出大於此大小的資料夾。可以指定 0，但大小越小，掃描所需的時間就越長。"
 # FolderName<---Space--->Size
 SeparatorLabel: "分隔符:"
 SeparatorToolTip: "指定資料夾名稱與大小 ({0}) 之間的空格。"
+TabWidthLabel: "寬度:"
 # Scan Button
 ScanButton: "掃描"
 CancelButton: "取消"
@@ -78,7 +79,7 @@ UnitMillisecond: "毫秒"
 UnitElapsed: "已用時"
 
 Unknown: "未知" # 進捗率表示用: 総数を把握していない時に表示されます。
-LabelError: "錯誤: "
+LabelError: "錯誤"
 UnitFolder: " 資料夾"
 
 DetailLabel: "詳細資訊:"
@@ -98,7 +99,8 @@ ThresholdInvalidError: "搜尋大小無效。"
 InitializationError: "應用程式初始化期間發生錯誤:"
 ClipboardError: "複製到剪貼板失敗: "
 ProgressErrorLabel: "進度錯誤:"
-RenderErrorLabel: "繪製錯誤"
+RenderErrorLabel: "繪製錯誤:"
+RenderingStatus: "正在繪製..."
 DebugInfoTitle: "調試資訊"
 MenuThirdPartyLicenses: "第三方授權(_T)"
 LicenseNotFoundError: "找不到授權檔案 ({0})。"

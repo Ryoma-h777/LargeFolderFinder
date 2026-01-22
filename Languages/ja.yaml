@@ -32,7 +32,7 @@ FolderLabel: "フォルダ:"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "検索サイズ: ({0})"
+SearchSizeLabel: "最小サイズ:"
 SearchSizeToolTip: "このサイズ以上（またはこれと同等）のフォルダを抽出して一覧表示します。0を指定可能ですが、サイズが小さいほどスキャンに時間がかかります。"
 # FolderName<---Space--->Size
 SeparatorLabel: "空白:"
@@ -79,7 +79,7 @@ UnitMillisecond: "ミリ秒"
 UnitElapsed: "経過"
 
 Unknown: "不明" # 進捗率表示用: 総数を把握していない時に表示されます。
-LabelError: "エラー: "
+LabelError: "エラー"
 UnitFolder: " フォルダ"
 
 DetailLabel: "詳細:"

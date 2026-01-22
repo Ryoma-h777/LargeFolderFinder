@@ -32,11 +32,12 @@ FolderLabel: "Pasta:"
 BrowseButton: "..."
 ## Line 2
 # Scan
-SearchSizeLabel: "Tamanho da pesquisa: ({0})"
+SearchSizeLabel: "Tamanho mínimo:"
 SearchSizeToolTip: "Extrai e lista as pastas maiores que este tamanho. 0 pode ser especificado, mas quanto menor o tamanho, mais demorada será a varredura."
 # FolderName<---Space--->Size
 SeparatorLabel: "Separador:"
 SeparatorToolTip: "Especifica o espaço entre o nome da pasta e o tamanho ({0})."
+TabWidthLabel: "Largura:"
 # Scan Button
 ScanButton: "Escanear"
 CancelButton: "Cancelar"
@@ -45,7 +46,6 @@ CancelToolTip: "Cancela. Se não funcionar, pressione o botão X."
 OpenConfigToolTip: "Abrir configurações avançadas (Config.txt)"
 # Clipboard Copy Button
 CopyToolTip: "Copiar para a área de transferência"
-IncludeFiles: "成果物を表示" # ここは "Mostrar arquivos" にすべき
 IncludeFiles: "Mostrar arquivos"
 ViewLabel: "Exibir"
 
@@ -79,7 +79,7 @@ UnitMillisecond: "ms"
 UnitElapsed: "decorrido"
 
 Unknown: "Desconhecido" # Barra de progresso: exibido quando o total é desconhecido.
-LabelError: "Erro: "
+LabelError: "Erro"
 UnitFolder: " pastas"
 
 DetailLabel: "Detalhes:"
@@ -100,6 +100,7 @@ InitializationError: "Ocorreu um erro durante a inicialização do aplicativo:"
 ClipboardError: "Falha ao copiar para a área de transferência: "
 ProgressErrorLabel: "Erro de progresso:"
 RenderErrorLabel: "Erro de renderização:"
+RenderingStatus: "Renderizando..."
 DebugInfoTitle: "Informações de depuração"
 MenuThirdPartyLicenses: "Licenças de Terceiros(_T)"
 LicenseNotFoundError: "Arquivo de licença ({0}) não encontrado."
