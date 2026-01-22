@@ -16,8 +16,8 @@
         <!-- Main Content (Settings Left, Results Right) -->
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300" MinWidth="250"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="3*" MaxWidth="300" MinWidth="250"/>
+                <ColumnDefinition Width="7*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Left column: Settings Area -->
@@ -41,15 +41,7 @@
                     <Button x:Name="browseButton" Grid.Column="1" Content="..." Width="40" Height="26" Click="BrowseButton_Click" />
                 </Grid>
 
-                <!-- Row 1: Size Threshold Input -->
-                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
-                    <TextBlock x:Name="searchSizeLabel" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <TextBox x:Name="searchSizeTextBox" Width="60" Height="26" VerticalContentAlignment="Center" Text="1" Margin="0,0,5,0" KeyDown="Input_KeyDown"/>
-                    <ComboBox x:Name="unitComboBox" Width="60" Height="26" VerticalContentAlignment="Center">
-                    </ComboBox>
-                </StackPanel>
-
-                <Grid Grid.Row="2" Margin="0,5,0,10">
+                <Grid Grid.Row="1" Margin="0,5,0,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
@@ -67,13 +59,25 @@
                 </Grid>
 
                 <!-- Row 3: Separator -->
-                <Border Grid.Row="3" Height="1" Background="#EEE" Margin="0,0,0,5"/>
+                <Border Grid.Row="2" Height="1" Background="#EEE" Margin="0,0,0,5"/>
 
                 <!-- Row 4: View Label Header -->
-                <TextBlock x:Name="viewHeaderLabel" Grid.Row="4" Text="表示" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,5,0,5" FontSize="12"/>
+                <TextBlock x:Name="viewHeaderLabel" Grid.Row="3" Text="表示" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,5,0,5" FontSize="12"/>
 
                 <!-- Row 5: Display Settings (Vertical & Indented) -->
-                <StackPanel Grid.Row="5" Orientation="Vertical" Margin="15,0,0,0">
+                <StackPanel Grid.Row="4" Orientation="Vertical" Margin="15,0,0,0">
+                    <!-- Include Files -->
+                    <StackPanel x:Name="includeFilesPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
+                        <TextBlock x:Name="includeFilesLabel" Text="ファイルも表示" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                        <CheckBox x:Name="includeFilesCheckBox" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <!-- Size Threshold Input -->
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock x:Name="searchSizeLabel" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="searchSizeTextBox" Width="60" Height="26" VerticalContentAlignment="Center" Text="1" Margin="0,0,5,0" KeyDown="Input_KeyDown"/>
+                        <ComboBox x:Name="unitComboBox" Width="60" Height="26" VerticalContentAlignment="Center">
+                        </ComboBox>
+                    </StackPanel>
                     <!-- Sort -->
                     <StackPanel x:Name="sortOuterPanel" Orientation="Horizontal" Margin="0,0,0,10">
                         <TextBlock x:Name="sortLabel" Text="ソート:" VerticalAlignment="Center" Margin="0,0,5,0" />
@@ -85,11 +89,6 @@
                             <ComboBoxItem>Asc</ComboBoxItem>
                             <ComboBoxItem>Desc</ComboBoxItem>
                         </ComboBox>
-                    </StackPanel>
-                    <!-- Include Files -->
-                    <StackPanel x:Name="includeFilesPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
-                        <TextBlock x:Name="includeFilesLabel" Text="ファイルも表示" VerticalAlignment="Center" Margin="0,0,3,0"/>
-                        <CheckBox x:Name="includeFilesCheckBox" VerticalAlignment="Center"/>
                     </StackPanel>
                     <!-- Separator -->
                     <StackPanel x:Name="separatorOuterPanel" Orientation="Horizontal" Margin="0,0,0,5">
