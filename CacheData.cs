@@ -33,6 +33,13 @@ namespace LargeFolderFinder
         public List<SearchSession> Sessions { get; set; } = new List<SearchSession>();
         public int SelectedIndex { get; set; } = 0;
 
+        // Window Geometry
+        public double WindowTop { get; set; } = double.NaN;
+        public double WindowLeft { get; set; } = double.NaN;
+        public double WindowWidth { get; set; } = double.NaN;
+        public double WindowHeight { get; set; } = double.NaN;
+        public int WindowState { get; set; } = 0; // 0: Normal, 1: Minimized, 2: Maximized (Matches System.Windows.WindowState)
+
         private static string SettingsFilePath =>
             Path.Combine(AppConstants.AppDataDirectory, AppConstants.CacheFileName);
 
