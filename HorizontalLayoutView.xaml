@@ -32,15 +32,20 @@
 
                 <!-- Row 1: Display Settings (Vertical & Indented) -->
                 <StackPanel Grid.Row="1" Orientation="Vertical" Margin="15,0,0,0">
-                    <!-- Include Files -->
+                    <!-- Font Size -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="Font:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="fontSizeTextBox" Width="30" Height="24" VerticalContentAlignment="Center" Text="14" />
+                    </StackPanel>
+                    <!-- View Files -->
                     <StackPanel x:Name="includeFilesPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
                         <TextBlock x:Name="includeFilesLabel" Text="ファイルも表示" VerticalAlignment="Center" Margin="0,0,3,0"/>
                         <CheckBox x:Name="includeFilesCheckBox" VerticalAlignment="Center"/>
                     </StackPanel>
                     <!-- Size Threshold Input -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <TextBlock x:Name="searchSizeLabel" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                        <TextBox x:Name="searchSizeTextBox" Width="60" Height="26" VerticalContentAlignment="Center" Text="1" Margin="0,0,5,0" KeyDown="Input_KeyDown"/>
+                        <TextBlock x:Name="minSizeLabel" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="minSizeTextBox" Width="60" Height="26" VerticalContentAlignment="Center" Text="1" Margin="0,0,5,0"/>
                         <ComboBox x:Name="unitComboBox" Width="60" Height="26" VerticalContentAlignment="Center">
                         </ComboBox>
                     </StackPanel>
@@ -79,19 +84,52 @@
                     <RowDefinition Height="*"/>    <!-- Text display -->
                 </Grid.RowDefinitions>
                 
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,5">
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,5" HorizontalAlignment="Right">
                     <Button x:Name="copyButton" ToolTip="Copy" Width="32" Height="32" Click="CopyButton_Click">
                         <Path Data="{StaticResource CopyIconGeometry}" Fill="#444" Stretch="Uniform" Margin="6" />
                     </Button>
                 </StackPanel>
-                <TextBox x:Name="outputTextBox" 
-                    Grid.Row="1" TextWrapping="NoWrap" 
-                    AcceptsReturn="True" 
-                    IsReadOnly="True" 
-                    ScrollViewer.HorizontalScrollBarVisibility="Auto" 
-                    ScrollViewer.VerticalScrollBarVisibility="Auto" 
-                    FontFamily="MS Gothic"
-                    FontSize="12" />
+                <!-- Output ListBox (Virtualizing) -->
+            <ListBox x:Name="outputListBox" 
+                     Grid.Row="1"
+                     VirtualizingStackPanel.IsVirtualizing="True"
+                     VirtualizingStackPanel.VirtualizationMode="Recycling"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto" 
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" 
+                     FontFamily="MS Gothic"
+                     FontSize="14"
+                     BorderThickness="1"
+                     BorderBrush="#ABADB3"
+                     AlternationCount="2"
+                     SelectionMode="Extended"
+                     PreviewKeyDown="ListBox_PreviewKeyDown">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0,0"/>
+                        <Setter Property="MinHeight" Value="8"/>
+                        <!-- Event Handlers -->
+                        <EventSetter Event="MouseDoubleClick" Handler="ListBoxItem_MouseDoubleClick"/>
+                        
+                        <Style.Triggers>
+                            <Trigger Property="ItemsControl.AlternationIndex" Value="1">
+                                <Setter Property="Background" Value="#FAFAFA"/>
+                            </Trigger>
+                             <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsExpanded}" Value="False"/>
+                                    <Condition Binding="{Binding IsFile}" Value="False"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Background" Value="#E6F7FF"/>
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
             </Grid>
         </Grid>
 

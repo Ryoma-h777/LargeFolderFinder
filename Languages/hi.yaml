@@ -5,16 +5,19 @@ MenuFile: "फ़ाइल(_F)"
 MenuOpenConfig: "उन्नत सेटिंग्स खोलें(_S)"
 MenuOpenLogSub: "लॉग खोलें(_O)"
 MenuRestartAdmin: "प्रशासक के रूप में फिर से शुरू करें(_A)"
+MenuRestartAdminToolTip: "उन क्षेत्रों को स्कैन करने की अनुमति देता है जिनके लिए विशेषाधिकारों की आवश्यकता होती है"
 MenuExit: "बाहर निकलें(_X)"
+# View
+MenuView: "देखें(_V)"
+MenuLayout: "लेआउट(_L)"
+MenuLayoutVertical: "लंबवत(_V)"
+MenuLayoutHorizontal: "क्षैतिज(_H)"
 # Help
 MenuHelp: "सहायता(_H)"
 MenuOpenReadme: "Readme खोलें(_R)"
 MenuLicense: "लाइसेन्स(_L)"
 MenuAppLicense: "ऐप लाइसेन्स(_A)"
-MenuView: "देखें(_V)"
-MenuLayout: "लेआउट(_L)"
-MenuLayoutVertical: "लंबवत(_V)"
-MenuLayoutHorizontal: "क्षैतिज(_H)"
+MenuThirdPartyLicenses: "थर्ड-पार्टी लाइसेंस(_T)"
 MenuAbout: "इसके बारे में(_A)"
 
 # Viewer (Log, Readme, License)
@@ -23,40 +26,41 @@ ViewerOpenFolder: "फ़ोल्डर खोलें"
 ViewerClose: "बंद करें"
 # Version Modal
 AboutTitle: "इसके बारे में"
-AboutMessage: "{0}\nसंस्करण {1}\n{2}\n\nबड़े फ़ोल्डरों को तेज़ी से खोजने के लिए एक उपकरण।"
+AboutMessage: "{0}\n{1}\nसंस्करण {2}\n\nबड़े फ़ोल्डरों को जल्दी से देखने का उपकरण।"
 DialogInfo: "जानकारी"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "फ़ोल्डर:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "न्यूनतम आकार:"
-SearchSizeToolTip: "इस आकार से बड़े फ़ोल्डरों को निकालता और सूचीबद्ध करता है। 0 निर्दिष्ट किया जा सकता है, लेकिन आकार जितना छोटा होगा, स्कैन में उतना ही अधिक समय लगेगा।"
-# FolderName<---Space--->Size
-SeparatorLabel: "विभाजक:"
-SeparatorToolTip: "फ़ोल्डर के नाम और आकार ({0}) के बीच की जगह निर्दिष्ट करता है।"
-TabWidthLabel: "चौड़ाई:"
 # Scan Button
-ScanButton: "स्कैन करें"
-CancelButton: "रद्द करें"
-CancelToolTip: "रद्द करें। यदि यह काम नहीं करता है, तो X बटन दबाएं।"
+ScanButtonToolTip: "स्कैन करें"
+CancelButtonToolTip: "रद्द करें। यदि यह काम नहीं करता है, तो X बटन दबाएं।"
 # Advance Setting Button
 OpenConfigToolTip: "उन्नत सेटिंग्स खोलें (Config.txt)"
+
+####### View #######
+ViewLabel: "दृश्य"
+# MinSize
+MinSizeLabel: "न्यूनतम आकार:"
+MinSizeToolTip: "इस आकार से बड़े आइटम दिखाता है। 0 की अनुमति है, लेकिन धीमा हो सकता है।"
+# FolderName<---Space--->Size
+SeparatorLabel: "विभाजक:"
+SeparatorToolTip: "नाम और आकार के बीच का स्थान निर्दिष्ट करता है।"
+TabWidthLabel: "चौड़ाई:"
 # Clipboard Copy Button
 CopyToolTip: "क्लिपबोर्ड पर कॉपी करें"
 IncludeFiles: "फ़ाइलें दिखाएं"
-ViewLabel: "दृश्य"
-
-## Line 3
 # Sort
 SortLabel: "क्रमबद्ध करें:"
-TargetSize: "आकार"
-TargetName: "नाम"
-TargetDate: "दिनांक"
+SortSize: "आकार"
+SortName: "नाम"
+SortDate: "दिनांक"
 DirectionAsc: "आरोही"
 DirectionDesc: "अवरोही"
+
+####### Result #######
+LiveScanningMessage: "स्कैन किया जा रहा है... आकार ({0}) मध्यवर्ती परिणाम दिखाता है।"
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "तैयार"
@@ -64,8 +68,11 @@ ScanningStatus: "स्कैन किया जा रहा है..."
 CancelledStatus: "रद्द कर दिया गया"
 FinishedStatus: "पूरा हुआ"
 NotFoundMessage: "कोई मिलान करने वाला फ़ोल्डर नहीं मिला।"
-CopyNotification: "कॉपी किया गया!"
 FolderCountStatus: "फ़ोल्डरों की संख्या जाँची जा रही है..."
+RenderingStatus: "रेंडर किया जा रहा है..."
+Unknown: "अज्ञात" # प्रोग्रेस बार डिस्प्ले: दिखाया जाता है जब कुल संख्या ज्ञात नहीं होती है।
+LabelError: "त्रुटि"
+UnitFolder: " फ़ोल्डर"
 # time
 RemainingTimeH: "लगभग {0}{1} {2}{3} शेष"
 RemainingTimeM: "लगभग {0}{1} {2}{3} शेष"
@@ -77,30 +84,20 @@ UnitMinute: "मिनट"
 UnitSecond: "सेकंड"
 UnitMillisecond: "ms"
 UnitElapsed: "बीता"
-
-Unknown: "अज्ञात" # प्रोग्रेस बार डिस्प्ले: दिखाया जाता है जब कुल संख्या ज्ञात नहीं होती है।
-LabelError: "त्रुटि"
-UnitFolder: " फ़ोल्डर"
-
-DetailLabel: "विवरण:"
-LiveScanningMessage: "स्कैन किया जा रहा है... आकार ({0}) मध्यवर्ती परिणाम दिखाता है।"
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} बीता"
 
+# tempolaty Notification
+CopyNotification: "कॉपी किया गया!"
+
 ####### Error Messages #######
 ConfigError: "कॉन्फ़िगरेशन फ़ाइल नहीं खोली जा सकी: "
 ReadmeError: "Readme नहीं खोला जा सका: "
-ReadmeNotFound: "Readme.txt नहीं मिला।"
 PathInvalidError: "कृपया एक मान्य फ़ोल्डर चुनें।"
 ThresholdInvalidError: "अमान्य खोज आकार।"
 InitializationError: "एप्लिकेशन प्रारंभ करने के दौरान एक त्रुटि हुई:"
 ClipboardError: "क्लिपबोर्ड पर कॉपी करने में विफल: "
-ProgressErrorLabel: "प्रगति त्रुटि:"
-RenderErrorLabel: "रेंडर त्रुटि:"
-RenderingStatus: "रेंडर किया जा रहा है..."
-DebugInfoTitle: "डिबग जानकारी"
-MenuThirdPartyLicenses: "थर्ड-पार्टी लाइसेंस(_T)"
-LicenseNotFoundError: "लाइसेंस फ़ाइल ({0}) नहीं मिली"

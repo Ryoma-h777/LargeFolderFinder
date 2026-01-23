@@ -5,16 +5,19 @@ MenuFile: "Файл(_F)"
 MenuOpenConfig: "Открыть расширенные настройки(_S)"
 MenuOpenLogSub: "Открыть журналы(_O)"
 MenuRestartAdmin: "Перезапустить от имени администратора(_A)"
+MenuRestartAdminToolTip: "Позволяет сканировать области, требующие прав доступа"
 MenuExit: "Выход(_X)"
+# View
+MenuView: "Вид(_V)"
+MenuLayout: "Макет(_L)"
+MenuLayoutVertical: "Вертикальный(_V)"
+MenuLayoutHorizontal: "Горизонтальный(_H)"
 # Help
 MenuHelp: "Справка(_H)"
 MenuOpenReadme: "Открыть Readme(_R)"
 MenuLicense: "Лицензия(_L)"
 MenuAppLicense: "Лицензия приложения(_A)"
-MenuView: "Вид(_V)"
-MenuLayout: "Макет(_L)"
-MenuLayoutVertical: "Вертикальный(_V)"
-MenuLayoutHorizontal: "Горизонтальный(_H)"
+MenuThirdPartyLicenses: "Лицензии третьих лиц(_T)"
 MenuAbout: "О программе(_A)"
 
 # Viewer (Log, Readme, License)
@@ -23,40 +26,41 @@ ViewerOpenFolder: "Открыть папку"
 ViewerClose: "Закрыть"
 # Version Modal
 AboutTitle: "О программе"
-AboutMessage: "{0}\nВерсия {1}\n{2}\n\nИнструмент для быстрого поиска больших папок."
+AboutMessage: "{0}\n{1}\nВерсия {2}\n\nИнструмент для быстрой визуализации больших папок."
 DialogInfo: "Информация"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "Папка:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "Минимальный размер:"
-SearchSizeToolTip: "Извлекает и перечисляет папки больше этого размера. Можно указать 0, но чем меньше размер, тем дольше длится сканирование."
-# FolderName<---Space--->Size
-SeparatorLabel: "Разделитель:"
-SeparatorToolTip: "Указывает пробел между именем папки и размером ({0})."
-TabWidthLabel: "Ширина:"
 # Scan Button
-ScanButton: "Сканировать"
-CancelButton: "Отмена"
-CancelToolTip: "Отмена. Если не работает, нажмите кнопку X."
+ScanButtonToolTip: "Сканировать"
+CancelButtonToolTip: "Отмена. Если не работает, нажмите кнопку X."
 # Advance Setting Button
 OpenConfigToolTip: "Открыть расширенные настройки (Config.txt)"
+
+####### View #######
+ViewLabel: "Вид"
+# MinSize
+MinSizeLabel: "Минимальный размер:"
+MinSizeToolTip: "Показывает элементы больше этого размера. 0 допустимо, но медленно."
+# FolderName<---Space--->Size
+SeparatorLabel: "Разделитель:"
+SeparatorToolTip: "Указывает пробел между именем и размером."
+TabWidthLabel: "Ширина:"
 # Clipboard Copy Button
 CopyToolTip: "Копировать результаты в буфер обмена"
 IncludeFiles: "Показать файлы"
-ViewLabel: "Вид"
-
-## Line 3
 # Sort
 SortLabel: "Сортировка:"
-TargetSize: "Размер"
-TargetName: "Имя"
-TargetDate: "Дата изменения"
+SortSize: "Размер"
+SortName: "Имя"
+SortDate: "Дата изменения"
 DirectionAsc: "По возрастанию"
 DirectionDesc: "По убыванию"
+
+####### Result #######
+LiveScanningMessage: "Сканирование... Размер (ГБ) показывает промежуточные результаты."
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "Готово"
@@ -64,8 +68,11 @@ ScanningStatus: "Сканирование..."
 CancelledStatus: "Отменено"
 FinishedStatus: "Завершено"
 NotFoundMessage: "Совпадающие папки не найдены."
-CopyNotification: "Скопировано!"
 FolderCountStatus: "Проверка количества папок..."
+RenderingStatus: "Отображение..."
+Unknown: "Неизвестно" # Шкала прогресса: отображается, когда общее количество неизвестно.
+LabelError: "Ошибка"
+UnitFolder: " папок"
 # time
 RemainingTimeH: "Осталось около {0}{1} {2}{3}"
 RemainingTimeM: "Осталось около {0}{1} {2}{3}"
@@ -77,30 +84,20 @@ UnitMinute: "м"
 UnitSecond: "с"
 UnitMillisecond: "мс"
 UnitElapsed: "прошло"
-
-Unknown: "Неизвестно" # Шкала прогресса: отображается, когда общее количество неизвестно.
-LabelError: "Ошибка"
-UnitFolder: " папок"
-
-DetailLabel: "Подробности:"
-LiveScanningMessage: "Сканирование... Размер (ГБ) показывает промежуточные результаты."
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} прошло"
 
+# tempolaty Notification
+CopyNotification: "Скопировано!"
+
 ####### Error Messages #######
 ConfigError: "Не удалось открыть файл конфигурации: "
 ReadmeError: "Не удалось открыть Readme: "
-ReadmeNotFound: "Readme.txt не найден."
 PathInvalidError: "Выберите допустимую папку."
 ThresholdInvalidError: "Недопустимый размер поиска."
 InitializationError: "Произошла ошибка во время инициализации приложения:"
 ClipboardError: "Ошибка при копировании в буфер обмена: "
-ProgressErrorLabel: "Ошибка прогресса:"
-RenderErrorLabel: "Ошибка отображения:"
-RenderingStatus: "Отображение..."
-DebugInfoTitle: "Отладочная информация"
-MenuThirdPartyLicenses: "Лицензии третьих лиц(_T)"
-LicenseNotFoundError: "Файл лицензии ({0}) не найден."

@@ -5,12 +5,19 @@ MenuFile: "Archivo(_F)"
 MenuOpenConfig: "Abrir configuración avanzada(_S)"
 MenuOpenLogSub: "Abrir registros(_O)"
 MenuRestartAdmin: "Reiniciar como administrador(_A)"
+MenuRestartAdminToolTip: "Permite escanear áreas que requieren privilegios"
 MenuExit: "Salir(_X)"
+# View
+MenuView: "Ver(_V)"
+MenuLayout: "Diseño(_L)"
+MenuLayoutVertical: "Vertical(_V)"
+MenuLayoutHorizontal: "Horizontal(_H)"
 # Help
 MenuHelp: "Ayuda(_H)"
 MenuOpenReadme: "Abrir Readme(_R)"
 MenuLicense: "Licencia(_L)"
 MenuAppLicense: "Licencia de la aplicación(_A)"
+MenuThirdPartyLicenses: "Licencias de terceros(_T)"
 MenuAbout: "Acerca de(_A)"
 
 # Viewer (Log, Readme, License)
@@ -19,44 +26,41 @@ ViewerOpenFolder: "Abrir carpeta"
 ViewerClose: "Cerrar"
 # Version Modal
 AboutTitle: "Acerca de"
-AboutMessage: "{0}\nVersión {1}\n{2}\n\nUna herramienta para encontrar rápidamente carpetas grandes."
+AboutMessage: "{0}\n{1}\nVersión {2}\n\nHerramienta para visualizar carpetas grandes rápidamente."
 DialogInfo: "Información"
-MenuView: "Ver(_V)"
-MenuLayout: "Diseño(_L)"
-MenuLayoutVertical: "Vertical(_V)"
-MenuLayoutHorizontal: "Horizontal(_H)"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "Carpeta:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "Tamaño mínimo:"
-SearchSizeToolTip: "Extrae y enumera las carpetas más grandes que este tamaño. Se puede especificar 0, pero cuanto más pequeño sea el tamaño, más tiempo llevará el escaneo."
-# FolderName<---Space--->Size
-SeparatorLabel: "Separador:"
-SeparatorToolTip: "Especifica el espacio entre el nombre de la carpeta y el tamaño ({0})."
-TabWidthLabel: "Ancho:"
 # Scan Button
-ScanButton: "Escanear"
-CancelButton: "Cancelar"
-CancelToolTip: "Cancelar. Si no funciona, presione el botón X."
+ScanButtonToolTip: "Escanear"
+CancelButtonToolTip: "Cancelar. Si no funciona, presione el botón X."
 # Advance Setting Button
 OpenConfigToolTip: "Abrir configuración avanzada (Config.txt)"
+
+####### View #######
+ViewLabel: "Ver"
+# MinSize
+MinSizeLabel: "Tamaño mínimo:"
+MinSizeToolTip: "Muestra elementos mayores que este tamaño. 0 permitido, pero lento."
+# FolderName<---Space--->Size
+SeparatorLabel: "Separador:"
+SeparatorToolTip: "Especifica el espacio entre nombre y tamaño."
+TabWidthLabel: "Ancho:"
 # Clipboard Copy Button
 CopyToolTip: "Copiar al portapapeles"
 IncludeFiles: "Mostrar archivos"
-ViewLabel: "Ver"
-
-## Line 3
 # Sort
 SortLabel: "Ordenar:"
-TargetSize: "Tamaño"
-TargetName: "Nombre"
-TargetDate: "Fecha"
+SortSize: "Tamaño"
+SortName: "Nombre"
+SortDate: "Fecha"
 DirectionAsc: "Ascendente"
 DirectionDesc: "Descendente"
+
+####### Result #######
+LiveScanningMessage: "Escaneando... El tamaño ({0}) muestra resultados intermedios."
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "Listo"
@@ -64,8 +68,11 @@ ScanningStatus: "Escaneando..."
 CancelledStatus: "Cancelado"
 FinishedStatus: "Finalizado"
 NotFoundMessage: "No se encontraron carpetas que coincidan."
-CopyNotification: "¡Copiado!"
 FolderCountStatus: "Comprobando el número de carpetas..."
+RenderingStatus: "Renderizando..."
+Unknown: "Desconocido" # Barra de progreso: Se muestra cuando el total es desconocido.
+LabelError: "Error"
+UnitFolder: " carpetas"
 # time
 RemainingTimeH: "Faltan aproximadamente {0}{1} {2}{3}"
 RemainingTimeM: "Faltan aproximadamente {0}{1} {2}{3}"
@@ -77,30 +84,20 @@ UnitMinute: "m"
 UnitSecond: "s"
 UnitMillisecond: "ms"
 UnitElapsed: "transcurrido"
-
-Unknown: "Desconocido" # Barra de progreso: Se muestra cuando el total es desconocido.
-LabelError: "Error"
-UnitFolder: " carpetas"
-
-DetailLabel: "Detalles:"
-LiveScanningMessage: "Escaneando... El tamaño ({0}) muestra resultados intermedios."
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} transcurrido"
 
+# tempolaty Notification
+CopyNotification: "¡Copiado!"
+
 ####### Error Messages #######
 ConfigError: "No se pudo abrir el archivo de configuración: "
 ReadmeError: "No se pudo abrir el Readme: "
-ReadmeNotFound: "Readme.txt no encontrado."
 PathInvalidError: "Seleccione una carpeta válida."
 ThresholdInvalidError: "Tamaño de búsqueda no válido."
 InitializationError: "Ocurrió un error durante la inicialización de la aplicación:"
 ClipboardError: "Error al copiar al portapapeles: "
-ProgressErrorLabel: "Error de progreso:"
-RenderErrorLabel: "Error de renderizado:"
-RenderingStatus: "Renderizando..."
-DebugInfoTitle: "Info de depuración"
-MenuThirdPartyLicenses: "Licencias de terceros(_T)"
-LicenseNotFoundError: "Archivo de licencia ({0}) no encontrado."

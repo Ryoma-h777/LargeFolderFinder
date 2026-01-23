@@ -43,7 +43,7 @@ namespace LargeFolderFinder
 
         public enum SizeUnit
         {
-            Byte,
+            B,
             KB,
             MB,
             GB,

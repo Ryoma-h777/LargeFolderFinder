@@ -5,16 +5,19 @@ MenuFile: "ファイル(_F)"
 MenuOpenConfig: "高度な設定を開く(_S)"
 MenuOpenLogSub: "ログを開く(_O)"
 MenuRestartAdmin: "管理者として開き直す(_A)"
+MenuRestartAdminToolTip: "権限が必要な箇所もスキャン可能になります"
 MenuExit: "終了(_X)"
+# View
+MenuView: "表示(_V)"
+MenuLayout: "レイアウト(_L)"
+MenuLayoutVertical: "縦並び(_V)"
+MenuLayoutHorizontal: "横並び(_H)"
 # Help
 MenuHelp: "ヘルプ(_H)"
 MenuOpenReadme: "Readme を開く(_R)"
 MenuLicense: "ライセンス(_L)"
 MenuAppLicense: "アプリのライセンス(_A)"
-MenuView: "表示(_V)"
-MenuLayout: "レイアウト(_L)"
-MenuLayoutVertical: "縦並び(_V)"
-MenuLayoutHorizontal: "横並び(_H)"
+MenuThirdPartyLicenses: "サードパーティライセンス(_T)"
 MenuAbout: "バージョン情報(_A)"
 
 # Viewer (Log, Readme, License)
@@ -23,40 +26,41 @@ ViewerOpenFolder: "フォルダを開く"
 ViewerClose: "閉じる"
 # Version Modal
 AboutTitle: "バージョン情報"
-AboutMessage: "{0}\nVersion {1}\n{2}\n\n巨大なフォルダを素早く見つけるためのツールです。"
+AboutMessage: "{0}\n{1}\nVersion {2}\n\n大容量フォルダや階層状況を素早く把握するためのツールです。"
 DialogInfo: "情報"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "フォルダ:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "最小サイズ:"
-SearchSizeToolTip: "このサイズ以上（またはこれと同等）のフォルダを抽出して一覧表示します。0を指定可能ですが、サイズが小さいほどスキャンに時間がかかります。"
-# FolderName<---Space--->Size
-SeparatorLabel: "空白:"
-SeparatorToolTip: "フォルダ名とサイズ({0})間のスペースを指定します。"
-TabWidthLabel: "幅:"
 # Scan Button
-ScanButton: "Scan"
-CancelButton: "Cancel"
-CancelToolTip: "キャンセルします。時間かかるときがあるので、待てないときはXボタンを押してください。"
+ScanButtonToolTip: "Scan"
+CancelButtonToolTip: "キャンセルします。時間かかるときがあるので、待てないときはXボタンを押してください。"
 # Advance Setting Button
 OpenConfigToolTip: "高度な設定 (Config.txt) を開く"
+
+####### View #######
+ViewLabel: "表示"
+# MinSize
+MinSizeLabel: "最小サイズ:"
+MinSizeToolTip: "指定サイズ以上のフォルダ/ファイルを抽出して一覧表示します。0を指定可能ですが、数が多いとフィルタに時間がかかり重くなります。"
+# FolderName<---Space--->Size
+SeparatorLabel: "空白:"
+SeparatorToolTip: "フォルダ名とサイズ間のスペースを指定します。"
+TabWidthLabel: "幅:"
 # Clipboard Copy Button
 CopyToolTip: "結果をクリップボードにコピー"
 IncludeFiles: "ファイルも表示"
-ViewLabel: "表示"
-
-## Line 3
 # Sort
 SortLabel: "ソート:"
-TargetSize: "サイズ"
-TargetName: "名前"
-TargetDate: "更新日時"
+SortSize: "サイズ"
+SortName: "名前"
+SortDate: "更新日時"
 DirectionAsc: "昇順"
 DirectionDesc: "降順"
+
+####### Result #######
+LiveScanningMessage: "スキャン中…… サイズは途中結果を表示しています。"
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "準備完了"
@@ -64,8 +68,11 @@ ScanningStatus: "スキャン中..."
 CancelledStatus: "キャンセルされました"
 FinishedStatus: "完了"
 NotFoundMessage: "該当するフォルダは見つかりませんでした。"
-CopyNotification: "コピーしました！"
 FolderCountStatus: "フォルダ数を確認中..."
+RenderingStatus: "描画中..."
+Unknown: "不明" # 進捗率表示用: 総数を把握していない時に表示されます。
+LabelError: "エラー"
+UnitFolder: " フォルダ"
 # time
 RemainingTimeH: "残り約{0}{1}{2}{3}"
 RemainingTimeM: "残り約{0}{1}{2}{3}"
@@ -77,30 +84,20 @@ UnitMinute: "分"
 UnitSecond: "秒"
 UnitMillisecond: "ミリ秒"
 UnitElapsed: "経過"
-
-Unknown: "不明" # 進捗率表示用: 総数を把握していない時に表示されます。
-LabelError: "エラー"
-UnitFolder: " フォルダ"
-
-DetailLabel: "詳細:"
-LiveScanningMessage: "スキャン中…… サイズ({0})は途中結果を表示しています。"
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0}{1}"
 TimeStatusFormat: "{0} {1}"
 
+# tempolaty Notification
+CopyNotification: "コピーしました！"
+
 ####### Error Messages #######
-ConfigError: "Config.txt"
+ConfigError: "Config.txt を開けませんでした: "
 ReadmeError: "Readme.txt を開けませんでした: "
-ReadmeNotFound: "Readme.txt が見つかりませんでした。"
 PathInvalidError: "有効なフォルダを選択してください。"
 ThresholdInvalidError: "検索サイズが無効です。"
 InitializationError: "アプリケーションの初期化中にエラーが発生しました:"
 ClipboardError: "クリップボードへのコピーに失敗しました: "
-ProgressErrorLabel: "進行状況表示エラー:"
-RenderErrorLabel: "描画処理エラー:"
-RenderingStatus: "描画中..."
-DebugInfoTitle: "デバッグ情報"
-MenuThirdPartyLicenses: "サードパーティライセンス(_T)"
-LicenseNotFoundError: "ライセンスファイル ({0}) が見つかりません。"

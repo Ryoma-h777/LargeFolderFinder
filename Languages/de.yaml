@@ -5,12 +5,19 @@ MenuFile: "Datei(_F)"
 MenuOpenConfig: "Erweiterte Einstellungen öffnen(_S)"
 MenuOpenLogSub: "Protokolle öffnen(_O)"
 MenuRestartAdmin: "Als Administrator neu starten(_A)"
+MenuRestartAdminToolTip: "Ermöglicht das Scannen von Bereichen, die Berechtigungen erfordern"
 MenuExit: "Beenden(_X)"
+# View
+MenuView: "Ansicht(_V)"
+MenuLayout: "Layout(_L)"
+MenuLayoutVertical: "Vertikal(_V)"
+MenuLayoutHorizontal: "Horizontal(_H)"
 # Help
 MenuHelp: "Hilfe(_H)"
 MenuOpenReadme: "Readme öffnen(_R)"
 MenuLicense: "Lizenz(_L)"
 MenuAppLicense: "App-Lizenz(_A)"
+MenuThirdPartyLicenses: "Lizenzen von Drittanbietern(_T)"
 MenuAbout: "Über(_A)"
 
 # Viewer (Log, Readme, License)
@@ -19,44 +26,41 @@ ViewerOpenFolder: "Ordner öffnen"
 ViewerClose: "Schließen"
 # Version Modal
 AboutTitle: "Über"
-AboutMessage: "{0}\nVersion {1}\n{2}\n\nEin Werkzeug, um große Ordner schnell zu finden."
+AboutMessage: "{0}\n{1}\nVersion {2}\n\nTool zur schnellen Visualisierung großer Ordner."
 DialogInfo: "Information"
-MenuView: "Ansicht(_V)"
-MenuLayout: "Layout(_L)"
-MenuLayoutVertical: "Vertikal(_V)"
-MenuLayoutHorizontal: "Horizontal(_H)"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "Ordner:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "Mindestgröße:"
-SearchSizeToolTip: "Extrahiert und listet Ordner auf, die größer als diese Größe sind. 0 kann angegeben werden, aber je kleiner die Größe, desto länger dauert der Scan."
-# FolderName<---Space--->Size
-SeparatorLabel: "Trennzeichen:"
-SeparatorToolTip: "Gibt den Abstand zwischen dem Ordnernamen und der Größe ({0}) an."
-TabWidthLabel: "Breite:"
 # Scan Button
-ScanButton: "Scannen"
-CancelButton: "Abbrechen"
-CancelToolTip: "Abbrechen. Wenn es nicht funktioniert, drücken Sie die X-Taste."
+ScanButtonToolTip: "Scannen"
+CancelButtonToolTip: "Abbrechen. Wenn es nicht funktioniert, drücken Sie die X-Taste."
 # Advance Setting Button
 OpenConfigToolTip: "Erweiterte Einstellungen öffnen (Config.txt)"
+
+####### View #######
+ViewLabel: "Ansicht"
+# MinSize
+MinSizeLabel: "Mindestgröße:"
+MinSizeToolTip: "Zeigt Elemente größer als diese Größe an. 0 erlaubt, aber langsam."
+# FolderName<---Space--->Size
+SeparatorLabel: "Trennzeichen:"
+SeparatorToolTip: "Gibt den Abstand zwischen Name und Größe an."
+TabWidthLabel: "Breite:"
 # Clipboard Copy Button
 CopyToolTip: "Ergebnisse in die Zwischenablage kopieren"
 IncludeFiles: "Dateien anzeigen"
-ViewLabel: "Ansicht"
-
-## Line 3
 # Sort
 SortLabel: "Sortieren:"
-TargetSize: "Größe"
-TargetName: "Name"
-TargetDate: "Datum"
+SortSize: "Größe"
+SortName: "Name"
+SortDate: "Datum"
 DirectionAsc: "Aufsteigend"
 DirectionDesc: "Absteigend"
+
+####### Result #######
+LiveScanningMessage: "Scannen... Die Größe ({0}) zeigt Zwischenergebnisse an."
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "Bereit"
@@ -64,8 +68,11 @@ ScanningStatus: "Scannen..."
 CancelledStatus: "Abgebrochen"
 FinishedStatus: "Fertig"
 NotFoundMessage: "Keine passenden Ordner gefunden."
-CopyNotification: "Kopiert!"
 FolderCountStatus: "Überprüfung der Anzahl der Ordner..."
+RenderingStatus: "Rendern..."
+Unknown: "Unbekannt" # Fortschrittsanzeige: Wird angezeigt, wenn die Gesamtzahl unbekannt ist.
+LabelError: "Fehler"
+UnitFolder: " Ordner"
 # time
 RemainingTimeH: "Noch etwa {0}{1} {2}{3}"
 RemainingTimeM: "Noch etwa {0}{1} {2}{3}"
@@ -77,30 +84,20 @@ UnitMinute: "Min."
 UnitSecond: "Sek."
 UnitMillisecond: "ms"
 UnitElapsed: "vergangen"
-
-Unknown: "Unbekannt" # Fortschrittsanzeige: Wird angezeigt, wenn die Gesamtzahl unbekannt ist.
-LabelError: "Fehler"
-UnitFolder: " Ordner"
-
-DetailLabel: "Details:"
-LiveScanningMessage: "Scannen... Die Größe ({0}) zeigt Zwischenergebnisse an."
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} vergangen"
 
+# tempolaty Notification
+CopyNotification: "Kopiert!"
+
 ####### Error Messages #######
 ConfigError: "Konfigurationsdatei konnte nicht geöffnet werden: "
 ReadmeError: "Readme konnte nicht geöffnet werden: "
-ReadmeNotFound: "Readme.txt nicht gefunden."
 PathInvalidError: "Bitte wählen Sie einen gültigen Ordner aus."
 ThresholdInvalidError: "Ungültige Suchgröße."
 InitializationError: "Bei der Initialisierung der Anwendung ist ein Fehler aufgetreten:"
 ClipboardError: "Kopieren in die Zwischenablage fehlgeschlagen: "
-ProgressErrorLabel: "Fortschrittsfehler:"
-RenderErrorLabel: "Rendering-Fehler:"
-RenderingStatus: "Rendern..."
-DebugInfoTitle: "Debug-Informationen"
-MenuThirdPartyLicenses: "Lizenzen von Drittanbietern(_T)"
-LicenseNotFoundError: "Lizenzdatei ({0}) nicht gefunden."

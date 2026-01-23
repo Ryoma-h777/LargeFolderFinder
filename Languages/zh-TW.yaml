@@ -5,12 +5,19 @@ MenuFile: "檔案(_F)"
 MenuOpenConfig: "開啟進階設定(_S)"
 MenuOpenLogSub: "開啟記錄檔(_O)"
 MenuRestartAdmin: "以管理員身分重新啟動(_A)"
+MenuRestartAdminToolTip: "允許掃描需要權限的區域"
 MenuExit: "退出(_X)"
+# View
+MenuView: "檢視(_V)"
+MenuLayout: "佈局(_L)"
+MenuLayoutVertical: "垂直佈局(_V)"
+MenuLayoutHorizontal: "水平佈局(_H)"
 # Help
 MenuHelp: "說明(_H)"
 MenuOpenReadme: "開啟 Readme(_R)"
 MenuLicense: "授權(_L)"
 MenuAppLicense: "應用程式授權(_A)"
+MenuThirdPartyLicenses: "第三方授權(_T)"
 MenuAbout: "關於(_A)"
 
 # Viewer (Log, Readme, License)
@@ -19,44 +26,41 @@ ViewerOpenFolder: "開啟資料夾"
 ViewerClose: "關閉"
 # Version Modal
 AboutTitle: "關於"
-AboutMessage: "{0}\n版本 {1}\n{2}\n\n快速查找大資料夾的工具。"
+AboutMessage: "{0}\n{1}\n版本 {2}\n\n快速搜尋大資料夾和層次結構的工具。"
 DialogInfo: "訊息"
-MenuView: "檢視(_V)"
-MenuLayout: "佈局(_L)"
-MenuLayoutVertical: "垂直佈局(_V)"
-MenuLayoutHorizontal: "水平佈局(_H)"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "資料夾:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "最小大小:"
-SearchSizeToolTip: "提取並列出大於此大小的資料夾。可以指定 0，但大小越小，掃描所需的時間就越長。"
-# FolderName<---Space--->Size
-SeparatorLabel: "分隔符:"
-SeparatorToolTip: "指定資料夾名稱與大小 ({0}) 之間的空格。"
-TabWidthLabel: "寬度:"
 # Scan Button
-ScanButton: "掃描"
-CancelButton: "取消"
-CancelToolTip: "取消。如果不起作用，請按 X 按鈕。"
+ScanButtonToolTip: "掃描"
+CancelButtonToolTip: "取消。如果不起作用，請按 X 按鈕。"
 # Advance Setting Button
 OpenConfigToolTip: "開啟進階設定 (Config.txt)"
+
+####### View #######
+ViewLabel: "檢視"
+# MinSize
+MinSizeLabel: "最小大小:"
+MinSizeToolTip: "顯示大於此大小的項目。可設為0，但可能較慢。"
+# FolderName<---Space--->Size
+SeparatorLabel: "分隔符:"
+SeparatorToolTip: "指定名稱和大小之間的空格。"
+TabWidthLabel: "寬度:"
 # Clipboard Copy Button
 CopyToolTip: "複製到剪貼簿"
 IncludeFiles: "顯示文件"
-ViewLabel: "視図"
-
-## Line 3
 # Sort
 SortLabel: "排序:"
-TargetSize: "大小"
-TargetName: "名稱"
-TargetDate: "修改日期"
+SortSize: "大小"
+SortName: "名稱"
+SortDate: "修改日期"
 DirectionAsc: "升序"
 DirectionDesc: "降序"
+
+####### Result #######
+LiveScanningMessage: "正在掃描... 大小 ({0}) 顯示中間結果。"
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "就緒"
@@ -64,8 +68,11 @@ ScanningStatus: "正在掃描..."
 CancelledStatus: "已取消"
 FinishedStatus: "已完成"
 NotFoundMessage: "未找到匹配的資料夾。"
-CopyNotification: "已複製！"
 FolderCountStatus: "正在檢查資料夾數量..."
+RenderingStatus: "正在繪製..."
+Unknown: "未知" # 進捗率表示用: 総数を把握していない時に表示されます。
+LabelError: "錯誤"
+UnitFolder: " 資料夾"
 # time
 RemainingTimeH: "剩餘約 {0}{1} {2}{3}"
 RemainingTimeM: "剩餘約 {0}{1} {2}{3}"
@@ -77,30 +84,20 @@ UnitMinute: "分"
 UnitSecond: "秒"
 UnitMillisecond: "毫秒"
 UnitElapsed: "已用時"
-
-Unknown: "未知" # 進捗率表示用: 総数を把握していない時に表示されます。
-LabelError: "錯誤"
-UnitFolder: " 資料夾"
-
-DetailLabel: "詳細資訊:"
-LiveScanningMessage: "正在掃描... 大小 ({0}) 顯示中間結果。"
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} 已用時"
 
+# tempolaty Notification
+CopyNotification: "已複製！"
+
 ####### Error Messages #######
 ConfigError: "無法開啟設定檔案: "
 ReadmeError: "無法開啟 Readme: "
-ReadmeNotFound: "找不到 Readme.txt。"
 PathInvalidError: "請選擇一個有效的資料夾。"
 ThresholdInvalidError: "搜尋大小無效。"
 InitializationError: "應用程式初始化期間發生錯誤:"
 ClipboardError: "複製到剪貼板失敗: "
-ProgressErrorLabel: "進度錯誤:"
-RenderErrorLabel: "繪製錯誤:"
-RenderingStatus: "正在繪製..."
-DebugInfoTitle: "調試資訊"
-MenuThirdPartyLicenses: "第三方授權(_T)"
-LicenseNotFoundError: "找不到授權檔案 ({0})。"

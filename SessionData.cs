@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using MessagePack;
 
 namespace LargeFolderFinder
@@ -8,7 +9,7 @@ namespace LargeFolderFinder
     /// <summary>
     /// 検索セッションデータ（MessagePack形式で保存）
     /// </summary>
-    [MessagePackObject]
+    [MessagePackObject(AllowPrivate = true)]
     public class SessionData : INotifyPropertyChanged
     {
         [IgnoreMember]
@@ -141,6 +142,19 @@ namespace LargeFolderFinder
             }
         }
 
+        /// <summary>
+        /// タブのツールチップ（作成日時 - パス）
+        /// </summary>
+        [IgnoreMember]
+        public string TabTooltip
+        {
+            get
+            {
+                var pathDisplay = string.IsNullOrEmpty(Path) ? "No Path" : Path;
+                return $"{CreatedAt:yyyy/MM/dd HH:mm:ss} - {pathDisplay}";
+            }
+        }
+
         [IgnoreMember]
         private object? _currentView;
         [IgnoreMember]
@@ -161,6 +175,21 @@ namespace LargeFolderFinder
             get => _isScanning;
             set => SetProperty(ref _isScanning, value);
         }
+
+        [IgnoreMember]
+        public string? CachedCopyText { get; set; }
+
+        [IgnoreMember]
+        public System.Threading.CancellationTokenSource? RenderCts { get; set; }
+
+        [IgnoreMember]
+        public string? LastStatus { get; set; }
+
+        [IgnoreMember]
+        public Task? CopyTextGenerationTask { get; set; }
+
+        [IgnoreMember]
+        public System.Threading.CancellationTokenSource? CopyCts { get; set; }
 
         #region INotifyPropertyChanged Implementation
         public event PropertyChangedEventHandler? PropertyChanged;

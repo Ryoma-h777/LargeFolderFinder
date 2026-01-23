@@ -4,10 +4,10 @@ namespace LargeFolderFinder
 {
     public interface IMainLayoutView
     {
-        TextBox SearchSizeTextBox { get; }
+        TextBox MinSizeTextBox { get; }
         ComboBox UnitComboBox { get; }
         Button CopyButton { get; }
-        TextBox OutputTextBox { get; }
+        ListBox OutputListBox { get; }
         ProgressBar ScanProgressBar { get; }
         TextBlock StatusTextBlock { get; }
         TextBlock NotificationTextBlock { get; }
@@ -19,9 +19,10 @@ namespace LargeFolderFinder
         ComboBox SeparatorComboBox { get; }
         TextBox TabWidthTextBox { get; }
         System.Windows.FrameworkElement TabWidthArea { get; }
+        TextBox FontSizeTextBox { get; }
 
         // Labels (for localization)
-        TextBlock SearchSizeLabel { get; }
+        TextBlock MinSizeLabel { get; }
         TextBlock ViewHeaderLabel { get; }
         TextBlock SortLabel { get; }
         TextBlock IncludeFilesLabel { get; }

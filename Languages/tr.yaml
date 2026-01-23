@@ -5,16 +5,19 @@ MenuFile: "Dosya(_F)"
 MenuOpenConfig: "Gelişmiş Ayarları Aç(_S)"
 MenuOpenLogSub: "Günlükleri Aç(_O)"
 MenuRestartAdmin: "Yönetici olarak yeniden başlat(_A)"
+MenuRestartAdminToolTip: "Ayrıcalık gerektiren alanların taranmasını sağlar"
 MenuExit: "Çıkış(_X)"
+# View
+MenuView: "Görünüm(_V)"
+MenuLayout: "Düzen(_L)"
+MenuLayoutVertical: "Dikey(_V)"
+MenuLayoutHorizontal: "Yatay(_H)"
 # Help
 MenuHelp: "Yardım(_H)"
 MenuOpenReadme: "Readme'yi Aç(_R)"
 MenuLicense: "Lisans(_L)"
 MenuAppLicense: "Uygulama Lisansı(_A)"
-MenuView: "Görünüm(_V)"
-MenuLayout: "Düzen(_L)"
-MenuLayoutVertical: "Dikey(_V)"
-MenuLayoutHorizontal: "Yatay(_H)"
+MenuThirdPartyLicenses: "Üçüncü Taraf Lisansları(_T)"
 MenuAbout: "Hakkında(_A)"
 
 # Viewer (Log, Readme, License)
@@ -23,40 +26,41 @@ ViewerOpenFolder: "Klasörü Aç"
 ViewerClose: "Kapat"
 # Version Modal
 AboutTitle: "Hakkında"
-AboutMessage: "{0}\nSürüm {1}\n{2}\n\nBüyük klasörleri hızlıca bulmak için bir araç."
+AboutMessage: "{0}\n{1}\nSürüm {2}\n\nBüyük klasörleri hızlıca görme aracı."
 DialogInfo: "Bilgi"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "Klasör:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "Minimum Boyut:"
-SearchSizeToolTip: "Bu boyuttan büyük klasörleri ayıklar ve listeler. 0 belirtilebilir, ancak boyut ne kadar küçükse tarama o kadar uzun sürer."
-# FolderName<---Space--->Size
-SeparatorLabel: "Ayırıcı:"
-SeparatorToolTip: "Klasör adı ile boyut ({0}) arasındaki boşluğu belirtir."
-TabWidthLabel: "Genişlik:"
 # Scan Button
-ScanButton: "Tara"
-CancelButton: "İptal Et"
-CancelToolTip: "İptal eder. Çalışmazsa X düğmesine basın."
+ScanButtonToolTip: "Tara"
+CancelButtonToolTip: "İptal eder. Çalışmazsa X düğmesine basın."
 # Advance Setting Button
 OpenConfigToolTip: "Gelişmiş Ayarları Aç (Config.txt)"
+
+####### View #######
+ViewLabel: "Görünüm"
+# MinSize
+MinSizeLabel: "Minimum Boyut:"
+MinSizeToolTip: "Bu boyuttan büyük öğeleri gösterir. 0 olabilir ama yavaş olur."
+# FolderName<---Space--->Size
+SeparatorLabel: "Ayırıcı:"
+SeparatorToolTip: "İsim ve boyut arasındaki boşluğu belirtir."
+TabWidthLabel: "Genişlik:"
 # Clipboard Copy Button
 CopyToolTip: "Sonuçları panoya kopyala"
 IncludeFiles: "Dosyaları göster"
-ViewLabel: "Görünüm"
-
-## Line 3
 # Sort
 SortLabel: "Sırala:"
-TargetSize: "Boyut"
-TargetName: "Ad"
-TargetDate: "Tarih"
+SortSize: "Boyut"
+SortName: "Ad"
+SortDate: "Tarih"
 DirectionAsc: "Artan"
 DirectionDesc: "Azalan"
+
+####### Result #######
+LiveScanningMessage: "Taranıyor... Boyut ({0}) ara sonuçları gösterir."
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "Hazır"
@@ -64,8 +68,11 @@ ScanningStatus: "Taranıyor..."
 CancelledStatus: "İptal Edildi"
 FinishedStatus: "Tamamlandı"
 NotFoundMessage: "Eşleşen klasör bulunamadı."
-CopyNotification: "Kopyalandı!"
 FolderCountStatus: "Klasör sayısı kontrol ediliyor..."
+RenderingStatus: "Oluşturuluyor..."
+Unknown: "Bilinmiyor" # İlerleme çubuğu ekranı: Toplam sayı bilinmediğinde gösterilir.
+LabelError: "Hata"
+UnitFolder: " klasör"
 # time
 RemainingTimeH: "Yaklaşık {0}{1} {2}{3} kaldı"
 RemainingTimeM: "Yaklaşık {0}{1} {2}{3} kaldı"
@@ -77,30 +84,20 @@ UnitMinute: "dk"
 UnitSecond: "sn"
 UnitMillisecond: "ms"
 UnitElapsed: "geçti"
-
-Unknown: "Bilinmiyor" # İlerleme çubuğu ekranı: Toplam sayı bilinmediğinde gösterilir.
-LabelError: "Hata"
-UnitFolder: " klasör"
-
-DetailLabel: "Ayrıntılar:"
-LiveScanningMessage: "Taranıyor... Boyut ({0}) ara sonuçları gösterir."
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} geçti"
 
+# tempolaty Notification
+CopyNotification: "Kopyalandı!"
+
 ####### Error Messages #######
 ConfigError: "Yapılandırma dosyası açılamadı: "
 ReadmeError: "Readme açılamadı: "
-ReadmeNotFound: "Readme.txt bulunamadı."
 PathInvalidError: "Lütfen geçerli bir klasör seçin."
 ThresholdInvalidError: "Geçersiz arama boyutu."
 InitializationError: "Uygulama başlatılırken bir hata oluştu:"
 ClipboardError: "Panoya kopyalama başarısız oldu: "
-ProgressErrorLabel: "İlerleme hatası:"
-RenderErrorLabel: "Oluşturma hatası:"
-RenderingStatus: "Oluşturuluyor..."
-DebugInfoTitle: "Hata ayıklama bilgisi"
-MenuThirdPartyLicenses: "Üçüncü Taraf Lisansları(_T)"
-LicenseNotFoundError: "Lisans dosyası ({0}) bulunamadı."

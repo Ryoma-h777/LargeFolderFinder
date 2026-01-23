@@ -7,11 +7,14 @@ namespace LargeFolderFinder
     /// <summary>
     /// フォルダ情報を保持するクラス
     /// </summary>
-    [MessagePackObject]
+    [MessagePackObject(AllowPrivate = true)]
     public class FolderInfo
     {
         [Key(0)]
         public string Name { get; set; }
+
+        [Key(5)]
+        public bool IsExpanded { get; set; } = true;
 
         [Key(1)]
         public bool IsFile { get; set; } = false;
