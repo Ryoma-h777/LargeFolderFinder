@@ -94,7 +94,8 @@ namespace LargeFolderFinder
                 ScanRecursiveInternal(dir, thresholdBytes, totalFolders, 0, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, rootNode);
 
                 // 最終的に閾値未満の枝を剪定
-                PruneTree(rootNode, thresholdBytes);
+                // 最終的に閾値未満の枝を剪定しない（全ノード保持）
+                // PruneTree(rootNode, thresholdBytes);
 
                 return rootNode; // 閾値に関わらずルートノードを返す
             }, token);
@@ -152,8 +153,8 @@ namespace LargeFolderFinder
 
                     myFilesSize += size;
 
-                    // ファイルのサイズが閾値以上ならノードとして追加（表示するかはUI側で制御）
-                    if (size >= thresholdBytes)
+                    // ファイルのサイズに関わらずノードとして追加（表示時にフィルタリング）
+                    // if (size >= thresholdBytes)
                     {
                         var fileNode = new FolderInfo(f.Name, size, true, f.LastWriteTime) { Parent = currentNode };
                         lock (currentNode.Children) { currentNode.Children.Add(fileNode); }

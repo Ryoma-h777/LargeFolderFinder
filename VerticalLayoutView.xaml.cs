@@ -22,12 +22,9 @@ namespace LargeFolderFinder
         }
 
         // IMainLayoutView Implementation
-        public TextBox PathTextBox => pathTextBox;
+        // IMainLayoutView Implementation
         public TextBox SearchSizeTextBox => searchSizeTextBox;
         public ComboBox UnitComboBox => unitComboBox;
-        public Button RunButton => runButton;
-        public Button CancelButton => cancelButton;
-        public Button ConfigButton => configButton;
         public Button CopyButton => copyButton;
         public TextBox OutputTextBox => outputTextBox;
         public ProgressBar ScanProgressBar => scanProgressBar;
@@ -51,11 +48,10 @@ namespace LargeFolderFinder
             _commonLogic?.ApplyLocalization(lm);
         }
 
-        private void BrowseButton_Click(object sender, RoutedEventArgs e) => _mainWindow?.BrowseButton_Click(sender, e);
-        private void ScanButton_Click(object sender, RoutedEventArgs e) => _mainWindow?.ScanButton_Click(sender, e);
-        private void CancelButton_Click(object sender, RoutedEventArgs e) => _mainWindow?.CancelButton_Click(sender, e);
-        private void MenuConfig_Click(object sender, RoutedEventArgs e) => _mainWindow?.MenuConfig_Click(sender, e);
         private void CopyButton_Click(object sender, RoutedEventArgs e) => _mainWindow?.CopyButton_Click(sender, e);
+
+        // Helper for KeyDown
+        private void TriggerScan(object sender, RoutedEventArgs e) => _mainWindow?.ScanButton_Click(sender, e);
         /// <summary>
         /// キー押したときの動作
         /// Xamlにレイアウトが紐づくので共通化できていません。
@@ -66,7 +62,7 @@ namespace LargeFolderFinder
         {
             if (e.Key == Key.Enter)
             {
-                ScanButton_Click(sender, e);
+                TriggerScan(sender, e);
             }
             // Undoに取られて動作しない
             // else if (e.Key == Key.Z && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))

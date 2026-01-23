@@ -26,7 +26,7 @@ namespace LargeFolderFinder
                 }
 
                 // ファイル名: YYYYMMDD_HHmm_ss_Log.txt
-                string fileName = $"{DateTime.Now:yyyyMMdd_HHmm_ss}_Log.txt";
+                string fileName = $"{DateTime.Now.ToString(AppConstants.LogsFileNameWithoutExtension)}.{AppConstants.LogsExtension}";
                 _logFilePath = Path.Combine(logsDir, fileName);
 
                 CleanupOldLogs(logsDir);
@@ -43,15 +43,15 @@ namespace LargeFolderFinder
         {
             try
             {
-                var files = Directory.GetFiles(logsDir, "*_Log.txt")
+                var files = Directory.GetFiles(logsDir, $"*.{AppConstants.LogsExtension}")
                                      .Select(f => new FileInfo(f))
                                      .OrderByDescending(f => f.CreationTime)
                                      .ToList();
-
-                // 2ファイルまで保持、それより古いものは削除
-                if (files.Count > 2)
+                int maxLogFiles = 4;
+                // maxLogFilesファイルまで保持、それより古いものは削除
+                if (files.Count >= maxLogFiles)
                 {
-                    for (int i = 2; i < files.Count; i++)
+                    for (int i = maxLogFiles; i < files.Count; i++)
                     {
                         files[i].Delete();
                     }

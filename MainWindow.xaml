@@ -37,7 +37,117 @@
             </MenuItem>
         </Menu>
 
-        <!-- Dynamic Content Holder -->
-        <ContentControl x:Name="MainContentHolder" />
+        <!-- Global Header (Path, Scan, etc.) -->
+        <Grid DockPanel.Dock="Top" Margin="10,10,10,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="pathTextBox" Grid.Column="0" Height="26" VerticalContentAlignment="Center" Margin="0,0,1,0" KeyDown="Input_KeyDown" />
+            <Button x:Name="browseButton" Grid.Column="1" Content="..." Width="40" Height="26" Click="BrowseButton_Click" />
+
+            <!-- Scan buttons -->
+            <Button x:Name="runButton" Grid.Column="2" ToolTip="Scan" Width="50" Height="25" FontWeight="Bold" Background="#0078D7" Foreground="White" Margin="10,0,0,0" Click="ScanButton_Click">
+                <Path Data="{StaticResource RunIconGeometry}" Fill="White" Stretch="Uniform" Margin="6" />
+            </Button>
+            <!-- Cancel buttons -->
+            <Button x:Name="cancelButton" Grid.Column="3" Width="50" Height="25" IsEnabled="False" Margin="5,0,0,0" Click="CancelButton_Click" ToolTip="Cancel">
+                <Path Data="{StaticResource StopIconGeometry}" Fill="#444" Stretch="Uniform" Margin="6" />
+            </Button>
+            <!-- Config buttons -->
+            <Button x:Name="configButton" Grid.Column="4" Width="25" Height="25" Margin="5,0,0,0" Click="MenuConfig_Click" ToolTip="Settings">
+                <Path Data="{StaticResource ConfigIconGeometry}" Fill="#444" Stretch="Uniform" Margin="5" />
+            </Button>
+        </Grid>
+
+        <!-- Tab Control -->
+        <Grid Margin="5">
+            <TabControl x:Name="SessionTabControl" 
+                        ItemsSource="{Binding Sessions}" 
+                        SelectedIndex="{Binding SelectedIndex}"
+                        SelectionChanged="SessionTabControl_SelectionChanged"
+                        Background="Transparent"
+                        BorderThickness="0">
+                <TabControl.Resources>
+                    <Style TargetType="TabItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                    </Style>
+                    
+                    <!-- Style for Close Button -->
+                    <Style x:Key="TabCloseButtonStyle" TargetType="Button">
+                        <Setter Property="RenderOptions.BitmapScalingMode" Value="NearestNeighbor"/>
+                        <Setter Property="Width" Value="16"/>
+                        <Setter Property="Height" Value="16"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="Margin" Value="5,0,0,0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}" CornerRadius="2">
+                                        <Path Data="M0,0 L8,8 M8,0 L0,8" Stroke="#666" StrokeThickness="1.5" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#DDD"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </TabControl.Resources>
+
+                <!-- ItemsPanel for Uniform Width Tabs -->
+                <TabControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="1"/>
+                    </ItemsPanelTemplate>
+                </TabControl.ItemsPanel>
+                
+                <!-- Header Template (Title + Close Button) -->
+                <TabControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- Right aligned behavior for trimming is tricky in standard TextBlock. 
+                                 Usually TextTrimming works from end. 
+                                 To see the end and trim start, we need specific control behavior or direction.
+                                 However, TabTitle logic in CacheData.cs returns JUST the folder name (e.g. "Folder").
+                                 It only returns full path if empty.
+                                 So "Folder Name" should be visible.
+                                 "Right alignment image" might mean the text is right aligned in the tab? -->
+                            <TextBlock Grid.Column="0" Text="{Binding TabTitle}" 
+                                       ToolTip="{Binding Path}"
+                                       VerticalAlignment="Center" 
+                                       HorizontalAlignment="Right"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <Button Grid.Column="1" Style="{StaticResource TabCloseButtonStyle}" Click="TabCloseButton_Click" Tag="{Binding}"/>
+                        </Grid>
+                    </DataTemplate>
+                </TabControl.ItemTemplate>
+
+                <!-- Content Template (The Result View) -->
+                <TabControl.ContentTemplate>
+                    <DataTemplate>
+                        <Border BorderBrush="#CCC" BorderThickness="1" CornerRadius="0,0,4,4" Padding="0" Background="White">
+                           <ContentControl Content="{Binding CurrentView}"/>
+                        </Border>
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
+            </TabControl>
+          
+            <!-- Add Tab Button (Top Right Overlay) -->
+            <Button x:Name="AddTabButton" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,5,0" Width="24" Height="24" Click="AddTabButton_Click" ToolTip="New Tab (Max 10)" Background="Transparent" BorderThickness="0">
+                <Path Data="M4,0 L4,8 M0,4 L8,4" Stroke="#444" StrokeThickness="1.5" Margin="4"/>
+            </Button>
+        </Grid>
     </DockPanel>
 </Window>

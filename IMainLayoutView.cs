@@ -4,13 +4,9 @@ namespace LargeFolderFinder
 {
     public interface IMainLayoutView
     {
-        TextBox PathTextBox { get; }
         TextBox SearchSizeTextBox { get; }
         ComboBox UnitComboBox { get; }
-        Button RunButton { get; }
-        Button CancelButton { get; }
         Button CopyButton { get; }
-        Button ConfigButton { get; }
         TextBox OutputTextBox { get; }
         ProgressBar ScanProgressBar { get; }
         TextBlock StatusTextBlock { get; }

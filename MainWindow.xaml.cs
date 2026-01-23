@@ -15,22 +15,52 @@ using System.Threading.Tasks;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
 using YamlDotNet.Serialization;
-using System.Windows.Controls.Primitives;
+using MessagePack;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 namespace LargeFolderFinder
 {
     /// <summary>
     /// メインクラス
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, INotifyPropertyChanged
     {
-        private CancellationTokenSource? _cts;
         private CancellationTokenSource? _renderCts;
-        private FolderInfo? _lastScanResult;
-        private bool _isScanning = false;
         private DispatcherTimer? _memoryTimer;
-        private IMainLayoutView? _layoutView;
         private bool _hasShownProgressError = false;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? name = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        public ObservableCollection<SessionData> Sessions { get; set; } = new ObservableCollection<SessionData>();
+
+        // SelectedIndex Dependency Property to allow binding to TabControl
+        public static readonly DependencyProperty SelectedIndexProperty = DependencyProperty.Register(
+            nameof(SelectedIndex), typeof(int), typeof(MainWindow),
+            new PropertyMetadata(0));
+
+        public int SelectedIndex
+        {
+            get => (int)GetValue(SelectedIndexProperty);
+            set => SetValue(SelectedIndexProperty, value);
+        }
+
+        public SessionData? CurrentSession
+        {
+            get
+            {
+                if (SelectedIndex >= 0 && SelectedIndex < Sessions.Count)
+                    return Sessions[SelectedIndex];
+                return null;
+            }
+        }
+
+        public IMainLayoutView? CurrentLayoutView => CurrentSession?.CurrentView as IMainLayoutView;
 
         public MainWindow()
         {
@@ -38,9 +68,18 @@ namespace LargeFolderFinder
             {
                 Logger.Log(AppConstants.LogAppStarted);
                 InitializeComponent();
+                this.DataContext = this;
+
                 InitializeLocalization();
-                LoadCache(); // ここで ApplyLayout が呼ばれる
+                LoadCache();
                 UpdateLanguageMenu();
+
+                // Binding updates
+                Sessions.CollectionChanged += (s, e) =>
+                {
+                    Logger.Log("Sessions collection changed");
+                    // Handle any collection changes if needed
+                };
 
                 // 初回描画完了後にメモリを絞る
                 this.ContentRendered += (s, e) => OptimizeMemory();
@@ -61,9 +100,99 @@ namespace LargeFolderFinder
             }
         }
 
+        private void InitializeView(IMainLayoutView view, SessionData session)
+        {
+            if (view == null) return;
+
+            // Bind events logic from the View to MainWindow logic
+            // Note: View controls already call _mainWindow.ScanButton_Click etc via XAML/CodeBehind wiring.
+            // We just need to initialize ComboBoxes and set values.
+
+            view.UnitComboBox.Items.Clear();
+            foreach (var u in Enum.GetNames(typeof(AppConstants.SizeUnit)))
+                view.UnitComboBox.Items.Add(u);
+
+            view.SortComboBox.Items.Clear();
+            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetSize));
+            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetName));
+            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetDate));
+
+            view.SortDirectionComboBox.Items.Clear();
+            view.SortDirectionComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.DirectionAsc));
+            view.SortDirectionComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.DirectionDesc));
+
+            view.SeparatorComboBox.Items.Clear();
+            view.SeparatorComboBox.Items.Add("Tab");
+            view.SeparatorComboBox.Items.Add("Space");
+
+            // Event Handlers for Re-rendering
+            view.SeparatorComboBox.SelectionChanged += (s, e) =>
+            {
+                view.TabWidthArea.Visibility = view.SeparatorComboBox.SelectedIndex == (int)AppConstants.Separator.Tab
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                _ = RenderResult(session);
+            };
+
+            view.SearchSizeTextBox.TextChanged += (s, e) => { _ = RenderResult(session); };
+            view.UnitComboBox.SelectionChanged += (s, e) => { _ = RenderResult(session); };
+            view.SortComboBox.SelectionChanged += (s, e) => { _ = RenderResult(session); };
+            view.SortDirectionComboBox.SelectionChanged += (s, e) => { _ = RenderResult(session); };
+            view.IncludeFilesCheckBox.Click += (s, e) => { _ = RenderResult(session); };
+            view.TabWidthTextBox.TextChanged += (s, e) => { _ = RenderResult(session); };
+
+            // Set Initial Values from Session
+            view.SearchSizeTextBox.Text = session.Threshold.ToString();
+            view.UnitComboBox.SelectedIndex = (int)session.Unit;
+            view.SortComboBox.SelectedIndex = (int)session.SortTarget;
+            view.SortDirectionComboBox.SelectedIndex = (int)session.SortDirection;
+            view.IncludeFilesCheckBox.IsChecked = session.IncludeFiles;
+            view.SeparatorComboBox.SelectedIndex = session.SeparatorIndex;
+            view.TabWidthTextBox.Text = session.TabWidth.ToString();
+
+            // Initial Visibility
+            view.TabWidthArea.Visibility = session.SeparatorIndex == (int)AppConstants.Separator.Tab ? Visibility.Visible : Visibility.Collapsed;
+
+            // Apply Localization
+            view.ApplyLocalization(LocalizationManager.Instance);
+        }
+
+        private void SessionTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Only handle if the source is the TabControl itself (not inner controls)
+            if (e.OriginalSource == SessionTabControl)
+            {
+                UpdateHeaderFromSession();
+            }
+        }
+
+        private void UpdateHeaderFromSession()
+        {
+            var session = CurrentSession;
+            if (session != null)
+            {
+                pathTextBox.Text = session.Path;
+
+                // Update buttons state
+                bool isScanning = session.IsScanning;
+                runButton.IsEnabled = !isScanning;
+                cancelButton.IsEnabled = isScanning;
+            }
+            else
+            {
+                pathTextBox.Text = "";
+                runButton.IsEnabled = true;
+                cancelButton.IsEnabled = false;
+            }
+        }
+
         internal void BrowseButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_layoutView == null) return;
+            // Always update current session
+            var session = CurrentSession;
+            // Create new session if none? (Though expected to always have one)
+            if (session == null) return;
+
             try
             {
                 Logger.Log(AppConstants.LogBrowseButtonClicked);
@@ -71,12 +200,14 @@ namespace LargeFolderFinder
                 {
                     Description = LocalizationManager.Instance.GetText(LanguageKey.FolderLabel),
                     UseDescriptionForTitle = true,
-                    SelectedPath = _layoutView.PathTextBox.Text
+                    SelectedPath = pathTextBox.Text
                 };
 
                 if (dialog.ShowDialog() == true)
                 {
-                    _layoutView.PathTextBox.Text = dialog.SelectedPath;
+                    pathTextBox.Text = dialog.SelectedPath;
+                    session.Path = dialog.SelectedPath;
+                    OnPropertyChanged(nameof(Sessions)); // Force update if needed, but path is manually synced
                     Logger.Log($"Folder selected via Ookii: {dialog.SelectedPath}");
                 }
             }
@@ -93,10 +224,16 @@ namespace LargeFolderFinder
 
         internal async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_isScanning || _layoutView == null) return;
+            var session = CurrentSession;
+            if (session == null) return;
+            var view = CurrentLayoutView;
+            if (view == null) return;
+
+            if (session.IsScanning) return;
+
             var lm = LocalizationManager.Instance;
 
-            string path = _layoutView.PathTextBox.Text;
+            string path = pathTextBox.Text;
             if (string.IsNullOrWhiteSpace(path) || !System.IO.Directory.Exists(path))
             {
                 MessageBox.Show(
@@ -107,7 +244,11 @@ namespace LargeFolderFinder
                 return;
             }
 
-            if (!double.TryParse(_layoutView.SearchSizeTextBox.Text, out double thresholdVal))
+            // Sync Path to Session
+            session.Path = path;
+
+            // Sync Settings from View to Session
+            if (!double.TryParse(view.SearchSizeTextBox.Text, out double thresholdVal))
             {
                 MessageBox.Show(
                     lm.GetText(LanguageKey.ThresholdInvalidError),
@@ -118,31 +259,41 @@ namespace LargeFolderFinder
             }
 
             AppConstants.SizeUnit selectedUnit = AppConstants.SizeUnit.GB;
-            if (_layoutView.UnitComboBox.SelectedIndex >= 0)
+            if (view.UnitComboBox.SelectedIndex >= 0)
             {
-                selectedUnit = (AppConstants.SizeUnit)_layoutView.UnitComboBox.SelectedIndex;
+                selectedUnit = (AppConstants.SizeUnit)view.UnitComboBox.SelectedIndex;
             }
             long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(selectedUnit));
+
+            // Store Settings Back to Session
+            session.Threshold = thresholdVal;
+            session.Unit = selectedUnit;
+            session.SortTarget = (AppConstants.SortTarget)view.SortComboBox.SelectedIndex;
+            session.SortDirection = (AppConstants.SortDirection)view.SortDirectionComboBox.SelectedIndex;
+            session.IncludeFiles = view.IncludeFilesCheckBox.IsChecked == true;
+            session.SeparatorIndex = view.SeparatorComboBox.SelectedIndex;
+            if (int.TryParse(view.TabWidthTextBox.Text, out int tw)) session.TabWidth = tw;
+
 
             var config = Config.Load();
             SaveCache(); // 検索履歴の保存
             _hasShownProgressError = false;
 
-            _cts = new CancellationTokenSource();
-            _isScanning = true;
-            _layoutView.RunButton.IsEnabled = false;
-            _layoutView.CancelButton.IsEnabled = true;
-            _layoutView.OutputTextBox.Clear();
-            _layoutView.ScanProgressBar.Visibility = Visibility.Visible;
-            _layoutView.ScanProgressBar.Value = 0;
-            _layoutView.StatusTextBlock.Text = lm.GetText(LanguageKey.FolderCountStatus);
+            session.Cts = new CancellationTokenSource();
+            session.IsScanning = true;
+            UpdateHeaderFromSession(); // Update buttons
+
+            view.OutputTextBox.Clear();
+            view.ScanProgressBar.Visibility = Visibility.Visible;
+            view.ScanProgressBar.Value = 0;
+            view.StatusTextBlock.Text = lm.GetText(LanguageKey.FolderCountStatus);
 
             Logger.Log(string.Format(AppConstants.LogScanStart, path, thresholdVal + selectedUnit.ToString()));
             var sw = Stopwatch.StartNew();
 
             try
             {
-                int totalFolders = config.SkipFolderCount ? 0 : await Scanner.CountFoldersAsync(path, config.MaxDepthForCount, _cts.Token);
+                int totalFolders = config.SkipFolderCount ? 0 : await Scanner.CountFoldersAsync(path, config.MaxDepthForCount, session.Cts.Token);
                 var progress = new Progress<ScanProgress>(p =>
                 {
                     try
@@ -151,8 +302,8 @@ namespace LargeFolderFinder
                         if (!config.SkipFolderCount && totalFolders > 0)
                         {
                             double percentage = (double)p.ProcessedFolders / totalFolders * 100;
-                            _layoutView.ScanProgressBar.Value = percentage;
-                            _layoutView.ScanProgressBar.IsIndeterminate = false;
+                            view.ScanProgressBar.Value = percentage;
+                            view.ScanProgressBar.IsIndeterminate = false;
 
                             string remainingStr = "";
                             if (p.EstimatedTimeRemaining.HasValue)
@@ -199,7 +350,7 @@ namespace LargeFolderFinder
                         }
                         else
                         {
-                            _layoutView.ScanProgressBar.IsIndeterminate = true;
+                            view.ScanProgressBar.IsIndeterminate = true;
                             string elapsedStr = FormatDuration(sw.Elapsed);
                             string processedPart = string.Format(lm.GetText(LanguageKey.ProcessedFolders), p.ProcessedFolders);
                             string elapsedPart = string.Format(
@@ -212,12 +363,12 @@ namespace LargeFolderFinder
                                 elapsedPart);
                         }
 
-                        _layoutView.StatusTextBlock.Text = statusMsg;
+                        view.StatusTextBlock.Text = statusMsg;
 
                         if (p.CurrentResult != null)
                         {
-                            _lastScanResult = p.CurrentResult;
-                            _ = RenderResult(); // Fire and forget
+                            session.Result = p.CurrentResult;
+                            _ = RenderResult(session); // Fire and forget
                         }
                     }
                     catch (Exception ex)
@@ -233,12 +384,12 @@ namespace LargeFolderFinder
 
                 if (config.SkipFolderCount)
                 {
-                    _layoutView.StatusTextBlock.Text = lm.GetText(LanguageKey.ScanningStatus);
-                    _layoutView.ScanProgressBar.IsIndeterminate = true;
+                    view.StatusTextBlock.Text = lm.GetText(LanguageKey.ScanningStatus);
+                    view.ScanProgressBar.IsIndeterminate = true;
                 }
                 else
                 {
-                    _layoutView.StatusTextBlock.Text = string.Format(
+                    view.StatusTextBlock.Text = string.Format(
                         lm.GetText(LanguageKey.ScanningStatusWithCountFormat),
                         lm.GetText(LanguageKey.ScanningStatus),
                         totalFolders,
@@ -254,17 +405,17 @@ namespace LargeFolderFinder
                     config.UseParallelScan,
                     config.UsePhysicalSize,
                     progress,
-                    _cts.Token);
+                    session.Cts.Token);
 
-                _lastScanResult = result;
-                await RenderResult();
+                session.Result = result;
+                await RenderResult(session);
                 // UIの描画完了を待ってから時間を止める
                 await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
                 sw.Stop();
 
-                if (_layoutView != null)
+                if (view != null)
                 {
-                    _layoutView.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} " +
+                    view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} " +
                         $"[{string.Format(lm.GetText(LanguageKey.ProcessingTime), FormatDuration(sw.Elapsed))}]";
                 }
                 Logger.Log(string.Format(AppConstants.LogScanSuccess, FormatDuration(sw.Elapsed)));
@@ -272,48 +423,53 @@ namespace LargeFolderFinder
                 SaveCache(); // 検索結果の保存
 
                 OptimizeMemory();
-                _cts?.Dispose();
-                _cts = null;
+                session.Cts?.Dispose();
+                session.Cts = null;
             }
             catch (OperationCanceledException)
             {
                 Logger.Log("Canceled.");
-                _layoutView.StatusTextBlock.Text = lm.GetText(LanguageKey.CancelledStatus);
+                view.StatusTextBlock.Text = lm.GetText(LanguageKey.CancelledStatus);
             }
             catch (Exception ex)
             {
                 Logger.Log(AppConstants.LogScanError, ex);
-                _layoutView.StatusTextBlock.Text = lm.GetText(LanguageKey.LabelError) + ex.Message;
+                view.StatusTextBlock.Text = lm.GetText(LanguageKey.LabelError) + ex.Message;
             }
             finally
             {
-                _isScanning = false;
-                _layoutView.RunButton.IsEnabled = true;
-                _layoutView.CancelButton.IsEnabled = false;
-                _layoutView.ScanProgressBar.Visibility = Visibility.Collapsed;
-                _layoutView.ScanProgressBar.IsIndeterminate = false;
-                _ = RenderResult();
+                session.IsScanning = false;
+                UpdateHeaderFromSession(); // Reset buttons
+
+                view.ScanProgressBar.Visibility = Visibility.Collapsed;
+                view.ScanProgressBar.IsIndeterminate = false;
+                _ = RenderResult(session);
                 OptimizeMemory();
-                _cts?.Dispose();
-                _cts = null;
+                session.Cts?.Dispose();
+                session.Cts = null;
             }
         }
 
         internal void CancelButton_Click(object sender, RoutedEventArgs e)
         {
-            Logger.Log("Canceling scan...");
-            _cts?.Cancel();
+            var session = CurrentSession;
+            if (session != null && session.IsScanning)
+            {
+                Logger.Log("Canceling scan...");
+                session.Cts?.Cancel();
+            }
         }
 
         internal void CopyButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_layoutView == null) return;
+            var view = CurrentLayoutView;
+            if (view == null) return;
             try
             {
-                string text = _layoutView.OutputTextBox.Text;
+                string text = view.OutputTextBox.Text;
                 if (string.IsNullOrWhiteSpace(text)) return;
                 Clipboard.SetText(text);
-                ShowNotification(LocalizationManager.Instance.GetText(LanguageKey.CopyNotification));
+                ShowNotification(view, LocalizationManager.Instance.GetText(LanguageKey.CopyNotification));
             }
             catch (Exception ex)
             {
@@ -324,86 +480,46 @@ namespace LargeFolderFinder
             }
         }
 
-        private async void ShowNotification(string message)
+        private async void ShowNotification(IMainLayoutView view, string message)
         {
-            if (_layoutView == null) return;
-            _layoutView.NotificationTextBlock.Text = message;
+            if (view == null) return;
+            view.NotificationTextBlock.Text = message;
             await Task.Delay(3000);
-            if (_layoutView.NotificationTextBlock.Text == message)
-                _layoutView.NotificationTextBlock.Text = "";
+            if (view.NotificationTextBlock.Text == message)
+                view.NotificationTextBlock.Text = "";
         }
 
         public void ApplyLayout(AppConstants.LayoutType layoutMode)
         {
-            if (MainContentHolder == null) return;
+            // Re-create View for ALL sessions
+            foreach (var session in Sessions)
+            {
+                UserControl view = layoutMode == AppConstants.LayoutType.Horizontal ?
+                    (UserControl)new HorizontalLayoutView(this) :
+                    (UserControl)new VerticalLayoutView(this);
 
-            UserControl view = layoutMode == AppConstants.LayoutType.Horizontal ?
-                (UserControl)new HorizontalLayoutView(this) :
-                (UserControl)new VerticalLayoutView(this);
-            _layoutView = (IMainLayoutView)view;
-            MainContentHolder.Content = view;
+                // Initialize View with Session data
+                InitializeView((IMainLayoutView)view, session);
+                session.CurrentView = view;
+            }
+
+            // Force TabControl to refresh content? 
+            // Since CurrentView property changed, if it raises notification... 
+            // CurrentView is not observable property of Session. Session should likely support notification or we refresh bindings.
+            // Since we replaced the CLR object in simple class, binding might not update.
+            // We should refresh Sessions collection or make CurrentView NotifyPropertyChanged.
+            // For now, let's reset ItemsSource or notify.
+
+            // To be safe, we can just replace the collection content or trigger refresh
+            // But doing it for all might flicker.
+
+            // Let's assume user only changes layout infrequently.
+            SessionTabControl.Items.Refresh();
 
             MenuLayoutVertical.IsChecked = layoutMode == AppConstants.LayoutType.Vertical;
             MenuLayoutHorizontal.IsChecked = layoutMode == AppConstants.LayoutType.Horizontal;
 
-            InitializeComboBoxes();
             ApplyLocalization();
-
-            var cache = CacheData.Load();
-            if (cache != null && cache.Sessions.Count > 0)
-            {
-                int idx = cache.SelectedIndex;
-                if (idx < 0 || idx >= cache.Sessions.Count) idx = 0;
-                var session = cache.Sessions[idx];
-
-                _layoutView.PathTextBox.Text = session.Path;
-                _layoutView.SearchSizeTextBox.Text = session.Threshold.ToString();
-                _layoutView.UnitComboBox.SelectedIndex = (int)session.Unit;
-                _layoutView.SortComboBox.SelectedIndex = (int)session.SortTarget;
-                _layoutView.SortDirectionComboBox.SelectedIndex = (int)session.SortDirection;
-                _layoutView.IncludeFilesCheckBox.IsChecked = session.IncludeFiles;
-                _layoutView.SeparatorComboBox.SelectedIndex = session.SeparatorIndex;
-                _layoutView.TabWidthTextBox.Text = session.TabWidth.ToString();
-            }
-        }
-
-        private void InitializeComboBoxes()
-        {
-            if (_layoutView == null) return;
-
-            _layoutView.UnitComboBox.Items.Clear();
-            foreach (var u in Enum.GetNames(typeof(AppConstants.SizeUnit)))
-                _layoutView.UnitComboBox.Items.Add(u);
-
-            _layoutView.SortComboBox.Items.Clear();
-            _layoutView.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetSize));
-            _layoutView.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetName));
-            _layoutView.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetDate));
-
-            _layoutView.SortDirectionComboBox.Items.Clear();
-            _layoutView.SortDirectionComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.DirectionAsc));
-            _layoutView.SortDirectionComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.DirectionDesc));
-
-            _layoutView.SeparatorComboBox.Items.Clear();
-            _layoutView.SeparatorComboBox.Items.Add("Tab");
-            _layoutView.SeparatorComboBox.Items.Add("Space");
-
-            _layoutView.SeparatorComboBox.SelectionChanged += (s, e) =>
-            {
-                _layoutView.TabWidthArea.Visibility = _layoutView.SeparatorComboBox.SelectedIndex == (int)AppConstants.Separator.Tab
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
-                _ = RenderResult();
-            };
-
-            // Re-bind other events if needed
-            // Re-bind other events if needed
-            _layoutView.SearchSizeTextBox.TextChanged += (s, e) => { _ = RenderResult(); };
-            _layoutView.UnitComboBox.SelectionChanged += (s, e) => { _ = RenderResult(); };
-            _layoutView.SortComboBox.SelectionChanged += (s, e) => { _ = RenderResult(); };
-            _layoutView.SortDirectionComboBox.SelectionChanged += (s, e) => { _ = RenderResult(); };
-            _layoutView.IncludeFilesCheckBox.Click += (s, e) => { _ = RenderResult(); };
-            _layoutView.TabWidthTextBox.TextChanged += (s, e) => { _ = RenderResult(); };
         }
 
         private void ApplyLocalization()
@@ -429,27 +545,40 @@ namespace LargeFolderFinder
             MenuLayoutVertical.Header = lm.GetText(LanguageKey.MenuLayoutVertical);
             MenuLayoutHorizontal.Header = lm.GetText(LanguageKey.MenuLayoutHorizontal);
 
-            _layoutView?.ApplyLocalization(lm);
+            foreach (var session in Sessions)
+            {
+                (session.CurrentView as IMainLayoutView)?.ApplyLocalization(lm);
+            }
             Logger.Log(AppConstants.LogApplyLocSuccess);
         }
 
-        private async Task RenderResult()
+        // Renamed/signature changed to accept Session
+        private async Task RenderResult(SessionData session)
         {
-            if (_lastScanResult == null || _layoutView == null) return;
+            if (session == null || session.Result == null || session.CurrentView == null) return;
+            var view = session.CurrentView as IMainLayoutView;
+            if (view == null) return;
+
             try
             {
                 // UI入力の取得（メインスレッド）
-                if (!double.TryParse(_layoutView.SearchSizeTextBox.Text, out double thresholdVal)) return;
+                // Use session values or View values? 
+                // We should use View values as they are the source of truth for display settings currently.
+                // Sync View -> Session already done in ScanButton, but for display settings, they might change without scan.
+                // So let's Update Session from View before render, OR just use View values directly for render logic.
+                // Using View values directly is safer for "What you see is what you get".
 
-                AppConstants.SizeUnit unit = (AppConstants.SizeUnit)_layoutView.UnitComboBox.SelectedIndex;
+                if (!double.TryParse(view.SearchSizeTextBox.Text, out double thresholdVal)) return;
+
+                AppConstants.SizeUnit unit = (AppConstants.SizeUnit)view.UnitComboBox.SelectedIndex;
                 long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(unit));
-                bool includeFiles = _layoutView.IncludeFilesCheckBox.IsChecked == true;
-                var sortTarget = (AppConstants.SortTarget)_layoutView.SortComboBox.SelectedIndex;
-                var sortDirection = (AppConstants.SortDirection)_layoutView.SortDirectionComboBox.SelectedIndex;
-                bool useSpaces = _layoutView.SeparatorComboBox.SelectedIndex == (int)AppConstants.Separator.Space;
+                bool includeFiles = view.IncludeFilesCheckBox.IsChecked == true;
+                var sortTarget = (AppConstants.SortTarget)view.SortComboBox.SelectedIndex;
+                var sortDirection = (AppConstants.SortDirection)view.SortDirectionComboBox.SelectedIndex;
+                bool useSpaces = view.SeparatorComboBox.SelectedIndex == (int)AppConstants.Separator.Space;
 
                 int tabWidth = AppConstants.DefaultTabWidth;
-                int.TryParse(_layoutView.TabWidthTextBox.Text, out tabWidth);
+                int.TryParse(view.TabWidthTextBox.Text, out tabWidth);
 
                 // 前回の処理をキャンセル
                 _renderCts?.Cancel();
@@ -458,8 +587,8 @@ namespace LargeFolderFinder
 
                 // UIフェードバック開始
                 System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
-                string originalStatus = _layoutView.StatusTextBlock.Text;
-                _layoutView.StatusTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.RenderingStatus);
+                string originalStatus = view.StatusTextBlock.Text;
+                view.StatusTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.RenderingStatus);
 
                 try
                 {
@@ -470,13 +599,13 @@ namespace LargeFolderFinder
 
                         // 1. フィルタリングとソートの結果をキャッシュ（一貫性確保と高速化）
                         var filterCache = new Dictionary<FolderInfo, List<FolderInfo>>();
-                        BuildFilterCache(_lastScanResult, filterCache, thresholdBytes, includeFiles, sortTarget, sortDirection, token);
+                        BuildFilterCache(session.Result, filterCache, thresholdBytes, includeFiles, sortTarget, sortDirection, token);
 
                         if (token.IsCancellationRequested) return "";
 
                         // 2. 最大行長の計算（ソート順序非依存・キャッシュ利用）
                         int maxLineLen = CalculateMaxLineLength(
-                            _lastScanResult,
+                            session.Result,
                             filterCache, // キャッシュを使用
                             0,
                             true,
@@ -492,7 +621,7 @@ namespace LargeFolderFinder
                         // 3. 文字列の生成（ソート順序依存・キャッシュ利用）
                         PrintTreeRecursive(
                             sb,
-                            _lastScanResult,
+                            session.Result,
                             filterCache, // キャッシュを使用
                             "",
                             true,
@@ -509,27 +638,26 @@ namespace LargeFolderFinder
 
                     if (!token.IsCancellationRequested)
                     {
-                        _layoutView.OutputTextBox.Text = resultText;
+                        view.OutputTextBox.Text = resultText;
                     }
                 }
                 finally
                 {
                     // UIフェードバック終了
                     System.Windows.Input.Mouse.OverrideCursor = null;
-                    // キャンセルされていない場合のみステータスを戻す（キャンセルされた場合は「キャンセル」などが表示される可能性があるため...
-                    // 実際にはRenderResult自体がキャンセルされるわけではなく内部のタスクがキャンセルされる。
-                    // 新しいRenderResultが走っている場合は、そちらがステータスを上書きしているはずなので、
-                    // ここで戻すべきかどうかは微妙だが、_renderCtsが自分のものであれば戻す、などの制御が必要。
-                    // しかし単純化のため、完了時はとりあえず元に戻す。
+
                     if (!token.IsCancellationRequested)
                     {
-                        _layoutView.StatusTextBlock.Text = originalStatus;
+                        view.StatusTextBlock.Text = originalStatus;
                     }
                 }
             }
             catch (OperationCanceledException) { /* Ignored */ }
             catch (Exception ex) { Logger.Log("Render error", ex); }
         }
+
+        // ... Helper methods (CalculateMaxLineLength, PrintTreeRecursive, etc) remain mostly same ...
+        // I will copy them to include in the full file.
 
         private int CalculateMaxLineLength(
             FolderInfo node,
@@ -548,9 +676,7 @@ namespace LargeFolderFinder
             int currentLen = indentLen + prefixLen + GetStringWidth(node.Name);
             int max = currentLen;
 
-            // インデント幅の統一: Lastの場合もスペース3つ分（TreeSpace=1, TreeVertical=2相当だが、ここではスペース3つ）にする
-            // TreeVertical(2) + TreeSpace(1) = 3
-            // TreeSpace(1) + TreeSpace(1) + TreeSpace(1) = 3
+            // インデント幅の統一: Lastの場合もスペース3つ分
             int childIndentLen = indentLen + (isRoot
                 ? 0
                 : GetStringWidth(isLast
@@ -559,7 +685,6 @@ namespace LargeFolderFinder
 
             if (node.Children != null)
             {
-                // キャッシュからフィルタリング済みリストを取得（ソートは行長計算に関係ないが、フィルタリング結果は必要）
                 List<FolderInfo>? list = null;
                 if (filterCache.TryGetValue(node, out var cachedList))
                 {
@@ -567,7 +692,6 @@ namespace LargeFolderFinder
                 }
                 else
                 {
-                    // キャッシュが無い場合のフォールバック（通常発生しないはずだが安全のため）
                     lock (node.Children)
                     {
                         list = node.Children.Where(c => c.Size >= thresholdBytes && (includeFiles || !c.IsFile)).ToList();
@@ -638,7 +762,6 @@ namespace LargeFolderFinder
 
             if (node.Children != null)
             {
-                // キャッシュからソート済みリストを取得
                 List<FolderInfo>? list = null;
                 if (filterCache.TryGetValue(node, out var cachedList))
                 {
@@ -646,7 +769,6 @@ namespace LargeFolderFinder
                 }
                 else
                 {
-                    // フォールバック（通常は呼ばれない）
                     lock (node.Children)
                     {
                         list = node.Children.Where(c => c.Size >= thresholdBytes && (includeFiles || !c.IsFile)).ToList();
@@ -655,7 +777,6 @@ namespace LargeFolderFinder
 
                 if (list != null)
                 {
-                    // インデント幅の統一: Lastの場合もスペース3つ分
                     string childIndent = indent + (isRoot
                         ? ""
                         : (isLast
@@ -698,10 +819,8 @@ namespace LargeFolderFinder
                 List<FolderInfo> visible;
                 lock (node.Children)
                 {
-                    // フィルタリング
                     var query = node.Children.Where(c => c.Size >= thresholdBytes && (includeFiles || !c.IsFile));
 
-                    // ソート
                     switch (sortTarget)
                     {
                         case AppConstants.SortTarget.Size:
@@ -725,7 +844,6 @@ namespace LargeFolderFinder
 
                 cache[node] = visible;
 
-                // 再帰的にキャッシュ構築（可視要素のみ）
                 foreach (var child in visible)
                 {
                     BuildFilterCache(child, cache, thresholdBytes, includeFiles, sortTarget, sortDirection, token);
@@ -738,7 +856,6 @@ namespace LargeFolderFinder
             int width = 0;
             foreach (char c in str)
             {
-                // 半角(1):全角(2)
                 width += (c < 0x81 || (c >= 0xff61 && c < 0xffa0)) ? 1 : 2;
             }
             return width;
@@ -772,114 +889,95 @@ namespace LargeFolderFinder
             Logger.Log(AppConstants.LogCacheLoadStart);
             try
             {
-                var c = CacheData.Load();
-                ApplyLayout(c?.LayoutMode ?? AppConstants.LayoutType.Vertical);
+                var settings = AppSettings.Load();
 
-                if (c != null)
+                Sessions.Clear();
+                if (settings != null)
                 {
-                    // Restore Window Position/Size
-                    if (!double.IsNaN(c.WindowTop) && !double.IsNaN(c.WindowLeft) &&
-                        !double.IsNaN(c.WindowWidth) && !double.IsNaN(c.WindowHeight))
-                    {
-                        this.Top = c.WindowTop;
-                        this.Left = c.WindowLeft;
-                        this.Width = c.WindowWidth;
-                        this.Height = c.WindowHeight;
-                    }
+                    // Restore Window Geometry and State
+                    if (!double.IsNaN(settings.WindowTop)) this.Top = settings.WindowTop;
+                    if (!double.IsNaN(settings.WindowLeft)) this.Left = settings.WindowLeft;
+                    if (!double.IsNaN(settings.WindowWidth)) this.Width = settings.WindowWidth;
+                    if (!double.IsNaN(settings.WindowHeight)) this.Height = settings.WindowHeight;
 
-                    // Restore WindowState
-                    if (c.WindowState == (int)WindowState.Maximized)
+                    if (settings.WindowState == 1) this.WindowState = WindowState.Minimized;
+                    else if (settings.WindowState == 2) this.WindowState = WindowState.Maximized;
+
+                    // Load Sessions
+                    if (settings.SessionFileNames != null)
                     {
-                        this.WindowState = WindowState.Maximized;
+                        foreach (var name in settings.SessionFileNames)
+                        {
+                            var s = SessionFileManager.Load(name);
+                            if (s != null) Sessions.Add(s);
+                        }
                     }
+                    SelectedIndex = settings.SelectedIndex;
+
+                    // Apply Settings
+                    LocalizationManager.Instance.CurrentLanguage = settings.Language;
+                    ApplyLayout(settings.LayoutMode);
+                }
+                else
+                {
+                    // Initial/Default
+                    Sessions.Add(new SessionData() { Path = "c:\\" });
+                    SelectedIndex = 0;
+                    ApplyLayout(AppConstants.LayoutType.Vertical);
                 }
 
-                if (c != null && c.Sessions.Count > 0)
+                if (SelectedIndex < 0 || SelectedIndex >= Sessions.Count) SelectedIndex = 0;
+
+                // Ensure at least one session
+                if (Sessions.Count == 0)
                 {
-                    int idx = c.SelectedIndex;
-                    if (idx < 0 || idx >= c.Sessions.Count) idx = 0;
-                    var session = c.Sessions[idx];
-                    if (session.Result != null)
-                    {
-                        _lastScanResult = session.Result;
-                        // Initial render
-                        _ = RenderResult();
-                    }
+                    Sessions.Add(new SessionData() { Path = "c:\\" });
+                    SelectedIndex = 0;
                 }
+
+                UpdateHeaderFromSession();
                 Logger.Log(AppConstants.LogCacheLoadSuccess);
             }
             catch (Exception ex)
             {
                 Logger.Log(AppConstants.LogCacheLoadError, ex);
+                Sessions.Add(new SessionData() { Path = "c:\\" });
+                SelectedIndex = 0;
+                ApplyLayout(AppConstants.LayoutType.Vertical);
             }
         }
 
         private void SaveCache()
         {
-            if (_layoutView == null)
-            {
-                return;
-            }
-
-            Logger.Log(AppConstants.LogCacheSaveStart);
             try
             {
-                double.TryParse(_layoutView.SearchSizeTextBox.Text, out double th);
-                int.TryParse(_layoutView.TabWidthTextBox.Text, out int tw);
+                var settings = new AppSettings();
+                settings.Language = LocalizationManager.Instance.CurrentLanguage;
+                settings.LayoutMode = MenuLayoutHorizontal.IsChecked ? AppConstants.LayoutType.Horizontal : AppConstants.LayoutType.Vertical;
 
-                var cache = CacheData.Load() ?? new CacheData();
-                cache.Language = LocalizationManager.Instance.CurrentLanguage;
-                cache.LayoutMode = MenuLayoutHorizontal.IsChecked
-                        ? AppConstants.LayoutType.Horizontal
-                        : AppConstants.LayoutType.Vertical;
+                settings.WindowTop = this.Top;
+                settings.WindowLeft = this.Left;
+                settings.WindowWidth = this.Width;
+                settings.WindowHeight = this.Height;
 
-                // Save Window Geometry
-                if (this.WindowState == WindowState.Maximized)
+                if (this.WindowState == WindowState.Maximized) settings.WindowState = 2;
+                else if (this.WindowState == WindowState.Minimized) settings.WindowState = 1;
+                else settings.WindowState = 0;
+
+                settings.SelectedIndex = SelectedIndex;
+
+                var fileNames = new List<string>();
+                foreach (var s in Sessions)
                 {
-                    cache.WindowTop = this.RestoreBounds.Top;
-                    cache.WindowLeft = this.RestoreBounds.Left;
-                    cache.WindowWidth = this.RestoreBounds.Width;
-                    cache.WindowHeight = this.RestoreBounds.Height;
-                    cache.WindowState = (int)WindowState.Maximized;
+                    string name = SessionFileManager.Save(s);
+                    if (!string.IsNullOrEmpty(name)) fileNames.Add(name);
                 }
-                else
-                {
-                    // Normal or Minimized (treat Minimized as Normal using RestoreBounds)
-                    var rect = this.WindowState == WindowState.Minimized ? this.RestoreBounds : new Rect(this.Left, this.Top, this.Width, this.Height);
-                    cache.WindowTop = rect.Top;
-                    cache.WindowLeft = rect.Left;
-                    cache.WindowWidth = rect.Width;
-                    cache.WindowHeight = rect.Height;
-                    cache.WindowState = (int)WindowState.Normal;
-                }
+                settings.SessionFileNames = fileNames.ToArray();
 
-                var session = new SearchSession
-                {
-                    Path = _layoutView.PathTextBox.Text,
-                    Threshold = th,
-                    SeparatorIndex = _layoutView.SeparatorComboBox.SelectedIndex,
-                    TabWidth = tw,
-                    Unit = (AppConstants.SizeUnit)_layoutView.UnitComboBox.SelectedIndex,
-                    IncludeFiles = _layoutView.IncludeFilesCheckBox.IsChecked == true,
-                    SortTarget = (AppConstants.SortTarget)_layoutView.SortComboBox.SelectedIndex,
-                    SortDirection = (AppConstants.SortDirection)_layoutView.SortDirectionComboBox.SelectedIndex,
-                    Result = _lastScanResult
-                };
+                settings.Save();
 
-                if (cache.Sessions.Count == 0)
-                {
-                    cache.Sessions.Add(session);
-                    cache.SelectedIndex = 0;
-                }
-                else
-                {
-                    if (cache.SelectedIndex < 0 || cache.SelectedIndex >= cache.Sessions.Count)
-                        cache.SelectedIndex = 0;
-                    cache.Sessions[cache.SelectedIndex] = session;
-                }
-
-                cache.Save();
-                Logger.Log(AppConstants.LogCacheSaveSuccess);
+                // Clean up old sessions asynchronously
+                Task.Run(() => SessionFileManager.DeleteOldSessions(30));
             }
             catch (Exception ex)
             {
@@ -887,186 +985,7 @@ namespace LargeFolderFinder
             }
         }
 
-        private void UpdateLanguageMenu()
-        {
-            try
-            {
-                Logger.Log(AppConstants.LogUpdateMenuStart);
-                MenuLanguage.Items.Clear();
-                foreach (var l in LocalizationManager.Instance.GetAvailableLanguages())
-                {
-                    var item = new MenuItem
-                    {
-                        Header = l.MenuText,
-                        Tag = l.Code
-                    };
-                    item.Click += (s, e) =>
-                    {
-                        Logger.Log(string.Format(AppConstants.LogLangChangeStart, item.Tag));
-                        LocalizationManager.Instance.CurrentLanguage = (string)item.Tag;
-                        SaveCache();
-                        ApplyLocalization();
-                        if (_lastScanResult != null)
-                        {
-                            _ = RenderResult();
-                        }
-                    };
-                    MenuLanguage.Items.Add(item);
-                }
-                Logger.Log(AppConstants.LogUpdateMenuSuccess);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log(AppConstants.LogUpdateMenuError, ex);
-            }
-        }
 
-        private void MenuView_SubmenuOpened(object sender, RoutedEventArgs e)
-        {
-            if (e.OriginalSource != sender) return;
-            try
-            {
-#if DEBUG
-                Logger.Log("MenuView_SubmenuOpened");
-#endif
-                MenuOpenLogSub.Items.Clear();
-                var logsDir = AppConstants.LogsDirectoryPath;
-                if (Directory.Exists(logsDir))
-                {
-                    var logFiles = Directory.GetFiles(logsDir, "*_Log.txt")
-                        .Select(p => new FileInfo(p))
-                        .OrderByDescending(p => p.CreationTime);
-                    foreach (var f in logFiles)
-                    {
-                        var item = new MenuItem { Header = f.Name, Tag = f.FullName };
-                        item.Click += (s, ev) => OpenOrActivateTextViewer((string)item.Tag);
-                        MenuOpenLogSub.Items.Add(item);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Error Menu/Log/... view failed", ex);
-            }
-        }
-        internal void MenuConfig_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ConfigFileName);
-                if (File.Exists(path))
-                {
-                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-                    Logger.Log(Path.GetFileName(path));
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Error opening...", ex);
-                var lm = LocalizationManager.Instance;
-                MessageBox.Show(
-                    $"{lm.GetText(LanguageKey.ConfigError)}\n{ex.Message}",
-                    lm.GetText(LanguageKey.LabelError),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-            }
-        }
-        private void MenuReadme_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string langCode = LocalizationManager.Instance.CurrentLanguage;
-                if (string.IsNullOrEmpty(langCode)) langCode = "en";
-
-                // 言語コードだけでマッチ (例: ja, en)
-                string filename = AppConstants.GetReadmeFileName(langCode);
-                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ReadmeDirectoryName, filename);
-
-                if (!File.Exists(path))
-                {
-                    // フォールバック: 英語
-                    path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ReadmeDirectoryName, AppConstants.GetReadmeFileName("en"));
-                }
-
-                if (File.Exists(path))
-                {
-                    OpenOrActivateTextViewer(path);
-                    Logger.Log($"Opened {Path.GetFileName(path)}");
-                }
-                else
-                {
-                    var lm = LocalizationManager.Instance;
-                    MessageBox.Show(
-                        $"{lm.GetText(LanguageKey.ReadmeNotFound)}\n{path}",
-                        lm.GetText(LanguageKey.LabelError),
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Error opening...", ex);
-                var lm = LocalizationManager.Instance;
-                MessageBox.Show(
-                    $"{lm.GetText(LanguageKey.ReadmeError)}\n{ex.Message}",
-                    lm.GetText(LanguageKey.LabelError),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-            }
-        }
-        private void MenuAbout_Click(object sender, RoutedEventArgs e)
-        {
-            var lm = LocalizationManager.Instance;
-            MessageBox.Show(
-                string.Format(lm.GetText(LanguageKey.AboutMessage), AppInfo.Title, AppInfo.Version, AppInfo.Copyright),
-                lm.GetText(LanguageKey.AboutTitle)
-            );
-        }
-        private void MenuExit_Click(object sender, RoutedEventArgs e)
-        {
-            Application.Current.Shutdown();
-        }
-        private void MenuRestartAdmin_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = Process.GetCurrentProcess().MainModule?.FileName,
-                    UseShellExecute = true,
-                    Verb = "runas"
-                };
-                if (psi.FileName != null)
-                {
-                    Process.Start(psi);
-                    Application.Current.Shutdown();
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Error restarting as admin", ex);
-            }
-        }
-        private void MenuLayoutVertical_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyLayout(AppConstants.LayoutType.Vertical);
-        }
-        private void MenuLayoutHorizontal_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyLayout(AppConstants.LayoutType.Horizontal);
-        }
-        private void OpenOrActivateTextViewer(string path)
-        {
-            foreach (Window w in Application.Current.Windows)
-            {
-                if (w is TextViewer v && string.Equals(v.FilePath, path, StringComparison.OrdinalIgnoreCase))
-                {
-                    w.Activate();
-                    return;
-                }
-            }
-            new TextViewer(path).Show();
-        }
 
         private void OptimizeMemory()
         {
@@ -1074,55 +993,218 @@ namespace LargeFolderFinder
             {
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
-                GC.Collect();
-                Win32.SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, -1, -1);
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                {
+                    Win32.SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, -1, -1);
+                }
             }
-            catch (Exception ex)
-            {
-                Logger.Log("Error optimizing memory", ex);
-            }
-            Logger.Log(AppConstants.LogOptimizeMemory);
+            catch { }
         }
 
         private void InitializeMemoryTimer()
         {
-            _memoryTimer = new DispatcherTimer(DispatcherPriority.Background)
+            _memoryTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMinutes(AppConstants.MemoryOptimizeIntervalMinutes)
+                Interval = TimeSpan.FromMinutes(1)
             };
             _memoryTimer.Tick += (s, e) => OptimizeMemory();
             _memoryTimer.Start();
         }
 
-        private void MenuAppLicense_Click(object sender, RoutedEventArgs e)
+        private void UpdateLanguageMenu()
         {
-            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.LicenseDirectoryName, AppConstants.AppLicenseFileName);
+            // Simple implementation or reference existing
+            // ...
+            // Rebuild Language Menu from Languages folder
+            MenuLanguage.Items.Clear();
+            var languages = LocalizationManager.Instance.GetAvailableLanguages();
+            string currentLang = LocalizationManager.Instance.CurrentLanguage;
+
+            foreach (var langConfig in languages)
+            {
+                var lang = langConfig.Code;
+                var item = new MenuItem
+                {
+                    Header = langConfig.MenuText,
+                    IsCheckable = true,
+                    IsChecked = lang == currentLang
+                };
+                item.Click += (s, e) => ChangeLanguage(lang);
+                MenuLanguage.Items.Add(item);
+            }
+        }
+
+        private void ChangeLanguage(string lang)
+        {
+            LocalizationManager.Instance.CurrentLanguage = lang;
+            ApplyLocalization();
+
+            var settings = AppSettings.Load() ?? new AppSettings();
+            settings.Language = lang;
+            settings.Save();
+
+            UpdateLanguageMenu();
+        }
+
+        // AddTab Logic
+        private void AddTabButton_Click(object sender, RoutedEventArgs e)
+        {
+            AddNewTab();
+        }
+
+        private void AddNewTab()
+        {
+            if (Sessions.Count >= 10) return;
+
+            var newSession = new SessionData() { Path = "c:\\" };
+            Sessions.Add(newSession);
+            SelectedIndex = Sessions.Count - 1;
+
+            UserControl view = MenuLayoutHorizontal.IsChecked
+                ? (UserControl)new HorizontalLayoutView(this)
+                : (UserControl)new VerticalLayoutView(this);
+            InitializeView((IMainLayoutView)view, newSession);
+            newSession.CurrentView = view;
+
+            UpdateHeaderFromSession();
+            UpdateAddButtonState();
+        }
+
+        private void UpdateAddButtonState()
+        {
+            if (AddTabButton != null)
+                AddTabButton.IsEnabled = Sessions.Count < 10;
+        }
+
+        private void TabCloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is SessionData session)
+            {
+                // Cancel partial scan if any?
+                session.Cts?.Cancel();
+
+                int idx = Sessions.IndexOf(session);
+                Sessions.Remove(session);
+
+                if (Sessions.Count == 0)
+                {
+                    AddNewTab(); // Add default
+                }
+                else if (idx == SelectedIndex) // If we closed active tab
+                {
+                    SelectedIndex = Math.Min(idx, Sessions.Count - 1);
+                }
+                UpdateAddButtonState();
+            }
+        }
+
+        // Input Logic (Path TextBox)
+        private void Input_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                ScanButton_Click(sender, e);
+            }
+        }
+
+        // --- Existing Menu Event Handlers ---
+        private void MenuLayoutVertical_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyLayout(AppConstants.LayoutType.Vertical);
+        }
+
+        private void MenuLayoutHorizontal_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyLayout(AppConstants.LayoutType.Horizontal);
+        }
+
+        private void MenuConfig_Click(object sender, RoutedEventArgs e)
+        {
             try
             {
+                if (!Directory.Exists(AppConstants.AppDataDirectory))
+                {
+                    Directory.CreateDirectory(AppConstants.AppDataDirectory);
+                }
+                Process.Start("explorer.exe", AppConstants.AppDataDirectory);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to open config folder", ex);
+            }
+        }
+
+        private void MenuReadme_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string lang = LocalizationManager.Instance.CurrentLanguage;
+                // Fallback to "en" if empty
+                if (string.IsNullOrEmpty(lang)) lang = "en";
+
+                // Assuming format like "Readme_ja.txt"
+                string fileName = AppConstants.GetReadmeFileName(lang);
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ReadmeDirectoryName, fileName);
+
+                if (!File.Exists(path))
+                {
+                    path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ReadmeDirectoryName, "Readme_en.txt");
+                }
+
                 if (File.Exists(path))
                 {
                     OpenOrActivateTextViewer(path);
-                    Logger.Log($"Opened {Path.GetFileName(path)}");
                 }
                 else
                 {
-                    var lm = LocalizationManager.Instance;
-                    MessageBox.Show(
-                        lm.GetText(LanguageKey.LicenseNotFoundError),
-                        lm.GetText(LanguageKey.LabelError),
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
+                    MessageBox.Show("Readme file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
             catch (Exception ex)
             {
-                Logger.Log($"Error opening... {path}", ex);
-                var lm = LocalizationManager.Instance;
-                MessageBox.Show(
-                    $"{lm.GetText(LanguageKey.LabelError)}\n{ex.Message}",
-                    lm.GetText(LanguageKey.LabelError),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                Logger.Log("Failed to open Readme", ex);
+            }
+        }
+
+        private void MenuRestartAdmin_Click(object sender, RoutedEventArgs e)
+        {
+            var exe = Process.GetCurrentProcess().MainModule?.FileName;
+            if (exe != null)
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(exe) { Verb = "runas", UseShellExecute = true });
+                    Application.Current.Shutdown();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Failed to restart as admin", ex);
+                }
+            }
+        }
+
+        private void MenuExit_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
+        }
+
+        private void MenuAppLicense_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.LicenseDirectoryName, AppConstants.AppLicenseFileName);
+                if (File.Exists(path))
+                {
+                    OpenOrActivateTextViewer(path);
+                }
+                else
+                {
+                    MessageBox.Show("License file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to show app license", ex);
             }
         }
 
@@ -1134,28 +1216,99 @@ namespace LargeFolderFinder
                 if (File.Exists(path))
                 {
                     OpenOrActivateTextViewer(path);
-                    Logger.Log($"Opened {Path.GetFileName(path)}");
                 }
                 else
                 {
-                    var lm = LocalizationManager.Instance;
-                    MessageBox.Show(
-                        $"{lm.GetText(LanguageKey.LicenseNotFoundError)}\n{path}",
-                        lm.GetText(LanguageKey.LabelError),
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
+                    MessageBox.Show("Third-party notices file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
             catch (Exception ex)
             {
-                Logger.Log($"Error opening...", ex);
-                var lm = LocalizationManager.Instance;
-                MessageBox.Show(
-                    $"{lm.GetText(LanguageKey.LabelError)}\n{ex.Message}",
-                    lm.GetText(LanguageKey.LabelError),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                Logger.Log("Failed to show third party licenses", ex);
             }
+        }
+
+        private void MenuAbout_Click(object sender, RoutedEventArgs e)
+        {
+            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            string versionStr = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
+
+            string message = LocalizationManager.Instance.GetText(LanguageKey.AboutMessage)
+                .Replace("{Version}", versionStr)
+                .Replace("{Date}", DateTime.Now.ToString("yyyy/MM/dd")) // Use current date or build date
+                .Replace("\\n", "\n");
+
+            MessageBox.Show(message, LocalizationManager.Instance.GetText(LanguageKey.AboutTitle), MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuView_SubmenuOpened(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Rebuild Log Submenu
+                MenuOpenLogSub.Items.Clear();
+                string logDir = AppConstants.LogsDirectoryPath;
+
+                if (Directory.Exists(logDir))
+                {
+                    var files = Directory.GetFiles(logDir, $"*.{AppConstants.LogsExtension}")
+                                         .OrderByDescending(f => File.GetCreationTime(f))
+                                         .Take(10); // Show recent 10 logs
+
+                    foreach (var file in files)
+                    {
+                        var item = new MenuItem { Header = Path.GetFileName(file) };
+                        item.Click += (s, args) =>
+                        {
+                            OpenOrActivateTextViewer(file);
+                        };
+                        MenuOpenLogSub.Items.Add(item);
+                    }
+                }
+
+                if (MenuOpenLogSub.Items.Count == 0)
+                {
+                    var item = new MenuItem { Header = "(No logs)", IsEnabled = false };
+                    MenuOpenLogSub.Items.Add(item);
+                }
+
+                MenuOpenLogSub.Items.Add(new Separator());
+
+                var openFolderItem = new MenuItem { Header = "Open Log Folder..." };
+                openFolderItem.Click += (s, args) =>
+                {
+                    try
+                    {
+                        if (!Directory.Exists(logDir)) Directory.CreateDirectory(logDir);
+                        Process.Start("explorer.exe", logDir);
+                    }
+                    catch { }
+                };
+                MenuOpenLogSub.Items.Add(openFolderItem);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to update log menu", ex);
+            }
+        }
+
+        private void OpenOrActivateTextViewer(string path)
+        {
+            foreach (Window window in Application.Current.Windows)
+            {
+                if (window is TextViewer viewer && string.Equals(viewer.FilePath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (window.WindowState == WindowState.Minimized)
+                    {
+                        window.WindowState = WindowState.Normal;
+                    }
+                    Logger.Log($"Already Opened TextViewer for {Path.GetFileName(path)}");
+                    window.Activate();
+                    return;
+                }
+            }
+            Logger.Log($"Opened TextViewer for {Path.GetFileName(path)}");
+            new TextViewer(path).Show();
         }
     }
 }
