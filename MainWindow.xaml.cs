@@ -849,6 +849,11 @@ namespace LargeFolderFinder
             sb.Append(line);
 
             int curLen = GetStringWidth(line);
+            // if (useSpaces)
+            //     sb.Append(' ', targetColumn - curLen);
+            // else
+            //     //                sb.Append('\t', 1 + (((tabWidth-1)+targetColumn) / tabWidth) - (((tabWidth-1)+curLen) / tabWidth) );
+            //     sb.Append('\t', (targetColumn - curLen) / tabWidth);
             while (curLen < targetColumn)
             {
                 if (useSpaces)
@@ -1074,9 +1079,20 @@ namespace LargeFolderFinder
             int width = 0;
             foreach (char c in str)
             {
-                width += (c < 0x81 || (c >= 0xff61 && c < 0xffa0)) ? 1 : 2;
+                width += GetCharWidth(c);
             }
             return width;
+        }
+
+        private int GetCharWidth(char c)
+        {
+            if (c < 0x81 || (0xff61 <= c && c < 0xffa0)) return 1;
+            var category = Char.GetUnicodeCategory(c);
+            if (category == UnicodeCategory.NonSpacingMark
+                || category == UnicodeCategory.EnclosingMark
+                || category == UnicodeCategory.Format)
+                return 0;
+            return 2;
         }
 
         private string FormatDuration(TimeSpan ts)
