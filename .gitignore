@@ -61,13 +61,8 @@ ServiceFabricBackup/
 Thumbs.db
 
 # Project specific
-build_err.txt
-build_errors.txt
-build_log.txt
-build_log_ascii.txt
-build_log_utf8.txt
-build_output.txt
-build_result*.txt
+build*.log
+build*.txt
 msbuild.log
 Cache.bin
 /docs/

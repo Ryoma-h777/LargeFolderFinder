@@ -5,16 +5,19 @@ MenuFile: "File(_F)"
 MenuOpenConfig: "Open Advanced Settings(_S)"
 MenuOpenLogSub: "Open Logs(_O)"
 MenuRestartAdmin: "Restart as Administrator(_A)"
+MenuRestartAdminToolTip: "Allows scanning of areas requiring privileges"
 MenuExit: "Exit(_X)"
+# View
+MenuView: "View(_V)"
+MenuLayout: "Layout(_L)"
+MenuLayoutVertical: "Vertical(_V)"
+MenuLayoutHorizontal: "Horizontal(_H)"
 # Help
 MenuHelp: "Help(_H)"
 MenuOpenReadme: "Open Readme(_R)"
 MenuLicense: "License(_L)"
 MenuAppLicense: "App License(_A)"
-MenuView: "View(_V)"
-MenuLayout: "Layout(_L)"
-MenuLayoutVertical: "Vertical(_V)"
-MenuLayoutHorizontal: "Horizontal(_H)"
+MenuThirdPartyLicenses: "Third-Party Licenses(_T)"
 MenuAbout: "About(_A)"
 
 # Viewer (Log, Readme, License)
@@ -23,40 +26,41 @@ ViewerOpenFolder: "Open Folder"
 ViewerClose: "Close"
 # Version Modal
 AboutTitle: "About"
-AboutMessage: "{0}\nVersion {1}\n{2}\n\nA tool to quickly find large folders."
+AboutMessage: "{0}\n{1}\nVersion {2}\n\nTool to quickly visualize large folders and hierarchy."
 DialogInfo: "Information"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "Folder:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "Minimum Size:"
-SearchSizeToolTip: "Extracts and lists folders larger than or equal to this size. 0 can be specified, but the smaller the size, the longer the scan takes."
-# FolderName<---Space--->Size
-SeparatorLabel: "Space:"
-SeparatorToolTip: "Specifies the space between the folder name and size ({0})."
-TabWidthLabel: "Width:"
 # Scan Button
-ScanButton: "Scan"
-CancelButton: "Cancel"
-CancelToolTip: "Cancel. It may take time, so press the X button if you can't wait."
+ScanButtonToolTip: "Scan"
+CancelButtonToolTip: "Cancel. It may take time, so press the X button if you can't wait."
 # Advance Setting Button
 OpenConfigToolTip: "Open advanced settings (Config.txt)"
+
+####### View #######
+ViewLabel: "View"
+# MinSize
+MinSizeLabel: "Minimum Size:"
+MinSizeToolTip: "Shows items larger than this size. 0 allowed, but can be slow."
+# FolderName<---Space--->Size
+SeparatorLabel: "Space:"
+SeparatorToolTip: "Specifies space between name and size."
+TabWidthLabel: "Width:"
 # Clipboard Copy Button
 CopyToolTip: "Copy result to clipboard"
 IncludeFiles: "Show Files"
-ViewLabel: "View"
-
-## Line 3
 # Sort
 SortLabel: "Sort:"
-TargetSize: "Size"
-TargetName: "Name"
-TargetDate: "Date"
+SortSize: "Size"
+SortName: "Name"
+SortDate: "Date"
 DirectionAsc: "Asc"
 DirectionDesc: "Desc"
+
+####### Result #######
+LiveScanningMessage: "Scanning... Size({0}) shows intermediate results."
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "Ready"
@@ -64,8 +68,11 @@ ScanningStatus: "Scanning..."
 CancelledStatus: "Cancelled"
 FinishedStatus: "Finished"
 NotFoundMessage: "No matching folders found."
-CopyNotification: "Copied!"
 FolderCountStatus: "Checking number of folders..."
+RenderingStatus: "Rendering..."
+Unknown: "Unknown" # Progress bar display: Shown when the total count is unknown.
+LabelError: "Error"
+UnitFolder: " folders"
 # time
 RemainingTimeH: "About {0}{1}{2}{3} remaining"
 RemainingTimeM: "About {0}{1}{2}{3} remaining"
@@ -77,30 +84,20 @@ UnitMinute: "minute"
 UnitSecond: "second"
 UnitMillisecond: "millisecond"
 UnitElapsed: "elapsed"
-
-Unknown: "Unknown" # Progress bar display: Shown when the total count is unknown.
-LabelError: "Error"
-UnitFolder: " folders"
-
-DetailLabel: "Details:"
-LiveScanningMessage: "Scanning... Size({0}) shows intermediate results."
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0}{1}"
 TimeStatusFormat: "{0} {1}"
 
+# tempolaty Notification
+CopyNotification: "Copied!"
+
 ####### Error Messages #######
 ConfigError: "Config.txt"
 ReadmeError: "Failed to open Readme.txt: "
-ReadmeNotFound: "Readme.txt not found."
 PathInvalidError: "Please select a valid folder."
 ThresholdInvalidError: "Invalid search size."
 InitializationError: "An error occurred during application initialization:"
 ClipboardError: "Failed to copy to clipboard: "
-ProgressErrorLabel: "Progress display error:"
-RenderErrorLabel: "Render error:"
-RenderingStatus: "Rendering..."
-DebugInfoTitle: "Debug Info"
-MenuThirdPartyLicenses: "Third-Party Licenses(_T)"
-LicenseNotFoundError: "License file ({0}) not found."

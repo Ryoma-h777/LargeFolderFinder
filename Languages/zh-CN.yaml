@@ -5,12 +5,19 @@ MenuFile: "文件(_F)"
 MenuOpenConfig: "打开高级设置(_S)"
 MenuOpenLogSub: "打开日志(_O)"
 MenuRestartAdmin: "以管理员身份重新启动(_A)"
+MenuRestartAdminToolTip: "允许扫描需要权限的区域"
 MenuExit: "退出(_X)"
+# View
+MenuView: "视图(_V)"
+MenuLayout: "布局(_L)"
+MenuLayoutVertical: "垂直布局(_V)"
+MenuLayoutHorizontal: "水平布局(_H)"
 # Help
 MenuHelp: "帮助(_H)"
 MenuOpenReadme: "打开 Readme(_R)"
 MenuLicense: "许可(_L)"
 MenuAppLicense: "应用许可(_A)"
+MenuThirdPartyLicenses: "第三方许可(_T)"
 MenuAbout: "关于(_A)"
 
 # Viewer (Log, Readme, License)
@@ -19,44 +26,41 @@ ViewerOpenFolder: "打开文件夹"
 ViewerClose: "关闭"
 # Version Modal
 AboutTitle: "关于"
-AboutMessage: "{0}\n版本 {1}\n{2}\n\n快速查找大文件夹的工具。"
+AboutMessage: "{0}\n{1}\n版本 {2}\n\n快速搜索大文件夹和层次结构的工具。"
 DialogInfo: "信息"
-MenuView: "视图(_V)"
-MenuLayout: "布局(_L)"
-MenuLayoutVertical: "垂直布局(_V)"
-MenuLayoutHorizontal: "水平布局(_H)"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "文件夹:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "最小大小:"
-SearchSizeToolTip: "提取并列出大于此大小的文件夹。可以指定 0，但大小越小，扫描所需的时间就越长。"
-# FolderName<---Space--->Size
-SeparatorLabel: "分隔符:"
-SeparatorToolTip: "指定文件夹名称与大小 ({0}) 之间的空格。"
-TabWidthLabel: "宽度:"
 # Scan Button
-ScanButton: "扫描"
-CancelButton: "取消"
-CancelToolTip: "取消。如果不起作用，请按 X 按钮。"
+ScanButtonToolTip: "扫描"
+CancelButtonToolTip: "取消。如果不起作用，请按 X 按钮。"
 # Advance Setting Button
 OpenConfigToolTip: "打开高级设置 (Config.txt)"
+
+####### View #######
+ViewLabel: "视图"
+# MinSize
+MinSizeLabel: "最小大小:"
+MinSizeToolTip: "显示大于此大小的项目。可设为0，但可能较慢。"
+# FolderName<---Space--->Size
+SeparatorLabel: "分隔符:"
+SeparatorToolTip: "指定名称和大小之间的空格。"
+TabWidthLabel: "宽度:"
 # Clipboard Copy Button
 CopyToolTip: "复制到剪贴板"
 IncludeFiles: "显示文件"
-ViewLabel: "视图"
-
-## Line 3
 # Sort
 SortLabel: "排序:"
-TargetSize: "大小"
-TargetName: "名称"
-TargetDate: "修改日期"
+SortSize: "大小"
+SortName: "名称"
+SortDate: "修改日期"
 DirectionAsc: "升序"
 DirectionDesc: "降序"
+
+####### Result #######
+LiveScanningMessage: "正在扫描... 大小 ({0}) 显示中间结果。"
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "就绪"
@@ -64,8 +68,11 @@ ScanningStatus: "正在扫描..."
 CancelledStatus: "已取消"
 FinishedStatus: "已完成"
 NotFoundMessage: "未找到匹配的文件夹。"
-CopyNotification: "已复制！"
 FolderCountStatus: "正在检查文件夹数量..."
+RenderingStatus: "正在渲染..."
+Unknown: "未知" # 进度条显示：总数未知时显示。
+LabelError: "错误"
+UnitFolder: " 文件夹"
 # time
 RemainingTimeH: "剩余约 {0}{1} {2}{3}"
 RemainingTimeM: "剩余约 {0}{1} {2}{3}"
@@ -77,30 +84,20 @@ UnitMinute: "分"
 UnitSecond: "秒"
 UnitMillisecond: "毫秒"
 UnitElapsed: "已用时"
-
-Unknown: "未知" # 进度条显示：总数未知时显示。
-LabelError: "错误"
-UnitFolder: " 文件夹"
-
-DetailLabel: "详细信息:"
-LiveScanningMessage: "正在扫描... 大小 ({0}) 显示中间结果。"
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} 已用时"
 
+# tempolaty Notification
+CopyNotification: "已复制！"
+
 ####### Error Messages #######
 ConfigError: "无法打开配置文件: "
 ReadmeError: "无法打开 Readme: "
-ReadmeNotFound: "找不到 Readme.txt。"
 PathInvalidError: "请选择一个有效的文件夹。"
 ThresholdInvalidError: "搜索大小无效。"
 InitializationError: "应用程序初始化期间发生错误:"
 ClipboardError: "复制到剪贴板失败: "
-ProgressErrorLabel: "进度错误:"
-RenderErrorLabel: "渲染错误:"
-RenderingStatus: "正在渲染..."
-DebugInfoTitle: "调试信息"
-MenuThirdPartyLicenses: "第三方许可(_T)"
-LicenseNotFoundError: "未找到许可证文件 ({0})。"

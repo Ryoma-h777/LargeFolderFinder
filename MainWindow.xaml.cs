@@ -27,7 +27,6 @@ namespace LargeFolderFinder
     /// </summary>
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
-        private CancellationTokenSource? _renderCts;
         private DispatcherTimer? _memoryTimer;
         private bool _hasShownProgressError = false;
 
@@ -93,7 +92,7 @@ namespace LargeFolderFinder
                 MessageBox.Show(
                     $"{LocalizationManager.Instance.GetText(LanguageKey.InitializationError)}\n" +
                     $"{ex.Message}\n\n" +
-                    $"{LocalizationManager.Instance.GetText(LanguageKey.DetailLabel)}\n{ex.StackTrace}",
+                    $"Error Detail:\n{ex.StackTrace}",
                     LocalizationManager.Instance.GetText(LanguageKey.AboutTitle),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -113,9 +112,9 @@ namespace LargeFolderFinder
                 view.UnitComboBox.Items.Add(u);
 
             view.SortComboBox.Items.Clear();
-            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetSize));
-            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetName));
-            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.TargetDate));
+            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.SortSize));
+            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.SortName));
+            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.SortDate));
 
             view.SortDirectionComboBox.Items.Clear();
             view.SortDirectionComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.DirectionAsc));
@@ -134,15 +133,27 @@ namespace LargeFolderFinder
                 _ = RenderResult(session);
             };
 
-            view.SearchSizeTextBox.TextChanged += (s, e) => { _ = RenderResult(session); };
+            view.MinSizeTextBox.TextChanged += (s, e) => { _ = RenderResult(session); };
             view.UnitComboBox.SelectionChanged += (s, e) => { _ = RenderResult(session); };
             view.SortComboBox.SelectionChanged += (s, e) => { _ = RenderResult(session); };
             view.SortDirectionComboBox.SelectionChanged += (s, e) => { _ = RenderResult(session); };
             view.IncludeFilesCheckBox.Click += (s, e) => { _ = RenderResult(session); };
             view.TabWidthTextBox.TextChanged += (s, e) => { _ = RenderResult(session); };
 
+            // FontSize Logic
+            view.FontSizeTextBox.TextChanged += (s, e) =>
+            {
+                if (double.TryParse(view.FontSizeTextBox.Text, out double newSize) && newSize > 0)
+                {
+                    view.OutputListBox.FontSize = newSize;
+                    var config = AppSettings.Load() ?? new AppSettings();
+                    config.FontSize = newSize;
+                    config.Save();
+                }
+            };
+
             // Set Initial Values from Session
-            view.SearchSizeTextBox.Text = session.Threshold.ToString();
+            view.MinSizeTextBox.Text = session.Threshold.ToString();
             view.UnitComboBox.SelectedIndex = (int)session.Unit;
             view.SortComboBox.SelectedIndex = (int)session.SortTarget;
             view.SortDirectionComboBox.SelectedIndex = (int)session.SortDirection;
@@ -152,6 +163,11 @@ namespace LargeFolderFinder
 
             // Initial Visibility
             view.TabWidthArea.Visibility = session.SeparatorIndex == (int)AppConstants.Separator.Tab ? Visibility.Visible : Visibility.Collapsed;
+
+            // Initialize FontSize
+            var settings = AppSettings.Load() ?? new AppSettings();
+            view.FontSizeTextBox.Text = settings.FontSize.ToString();
+            view.OutputListBox.FontSize = settings.FontSize;
 
             // Apply Localization
             view.ApplyLocalization(LocalizationManager.Instance);
@@ -175,13 +191,13 @@ namespace LargeFolderFinder
 
                 // Update buttons state
                 bool isScanning = session.IsScanning;
-                runButton.IsEnabled = !isScanning;
+                scanButton.IsEnabled = !isScanning;
                 cancelButton.IsEnabled = isScanning;
             }
             else
             {
                 pathTextBox.Text = "";
-                runButton.IsEnabled = true;
+                scanButton.IsEnabled = true;
                 cancelButton.IsEnabled = false;
             }
         }
@@ -248,7 +264,7 @@ namespace LargeFolderFinder
             session.Path = path;
 
             // Sync Settings from View to Session
-            if (!double.TryParse(view.SearchSizeTextBox.Text, out double thresholdVal))
+            if (!double.TryParse(view.MinSizeTextBox.Text, out double thresholdVal))
             {
                 MessageBox.Show(
                     lm.GetText(LanguageKey.ThresholdInvalidError),
@@ -283,7 +299,7 @@ namespace LargeFolderFinder
             session.IsScanning = true;
             UpdateHeaderFromSession(); // Update buttons
 
-            view.OutputTextBox.Clear();
+            view.OutputListBox.ItemsSource = null;
             view.ScanProgressBar.Visibility = Visibility.Visible;
             view.ScanProgressBar.Value = 0;
             view.StatusTextBlock.Text = lm.GetText(LanguageKey.FolderCountStatus);
@@ -377,7 +393,7 @@ namespace LargeFolderFinder
                         if (!_hasShownProgressError)
                         {
                             _hasShownProgressError = true;
-                            MessageBox.Show($"{lm.GetText(LanguageKey.ProgressErrorLabel)} {ex.Message}", "Debug");
+                            MessageBox.Show($"Failed to update progress: {ex.Message}", "Debug");
                         }
                     }
                 });
@@ -460,19 +476,33 @@ namespace LargeFolderFinder
             }
         }
 
-        internal void CopyButton_Click(object sender, RoutedEventArgs e)
+        internal async void CopyButton_Click(object sender, RoutedEventArgs e)
         {
             var view = CurrentLayoutView;
             if (view == null) return;
+            // Get current session safely
+            if (SelectedIndex < 0 || SelectedIndex >= Sessions.Count) return;
+            var session = Sessions[SelectedIndex];
+
             try
             {
-                string text = view.OutputTextBox.Text;
+                // バックグラウンド生成待ち
+                if (session.CopyTextGenerationTask != null && !session.CopyTextGenerationTask.IsCompleted)
+                {
+                    System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+                    await session.CopyTextGenerationTask;
+                    System.Windows.Input.Mouse.OverrideCursor = null;
+                }
+
+                string? text = session.CachedCopyText;
                 if (string.IsNullOrWhiteSpace(text)) return;
+
                 Clipboard.SetText(text);
                 ShowNotification(view, LocalizationManager.Instance.GetText(LanguageKey.CopyNotification));
             }
             catch (Exception ex)
             {
+                System.Windows.Input.Mouse.OverrideCursor = null;
                 Logger.Log(AppConstants.LogClipboardError, ex);
                 MessageBox.Show(
                     $"{LocalizationManager.Instance.GetText(LanguageKey.ClipboardError)}{ex.Message}",
@@ -534,6 +564,7 @@ namespace LargeFolderFinder
             MenuOpenLogSub.Header = lm.GetText(LanguageKey.MenuOpenLogSub);
             MenuExit.Header = lm.GetText(LanguageKey.MenuExit);
             MenuRestartAdmin.Header = lm.GetText(LanguageKey.MenuRestartAdmin);
+            MenuRestartAdmin.ToolTip = lm.GetText(LanguageKey.MenuRestartAdminToolTip);
             MenuHelp.Header = lm.GetText(LanguageKey.MenuHelp);
             MenuOpenReadme.Header = lm.GetText(LanguageKey.MenuOpenReadme);
             MenuAbout.Header = lm.GetText(LanguageKey.MenuAbout);
@@ -545,9 +576,15 @@ namespace LargeFolderFinder
             MenuLayoutVertical.Header = lm.GetText(LanguageKey.MenuLayoutVertical);
             MenuLayoutHorizontal.Header = lm.GetText(LanguageKey.MenuLayoutHorizontal);
 
+            browseButton.Content = lm.GetText(LanguageKey.BrowseButton);
+            scanButton.ToolTip = lm.GetText(LanguageKey.ScanButtonToolTip);
+            cancelButton.ToolTip = lm.GetText(LanguageKey.CancelButtonToolTip);
+            configButton.ToolTip = lm.GetText(LanguageKey.OpenConfigToolTip);
+
             foreach (var session in Sessions)
             {
                 (session.CurrentView as IMainLayoutView)?.ApplyLocalization(lm);
+                _ = RenderResult(session);
             }
             Logger.Log(AppConstants.LogApplyLocSuccess);
         }
@@ -568,7 +605,7 @@ namespace LargeFolderFinder
                 // So let's Update Session from View before render, OR just use View values directly for render logic.
                 // Using View values directly is safer for "What you see is what you get".
 
-                if (!double.TryParse(view.SearchSizeTextBox.Text, out double thresholdVal)) return;
+                if (!double.TryParse(view.MinSizeTextBox.Text, out double thresholdVal)) return;
 
                 AppConstants.SizeUnit unit = (AppConstants.SizeUnit)view.UnitComboBox.SelectedIndex;
                 long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(unit));
@@ -581,27 +618,33 @@ namespace LargeFolderFinder
                 int.TryParse(view.TabWidthTextBox.Text, out tabWidth);
 
                 // 前回の処理をキャンセル
-                _renderCts?.Cancel();
-                _renderCts = new CancellationTokenSource();
-                var token = _renderCts.Token;
+                session.RenderCts?.Cancel();
+                session.RenderCts = new CancellationTokenSource();
+                var token = session.RenderCts.Token;
 
                 // UIフェードバック開始
                 System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
-                string originalStatus = view.StatusTextBlock.Text;
-                view.StatusTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.RenderingStatus);
+
+                // 現在のステータスが「描画中」ではない場合のみ保存する（連続呼び出し時の上書き防止）
+                string renderingText = LocalizationManager.Instance.GetText(LanguageKey.RenderingStatus);
+                if (view.StatusTextBlock.Text != renderingText)
+                {
+                    session.LastStatus = view.StatusTextBlock.Text;
+                }
+                view.StatusTextBlock.Text = renderingText;
 
                 try
                 {
-                    // バックグラウンドでレイアウト計算と文字列生成を実行
-                    string resultText = await Task.Run(() =>
+                    // バックグラウンドでレイアウト計算とリスト生成を実行
+                    var resultList = await Task.Run(() =>
                     {
-                        if (token.IsCancellationRequested) return "";
+                        if (token.IsCancellationRequested) return new List<FolderRowItem>();
 
                         // 1. フィルタリングとソートの結果をキャッシュ（一貫性確保と高速化）
                         var filterCache = new Dictionary<FolderInfo, List<FolderInfo>>();
                         BuildFilterCache(session.Result, filterCache, thresholdBytes, includeFiles, sortTarget, sortDirection, token);
 
-                        if (token.IsCancellationRequested) return "";
+                        if (token.IsCancellationRequested) return new List<FolderRowItem>();
 
                         // 2. 最大行長の計算（ソート順序非依存・キャッシュ利用）
                         int maxLineLen = CalculateMaxLineLength(
@@ -613,14 +656,13 @@ namespace LargeFolderFinder
                             thresholdBytes,
                             includeFiles);
 
-                        if (token.IsCancellationRequested) return "";
+                        if (token.IsCancellationRequested) return new List<FolderRowItem>();
 
                         int targetColumn = ((maxLineLen / tabWidth) + 1) * tabWidth;
-                        var sb = new StringBuilder();
 
-                        // 3. 文字列の生成（ソート順序依存・キャッシュ利用）
-                        PrintTreeRecursive(
-                            sb,
+                        // 3. リスト項目の生成（ソート順序依存・キャッシュ利用）
+                        // UI仮像化用リストを返す
+                        return GenerateListItemsRecursive(
                             session.Result,
                             filterCache, // キャッシュを使用
                             "",
@@ -631,14 +673,66 @@ namespace LargeFolderFinder
                             tabWidth,
                             thresholdBytes,
                             unit,
-                            includeFiles);
-
-                        return sb.ToString();
+                            includeFiles).ToList();
                     }, token);
 
                     if (!token.IsCancellationRequested)
                     {
-                        view.OutputTextBox.Text = resultText;
+                        // UI更新（一瞬）
+                        view.OutputListBox.ItemsSource = resultList;
+
+                        // コピー用テキストの非同期バックグラウンド生成
+                        // これによりUIをブロックせずにコピーの準備を行う
+                        session.CachedCopyText = null;
+
+                        // 以前のタスクがあれば待機することも考えられるが、ここでは新しいタスクを開始する。
+                        // ただし、RenderResultの呼び出し元の RenderCts とは別に、コピー生成専用のキャンセルが必要かもしれない。
+                        // 今回の要件では「再生成しなおす」ので、古いタスクの結果を破棄すればよい。
+                        // SessionData に CopyCts を持たせるのが確実だが、一旦 Task 自体を置き換える。
+                        // 生成処理内で IsExpanded を見るので、古いのを作成してもユーザー操作で即座に無効になる。
+
+                        // キャンセルさせるためにCancellationTokenSourceを使う
+                        session.CopyCts?.Cancel();
+                        session.CopyCts = new CancellationTokenSource();
+                        var copyToken = session.CopyCts.Token;
+
+                        session.CopyTextGenerationTask = Task.Run(() =>
+                        {
+                            try
+                            {
+                                if (copyToken.IsCancellationRequested) return;
+
+                                // 再度フィルタキャッシュを作る必要があるが、スレッドセーフでないため
+                                // RenderResult内と同じ条件で再計算させるか、あるいはRenderResult内でCacheも丸ごと渡すか。
+                                // ここでは、RenderResult完了後なので、RenderResult内で作った filterCache は Task内でアクセスできない（Task外変数はキャプチャされるが、GCリスクあり）
+                                // 安全のため、再計算するコストを受け入れる（表示は終わっているのでユーザーは操作可能）。
+                                // または、RenderResult内で生成したパラメーターをキャプチャして使う。
+
+                                // ここでは簡便のため、RenderResultと同じパラメータで再実行する。
+                                // ただし、filterCacheは大きいので再生成する。
+                                var bgCache = new Dictionary<FolderInfo, List<FolderInfo>>();
+                                // BuildFilterCacheはUIスレッドで呼ぶべきではないが、node構造が変わらなければOK。
+                                BuildFilterCache(session.Result, bgCache, thresholdBytes, includeFiles, sortTarget, sortDirection, CancellationToken.None);
+
+                                if (copyToken.IsCancellationRequested) return;
+
+                                // maxLineLen も再計算が必要 (targetColumnが変わる可能性があるため)
+                                int bgMaxLen = CalculateMaxLineLength(session.Result, bgCache, 0, true, true, thresholdBytes, includeFiles);
+                                int bgTargetCol = ((bgMaxLen / tabWidth) + 1) * tabWidth;
+
+                                var sb = new StringBuilder();
+                                PrintTreeRecursive(sb, session.Result, bgCache, "", true, true, bgTargetCol, useSpaces, tabWidth, thresholdBytes, unit, includeFiles, copyToken);
+
+                                if (!copyToken.IsCancellationRequested)
+                                {
+                                    session.CachedCopyText = sb.ToString();
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Log("Background copy text generation failed", ex);
+                            }
+                        }, copyToken);
                     }
                 }
                 finally
@@ -648,7 +742,7 @@ namespace LargeFolderFinder
 
                     if (!token.IsCancellationRequested)
                     {
-                        view.StatusTextBlock.Text = originalStatus;
+                        view.StatusTextBlock.Text = session.LastStatus;
                     }
                 }
             }
@@ -702,6 +796,9 @@ namespace LargeFolderFinder
                 {
                     for (int i = 0; i < list.Count; i++)
                     {
+                        // IsExpanded チェックを追加
+                        if (!node.IsExpanded && !node.IsFile) continue;
+
                         int childMax = CalculateMaxLineLength(
                             list[i],
                             filterCache,
@@ -729,8 +826,11 @@ namespace LargeFolderFinder
             int tabWidth,
             long thresholdBytes,
             AppConstants.SizeUnit unit,
-            bool includeFiles)
+            bool includeFiles,
+            CancellationToken token = default)
         {
+            if (token.IsCancellationRequested) return;
+
             if (node == null ||
                 (!isRoot && node.Size < thresholdBytes) ||
                 (!isRoot && node.IsFile && !includeFiles))
@@ -785,6 +885,9 @@ namespace LargeFolderFinder
 
                     for (int i = 0; i < list.Count; i++)
                     {
+                        // IsExpanded チェックを追加
+                        if (!node.IsExpanded && !node.IsFile) continue;
+
                         PrintTreeRecursive(
                             sb,
                             node: list[i],
@@ -797,7 +900,122 @@ namespace LargeFolderFinder
                             tabWidth,
                             thresholdBytes,
                             unit,
-                            includeFiles);
+                            includeFiles,
+                            token);
+                    }
+                }
+            }
+        }
+
+        private IEnumerable<FolderRowItem> GenerateListItemsRecursive(
+            FolderInfo node,
+            Dictionary<FolderInfo, List<FolderInfo>> filterCache,
+            string indent,
+            bool isLast,
+            bool isRoot,
+            int targetColumn,
+            bool useSpaces,
+            int tabWidth,
+            long thresholdBytes,
+            AppConstants.SizeUnit unit,
+            bool includeFiles)
+        {
+            if (node == null ||
+                (!isRoot && node.Size < thresholdBytes) ||
+                (!isRoot && node.IsFile && !includeFiles))
+                yield break;
+
+            if (isRoot && node.Size < thresholdBytes)
+            {
+                yield return new FolderRowItem
+                {
+                    Node = node,
+                    DisplayText = AppConstants.TreeLastBranch + LocalizationManager.Instance.GetText(LanguageKey.NotFoundMessage),
+                    SizeText = ""
+                };
+                yield break;
+            }
+
+            string sizeStr = $"{(double)node.Size / AppConstants.GetBytesPerUnit(unit):N0} {unit}".PadLeft(AppConstants.BaseSizeLength);
+            string line = isRoot
+                ? node.Name
+                : indent + (isLast ? AppConstants.TreeLastBranch : AppConstants.TreeBranch) + node.Name;
+
+            // Padding
+            int curLen = GetStringWidth(line);
+            int paddingNeeded = targetColumn - curLen;
+            if (paddingNeeded > 0)
+            {
+                if (useSpaces)
+                {
+                    line += new string(' ', paddingNeeded);
+                }
+                else
+                {
+                    // Reusing strict logic from PrintTreeRecursive:
+                    var sb = new StringBuilder(); // Temporary for padding
+                    while (curLen < targetColumn)
+                    {
+                        if (useSpaces)
+                            sb.Append(' ');
+                        else
+                            sb.Append('\t');
+                        curLen += (useSpaces ? 1 : tabWidth - (curLen % tabWidth));
+                    }
+                    line += sb.ToString();
+                }
+            }
+
+            yield return new FolderRowItem
+            {
+                Node = node,
+                DisplayText = line + sizeStr,
+                SizeText = sizeStr
+            };
+
+            if (node.Children != null)
+            {
+                // IsExpanded チェック
+                if (!node.IsExpanded && !node.IsFile) yield break;
+
+                List<FolderInfo>? list = null;
+                if (filterCache.TryGetValue(node, out var cachedList))
+                {
+                    list = cachedList;
+                }
+                else
+                {
+                    lock (node.Children)
+                    {
+                        list = node.Children.Where(c => c.Size >= thresholdBytes && (includeFiles || !c.IsFile)).ToList();
+                    }
+                }
+
+                if (list != null)
+                {
+                    string childIndent = indent + (isRoot
+                        ? ""
+                        : (isLast
+                            ? AppConstants.TreeSpace + AppConstants.TreeSpace + AppConstants.TreeSpace
+                            : AppConstants.TreeVertical + AppConstants.TreeSpace));
+
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        foreach (var item in GenerateListItemsRecursive(
+                            list[i],
+                            filterCache,
+                            childIndent,
+                            isLast: i == list.Count - 1,
+                            isRoot: false,
+                            targetColumn,
+                            useSpaces,
+                            tabWidth,
+                            thresholdBytes,
+                            unit,
+                            includeFiles))
+                        {
+                            yield return item;
+                        }
                     }
                 }
             }
@@ -920,15 +1138,33 @@ namespace LargeFolderFinder
                 }
                 else
                 {
-                    // Initial/Default
-                    Sessions.Add(new SessionData() { Path = "c:\\" });
+                    // Settings not found, try to restore sessions from disk
+                    Logger.Log("Settings file not found. Attempting to restore sessions from disk.");
+                    var sessionFiles = SessionFileManager.GetAllSessionFileNames();
+                    if (sessionFiles != null && sessionFiles.Length > 0)
+                    {
+                        // Sort by name (which includes timestamp) to restore order roughly
+                        Array.Sort(sessionFiles);
+                        foreach (var name in sessionFiles)
+                        {
+                            var s = SessionFileManager.Load(name);
+                            if (s != null) Sessions.Add(s);
+                        }
+                    }
+
+                    // If still no sessions, add default
+                    if (Sessions.Count == 0)
+                    {
+                        Sessions.Add(new SessionData() { Path = "c:\\" });
+                    }
+
                     SelectedIndex = 0;
                     ApplyLayout(AppConstants.LayoutType.Vertical);
                 }
 
                 if (SelectedIndex < 0 || SelectedIndex >= Sessions.Count) SelectedIndex = 0;
 
-                // Ensure at least one session
+                // Ensure at least one session (Double check)
                 if (Sessions.Count == 0)
                 {
                     Sessions.Add(new SessionData() { Path = "c:\\" });
@@ -1072,8 +1308,9 @@ namespace LargeFolderFinder
 
         private void UpdateAddButtonState()
         {
-            if (AddTabButton != null)
-                AddTabButton.IsEnabled = Sessions.Count < 10;
+            var btn = SessionTabControl.Template?.FindName("AddTabButton", SessionTabControl) as Button;
+            if (btn != null)
+                btn.IsEnabled = Sessions.Count < 10;
         }
 
         private void TabCloseButton_Click(object sender, RoutedEventArgs e)
@@ -1082,6 +1319,9 @@ namespace LargeFolderFinder
             {
                 // Cancel partial scan if any?
                 session.Cts?.Cancel();
+
+                // Delete cache file
+                SessionFileManager.Delete(session.GenerateFileName());
 
                 int idx = Sessions.IndexOf(session);
                 Sessions.Remove(session);
@@ -1118,24 +1358,27 @@ namespace LargeFolderFinder
             ApplyLayout(AppConstants.LayoutType.Horizontal);
         }
 
-        private void MenuConfig_Click(object sender, RoutedEventArgs e)
+        private void Config_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (!Directory.Exists(AppConstants.AppDataDirectory))
-                {
-                    Directory.CreateDirectory(AppConstants.AppDataDirectory);
-                }
-                Process.Start("explorer.exe", AppConstants.AppDataDirectory);
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ConfigFileName);
+                if (!File.Exists(configPath)) Config.Load(); // なかったら生成 (Load目的ではなく)
+
+                Process.Start(new ProcessStartInfo(configPath) { UseShellExecute = true });
+                Logger.Log("Opened Advanced Settings (Config.txt)");
             }
             catch (Exception ex)
             {
-                Logger.Log("Failed to open config folder", ex);
+                var lm = LocalizationManager.Instance;
+                Logger.Log($"{lm.GetText(LanguageKey.ConfigError)}", ex);
+                MessageBox.Show($"{lm.GetText(LanguageKey.ConfigError)}{ex.Message}", lm.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private void MenuReadme_Click(object sender, RoutedEventArgs e)
         {
+            var lm = LocalizationManager.Instance;
             try
             {
                 string lang = LocalizationManager.Instance.CurrentLanguage;
@@ -1157,12 +1400,13 @@ namespace LargeFolderFinder
                 }
                 else
                 {
-                    MessageBox.Show("Readme file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    throw new Exception($"Readme file not found. {path}");
                 }
             }
             catch (Exception ex)
             {
-                Logger.Log("Failed to open Readme", ex);
+                Logger.Log($"{lm.GetText(LanguageKey.ReadmeError)}", ex);
+                MessageBox.Show($"{lm.GetText(LanguageKey.ReadmeError)}{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1199,12 +1443,13 @@ namespace LargeFolderFinder
                 }
                 else
                 {
-                    MessageBox.Show("License file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    throw new Exception($"License file not found. {path}");
                 }
             }
             catch (Exception ex)
             {
                 Logger.Log("Failed to show app license", ex);
+                MessageBox.Show($"Failed to show app license\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1230,15 +1475,11 @@ namespace LargeFolderFinder
 
         private void MenuAbout_Click(object sender, RoutedEventArgs e)
         {
-            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-            string versionStr = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
+            var lm = LocalizationManager.Instance;
+            var format = lm.GetText(LanguageKey.AboutMessage);
+            var message = string.Format(format, AppInfo.Title, AppInfo.Copyright, AppInfo.Version);
 
-            string message = LocalizationManager.Instance.GetText(LanguageKey.AboutMessage)
-                .Replace("{Version}", versionStr)
-                .Replace("{Date}", DateTime.Now.ToString("yyyy/MM/dd")) // Use current date or build date
-                .Replace("\\n", "\n");
-
-            MessageBox.Show(message, LocalizationManager.Instance.GetText(LanguageKey.AboutTitle), MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(message, lm.GetText(LanguageKey.AboutTitle), MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void MenuView_SubmenuOpened(object sender, RoutedEventArgs e)
@@ -1292,6 +1533,48 @@ namespace LargeFolderFinder
             }
         }
 
+        public void SetFolderExpansion(IEnumerable<FolderRowItem> items, bool isExpanded)
+        {
+            var session = CurrentSession;
+            if (session == null) return;
+
+            bool changed = false;
+            foreach (var item in items)
+            {
+                if (!item.IsFile && item.Node.IsExpanded != isExpanded)
+                {
+                    item.Node.IsExpanded = isExpanded;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                _ = RenderResult(session);
+            }
+        }
+
+        public void ToggleFolderExpansion(IEnumerable<FolderRowItem> items)
+        {
+            var session = CurrentSession;
+            if (session == null) return;
+
+            bool changed = false;
+            foreach (var item in items)
+            {
+                if (!item.IsFile)
+                {
+                    item.Node.IsExpanded = !item.Node.IsExpanded;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                _ = RenderResult(session);
+            }
+        }
+
         private void OpenOrActivateTextViewer(string path)
         {
             foreach (Window window in Application.Current.Windows)
@@ -1309,6 +1592,20 @@ namespace LargeFolderFinder
             }
             Logger.Log($"Opened TextViewer for {Path.GetFileName(path)}");
             new TextViewer(path).Show();
+        }
+    }
+
+    public class FolderRowItem
+    {
+        public FolderInfo Node { get; set; }
+        public string DisplayText { get; set; }
+        public string SizeText { get; set; }
+        public bool IsExpanded => Node.IsExpanded;
+        public bool IsFile => Node.IsFile;
+
+        public override string ToString()
+        {
+            return DisplayText + SizeText;
         }
     }
 }

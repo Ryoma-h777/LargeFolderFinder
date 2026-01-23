@@ -12,13 +12,13 @@ namespace LargeFolderFinder
             _mainWindow = view;
         }
 
-        public TextBox SearchSizeTextBox => _mainWindow.SearchSizeTextBox;
+        public TextBox MinSizeTextBox => _mainWindow.MinSizeTextBox;
 
         public ComboBox UnitComboBox => _mainWindow.UnitComboBox;
 
         public Button CopyButton => _mainWindow.CopyButton;
 
-        public TextBox OutputTextBox => _mainWindow.OutputTextBox;
+        public ListBox OutputListBox => _mainWindow.OutputListBox;
 
         public ProgressBar ScanProgressBar => _mainWindow.ScanProgressBar;
         public TextBlock StatusTextBlock => _mainWindow.StatusTextBlock;
@@ -32,8 +32,9 @@ namespace LargeFolderFinder
         public ComboBox SeparatorComboBox => _mainWindow.SeparatorComboBox;
         public TextBox TabWidthTextBox => _mainWindow.TabWidthTextBox;
         public FrameworkElement TabWidthArea => _mainWindow.TabWidthArea;
+        public TextBox FontSizeTextBox => _mainWindow.FontSizeTextBox;
 
-        public TextBlock SearchSizeLabel => _mainWindow.SearchSizeLabel;
+        public TextBlock MinSizeLabel => _mainWindow.MinSizeLabel;
         public TextBlock ViewHeaderLabel => _mainWindow.ViewHeaderLabel;
         public TextBlock SortLabel => _mainWindow.SortLabel;
         public TextBlock IncludeFilesLabel => _mainWindow.IncludeFilesLabel;
@@ -46,8 +47,8 @@ namespace LargeFolderFinder
 
             CopyButton.ToolTip = lm.GetText(LanguageKey.CopyToolTip);
 
-            SearchSizeLabel.Text = lm.GetText(LanguageKey.SearchSizeLabel).Replace(" ({0})", "");
-            SearchSizeLabel.ToolTip = lm.GetText(LanguageKey.SearchSizeToolTip);
+            MinSizeLabel.Text = lm.GetText(LanguageKey.MinSizeLabel);
+            MinSizeLabel.ToolTip = lm.GetText(LanguageKey.MinSizeToolTip);
             SortLabel.Text = lm.GetText(LanguageKey.SortLabel);
             SeparatorLabel.Text = lm.GetText(LanguageKey.SeparatorLabel);
             SeparatorComboBox.ToolTip = lm.GetText(LanguageKey.SeparatorToolTip);
@@ -60,9 +61,9 @@ namespace LargeFolderFinder
             // Sort ComboBox Items
             int sortIdx = SortComboBox.SelectedIndex;
             SortComboBox.Items.Clear();
-            SortComboBox.Items.Add(lm.GetText(LanguageKey.TargetSize));
-            SortComboBox.Items.Add(lm.GetText(LanguageKey.TargetName));
-            SortComboBox.Items.Add(lm.GetText(LanguageKey.TargetDate));
+            SortComboBox.Items.Add(lm.GetText(LanguageKey.SortSize));
+            SortComboBox.Items.Add(lm.GetText(LanguageKey.SortName));
+            SortComboBox.Items.Add(lm.GetText(LanguageKey.SortDate));
             if (sortIdx >= 0 && sortIdx < SortComboBox.Items.Count) SortComboBox.SelectedIndex = sortIdx;
 
             // Sort Direction ComboBox Items

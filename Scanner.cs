@@ -118,24 +118,7 @@ namespace LargeFolderFinder
         {
             token.ThrowIfCancellationRequested();
 
-            if (currentDepth <= maxDepth)
-            {
-                Interlocked.Increment(ref progressCounter.Value);
-            }
 
-            int currentProcessed = progressCounter.Value;
-
-            // 5秒間隔で更新 (最初の1回は即時更新)
-            if (currentProcessed == 1 || (DateTime.Now - progressCounter.LastReportTime).TotalSeconds >= 5.0)
-            {
-                lock (progressCounter)
-                {
-                    if (currentProcessed == 1 || (DateTime.Now - progressCounter.LastReportTime).TotalSeconds >= 5.0)
-                    {
-                        ReportProgress(currentProcessed, totalFolders, startTime, progressCounter, progress, dir.FullName);
-                    }
-                }
-            }
 
             long myFilesSize = 0;
             // 1. ファイルの合計
@@ -194,6 +177,25 @@ namespace LargeFolderFinder
                 }
             }
             catch { /* 無視 */ }
+
+            if (currentDepth <= maxDepth)
+            {
+                Interlocked.Increment(ref progressCounter.Value);
+            }
+
+            int currentProcessed = progressCounter.Value;
+
+            // 5秒間隔で更新 (最初の1回は即時更新)
+            if (currentProcessed == 1 || (DateTime.Now - progressCounter.LastReportTime).TotalSeconds >= 5.0)
+            {
+                lock (progressCounter)
+                {
+                    if (currentProcessed == 1 || (DateTime.Now - progressCounter.LastReportTime).TotalSeconds >= 5.0)
+                    {
+                        ReportProgress(currentProcessed, totalFolders, startTime, progressCounter, progress, dir.FullName);
+                    }
+                }
+            }
 
             return currentNode.Size;
         }

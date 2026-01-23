@@ -11,6 +11,7 @@
     
     <DockPanel>
         <!-- Menu Bar (Common) -->
+        <!-- Menu Bar (Common) -->
         <Menu DockPanel.Dock="Top">
             <MenuItem x:Name="MenuFile" Header="ファイル(_F)">
                 <MenuItem x:Name="MenuRestartAdmin" Header="管理者として開き直す(_A)" Click="MenuRestartAdmin_Click"/>
@@ -23,7 +24,7 @@
                     <MenuItem x:Name="MenuLayoutVertical" Header="縦並び(_V)" Click="MenuLayoutVertical_Click" IsCheckable="True"/>
                     <MenuItem x:Name="MenuLayoutHorizontal" Header="横並び(_H)" Click="MenuLayoutHorizontal_Click" IsCheckable="True"/>
                 </MenuItem>
-                <MenuItem x:Name="MenuOpenConfig" Header="設定を開く(_S)" Click="MenuConfig_Click"/>
+                <MenuItem x:Name="MenuOpenConfig" Header="設定を開く(_S)" Click="Config_Click"/>
                 <MenuItem x:Name="MenuOpenLogSub" Header="ログを開く(_O)"/>
             </MenuItem>
             <MenuItem x:Name="MenuHelp" Header="ヘルプ(_H)">
@@ -50,7 +51,7 @@
             <Button x:Name="browseButton" Grid.Column="1" Content="..." Width="40" Height="26" Click="BrowseButton_Click" />
 
             <!-- Scan buttons -->
-            <Button x:Name="runButton" Grid.Column="2" ToolTip="Scan" Width="50" Height="25" FontWeight="Bold" Background="#0078D7" Foreground="White" Margin="10,0,0,0" Click="ScanButton_Click">
+            <Button x:Name="scanButton" Grid.Column="2" ToolTip="Scan" Width="50" Height="25" FontWeight="Bold" Background="#0078D7" Foreground="White" Margin="10,0,0,0" Click="ScanButton_Click">
                 <Path Data="{StaticResource RunIconGeometry}" Fill="White" Stretch="Uniform" Margin="6" />
             </Button>
             <!-- Cancel buttons -->
@@ -58,7 +59,7 @@
                 <Path Data="{StaticResource StopIconGeometry}" Fill="#444" Stretch="Uniform" Margin="6" />
             </Button>
             <!-- Config buttons -->
-            <Button x:Name="configButton" Grid.Column="4" Width="25" Height="25" Margin="5,0,0,0" Click="MenuConfig_Click" ToolTip="Settings">
+            <Button x:Name="configButton" Grid.Column="4" Width="25" Height="25" Margin="5,0,0,0" Click="Config_Click" ToolTip="Settings">
                 <Path Data="{StaticResource ConfigIconGeometry}" Fill="#444" Stretch="Uniform" Margin="5" />
             </Button>
         </Grid>
@@ -102,33 +103,59 @@
                     </Style>
                 </TabControl.Resources>
 
-                <!-- ItemsPanel for Uniform Width Tabs -->
+                <!-- ItemsPanel for Left Aligned Tabs -->
                 <TabControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <UniformGrid Rows="1"/>
+                        <StackPanel Orientation="Horizontal" IsItemsHost="True"/>
                     </ItemsPanelTemplate>
                 </TabControl.ItemsPanel>
+
+                <!-- Template to add button next to tabs -->
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <!-- Tab Header Area -->
+                            <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="#CCC">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/> <!-- Tabs -->
+                                        <ColumnDefinition Width="Auto"/> <!-- Add Button -->
+                                        <ColumnDefinition Width="*"/>    <!-- Rest -->
+                                    </Grid.ColumnDefinitions>
+                                    <TabPanel x:Name="HeaderPanel" Grid.Column="0" Panel.ZIndex="1" IsItemsHost="True" 
+                                              Margin="2,2,0,0" Background="Transparent"/>
+                                    
+                                    <!-- Add Tab Button (Next to Tabs) -->
+                                    <Button x:Name="AddTabButton" Grid.Column="1" VerticalAlignment="Bottom" Margin="2,0,0,2" Width="24" Height="24" 
+                                            Click="AddTabButton_Click" ToolTip="New Tab (Max 10)" Background="Transparent" BorderThickness="0">
+                                        <Path Data="M4,0 L4,8 M0,4 L8,4" Stroke="#444" StrokeThickness="1.5" Margin="4" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                            
+                            <!-- Tab Content -->
+                            <ContentPresenter x:Name="PART_SelectedContentHost" Grid.Row="1" ContentSource="SelectedContent" Margin="0"/>
+                        </Grid>
+                    </ControlTemplate>
+                </TabControl.Template>
                 
                 <!-- Header Template (Title + Close Button) -->
                 <TabControl.ItemTemplate>
                     <DataTemplate>
-                        <Grid>
+                        <Grid MinWidth="80" MaxWidth="250" ToolTip="{Binding TabTooltip}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <!-- Right aligned behavior for trimming is tricky in standard TextBlock. 
-                                 Usually TextTrimming works from end. 
-                                 To see the end and trim start, we need specific control behavior or direction.
-                                 However, TabTitle logic in CacheData.cs returns JUST the folder name (e.g. "Folder").
-                                 It only returns full path if empty.
-                                 So "Folder Name" should be visible.
-                                 "Right alignment image" might mean the text is right aligned in the tab? -->
                             <TextBlock Grid.Column="0" Text="{Binding TabTitle}" 
-                                       ToolTip="{Binding Path}"
                                        VerticalAlignment="Center" 
-                                       HorizontalAlignment="Right"
-                                       TextTrimming="CharacterEllipsis"/>
+                                       HorizontalAlignment="Left"
+                                       TextTrimming="CharacterEllipsis"
+                                       Margin="0,0,2,0"/>
                             <Button Grid.Column="1" Style="{StaticResource TabCloseButtonStyle}" Click="TabCloseButton_Click" Tag="{Binding}"/>
                         </Grid>
                     </DataTemplate>
@@ -137,17 +164,12 @@
                 <!-- Content Template (The Result View) -->
                 <TabControl.ContentTemplate>
                     <DataTemplate>
-                        <Border BorderBrush="#CCC" BorderThickness="1" CornerRadius="0,0,4,4" Padding="0" Background="White">
+                        <Border BorderBrush="#CCC" BorderThickness="1" Padding="0" Background="White">
                            <ContentControl Content="{Binding CurrentView}"/>
                         </Border>
                     </DataTemplate>
                 </TabControl.ContentTemplate>
             </TabControl>
-          
-            <!-- Add Tab Button (Top Right Overlay) -->
-            <Button x:Name="AddTabButton" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,5,0" Width="24" Height="24" Click="AddTabButton_Click" ToolTip="New Tab (Max 10)" Background="Transparent" BorderThickness="0">
-                <Path Data="M4,0 L4,8 M0,4 L8,4" Stroke="#444" StrokeThickness="1.5" Margin="4"/>
-            </Button>
         </Grid>
     </DockPanel>
 </Window>

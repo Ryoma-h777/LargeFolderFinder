@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Linq;
 
 namespace LargeFolderFinder
 {
@@ -23,10 +24,10 @@ namespace LargeFolderFinder
 
         // IMainLayoutView Implementation
         // IMainLayoutView Implementation
-        public TextBox SearchSizeTextBox => searchSizeTextBox;
+        public TextBox MinSizeTextBox => minSizeTextBox;
         public ComboBox UnitComboBox => unitComboBox;
         public Button CopyButton => copyButton;
-        public TextBox OutputTextBox => outputTextBox;
+        public ListBox OutputListBox => (ListBox)FindName("outputListBox");
         public ProgressBar ScanProgressBar => scanProgressBar;
         public TextBlock StatusTextBlock => statusTextBlock;
         public TextBlock NotificationTextBlock => notificationTextBlock;
@@ -36,7 +37,8 @@ namespace LargeFolderFinder
         public ComboBox SeparatorComboBox => separatorComboBox;
         public TextBox TabWidthTextBox => tabWidthTextBox;
         public FrameworkElement TabWidthArea => tabWidthArea;
-        public TextBlock SearchSizeLabel => searchSizeLabel;
+        public TextBox FontSizeTextBox => fontSizeTextBox;
+        public TextBlock MinSizeLabel => minSizeLabel;
         public TextBlock ViewHeaderLabel => viewHeaderLabel;
         public TextBlock SortLabel => sortLabel;
         public TextBlock IncludeFilesLabel => includeFilesLabel;
@@ -52,6 +54,71 @@ namespace LargeFolderFinder
 
         // Helper for KeyDown
         private void TriggerScan(object sender, RoutedEventArgs e) => _mainWindow?.ScanButton_Click(sender, e);
+
+        private void ListBoxItem_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is ListBoxItem item && item.Content is FolderRowItem rowItem)
+            {
+                // Toggle single item
+                _mainWindow?.ToggleFolderExpansion(new[] { rowItem });
+                e.Handled = true;
+            }
+        }
+
+        private void ListBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (sender is ListBox listBox)
+            {
+                var selectedItems = listBox.SelectedItems.OfType<FolderRowItem>().ToList();
+                if (selectedItems.Count == 0) return;
+
+                if (e.Key == System.Windows.Input.Key.Enter)
+                {
+                    _mainWindow?.ToggleFolderExpansion(selectedItems);
+                    e.Handled = true;
+                }
+                else if (e.Key == System.Windows.Input.Key.Right)
+                {
+                    _mainWindow?.SetFolderExpansion(selectedItems, true);
+                    e.Handled = true;
+                }
+                else if (e.Key == System.Windows.Input.Key.Left)
+                {
+                    _mainWindow?.SetFolderExpansion(selectedItems, false);
+                    e.Handled = true;
+                }
+                else if (e.Key == System.Windows.Input.Key.C && (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control)
+                {
+                    // Custom Copy
+                    try
+                    {
+                        if (selectedItems.Count == 1)
+                        {
+                            var item = selectedItems[0];
+                            string text = $"{item.Node.Name} {item.SizeText.Trim()}";
+                            Clipboard.SetText(text);
+                            this.NotificationTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.CopyNotification); // or simpler message
+                        }
+                        else
+                        {
+                            var sb = new System.Text.StringBuilder();
+                            foreach (var item in selectedItems)
+                            {
+                                sb.AppendLine(item.DisplayText);
+                            }
+                            Clipboard.SetText(sb.ToString());
+                            this.NotificationTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.CopyNotification); // or simpler message
+                        }
+                        e.Handled = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Error in Custom Copy", ex);
+                    }
+                }
+            }
+        }
+
         /// <summary>
         /// キー押したときの動作
         /// Xamlにレイアウトが紐づくので共通化できていません。

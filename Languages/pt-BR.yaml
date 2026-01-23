@@ -5,16 +5,19 @@ MenuFile: "Arquivo(_F)"
 MenuOpenConfig: "Abrir configurações avançadas(_S)"
 MenuOpenLogSub: "Abrir logs(_O)"
 MenuRestartAdmin: "Reiniciar como administrador(_A)"
+MenuRestartAdminToolTip: "Permite verificar áreas que exigem privilégios"
 MenuExit: "Sair(_X)"
+# View
+MenuView: "Exibir(_V)"
+MenuLayout: "Layout(_L)"
+MenuLayoutVertical: "Vertical(_V)"
+MenuLayoutHorizontal: "Horizontal(_H)"
 # Help
 MenuHelp: "Ajuda(_H)"
 MenuOpenReadme: "Abrir Readme(_R)"
 MenuLicense: "Licença(_L)"
 MenuAppLicense: "Licença do aplicativo(_A)"
-MenuView: "Exibir(_V)"
-MenuLayout: "Layout(_L)"
-MenuLayoutVertical: "Vertical(_V)"
-MenuLayoutHorizontal: "Horizontal(_H)"
+MenuThirdPartyLicenses: "Licenças de Terceiros(_T)"
 MenuAbout: "Sobre(_A)"
 
 # Viewer (Log, Readme, License)
@@ -23,40 +26,41 @@ ViewerOpenFolder: "Abrir pasta"
 ViewerClose: "Fechar"
 # Version Modal
 AboutTitle: "Sobre"
-AboutMessage: "{0}\nVersão {1}\n{2}\n\nUma ferramenta para encontrar rapidamente pastas grandes."
+AboutMessage: "{0}\n{1}\nVersão {2}\n\nFerramenta para visualizar pastas grandes rapidamente."
 DialogInfo: "Informação"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
 FolderLabel: "Pasta:"
 BrowseButton: "..."
-## Line 2
-# Scan
-SearchSizeLabel: "Tamanho mínimo:"
-SearchSizeToolTip: "Extrai e lista as pastas maiores que este tamanho. 0 pode ser especificado, mas quanto menor o tamanho, mais demorada será a varredura."
-# FolderName<---Space--->Size
-SeparatorLabel: "Separador:"
-SeparatorToolTip: "Especifica o espaço entre o nome da pasta e o tamanho ({0})."
-TabWidthLabel: "Largura:"
 # Scan Button
-ScanButton: "Escanear"
-CancelButton: "Cancelar"
-CancelToolTip: "Cancela. Se não funcionar, pressione o botão X."
+ScanButtonToolTip: "Escanear"
+CancelButtonToolTip: "Cancela. Se não funcionar, pressione o botão X."
 # Advance Setting Button
 OpenConfigToolTip: "Abrir configurações avançadas (Config.txt)"
+
+####### View #######
+ViewLabel: "Exibir"
+# MinSize
+MinSizeLabel: "Tamanho mínimo:"
+MinSizeToolTip: "Mostra itens maiores que este tamanho. 0 permitido, mas lento."
+# FolderName<---Space--->Size
+SeparatorLabel: "Separador:"
+SeparatorToolTip: "Especifica o espaço entre nome e tamanho."
+TabWidthLabel: "Largura:"
 # Clipboard Copy Button
 CopyToolTip: "Copiar para a área de transferência"
 IncludeFiles: "Mostrar arquivos"
-ViewLabel: "Exibir"
-
-## Line 3
 # Sort
 SortLabel: "Ordenar:"
-TargetSize: "Tamanho"
-TargetName: "Nome"
-TargetDate: "Data"
+SortSize: "Tamanho"
+SortName: "Nome"
+SortDate: "Data"
 DirectionAsc: "Crescente"
 DirectionDesc: "Decrescente"
+
+####### Result #######
+LiveScanningMessage: "Escaneando... O tamanho ({0}) mostra resultados intermediários."
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "Pronto"
@@ -64,11 +68,14 @@ ScanningStatus: "Escaneando..."
 CancelledStatus: "Cancelado"
 FinishedStatus: "Finalizado"
 NotFoundMessage: "Nenhuma pasta correspondente encontrada."
-CopyNotification: "Copiado!"
 FolderCountStatus: "Verificando o número de pastas..."
+RenderingStatus: "Renderizando..."
+Unknown: "Desconhecido" # Barra de progresso: exibido quando o total é desconhecido.
+LabelError: "Erro"
+UnitFolder: " pastas"
 # time
 RemainingTimeH: "Faltam cerca de {0}{1} {2}{3}"
-RemainingTimeM: "Faltam cerca de {0}{1} {2}{3}"
+RemainingTimeM: "Faltan cerca de {0}{1} {2}{3}"
 RemainingTimeS: "Faltam cerca de {0}{1}"
 ProcessedFolders: "{0} blocos processados"
 ProcessingTime: "Tempo de processamento: {0}"
@@ -77,30 +84,20 @@ UnitMinute: "m"
 UnitSecond: "s"
 UnitMillisecond: "ms"
 UnitElapsed: "decorrido"
-
-Unknown: "Desconhecido" # Barra de progresso: exibido quando o total é desconhecido.
-LabelError: "Erro"
-UnitFolder: " pastas"
-
-DetailLabel: "Detalhes:"
-LiveScanningMessage: "Escaneando... O tamanho ({0}) mostra resultados intermediários."
+# View Formatter
 ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
 TimeStatusFormat: "{0} decorrido"
 
+# tempolaty Notification
+CopyNotification: "Copiado!"
+
 ####### Error Messages #######
 ConfigError: "Não foi possível abrir o arquivo de configuração: "
 ReadmeError: "Não foi possível abrir o Readme: "
-ReadmeNotFound: "Readme.txt não encontrado."
 PathInvalidError: "Selecione uma pasta válida."
 ThresholdInvalidError: "Tamanho de pesquisa inválido."
 InitializationError: "Ocorreu um erro durante a inicialização do aplicativo:"
 ClipboardError: "Falha ao copiar para a área de transferência: "
-ProgressErrorLabel: "Erro de progresso:"
-RenderErrorLabel: "Erro de renderização:"
-RenderingStatus: "Renderizando..."
-DebugInfoTitle: "Informações de depuração"
-MenuThirdPartyLicenses: "Licenças de Terceiros(_T)"
-LicenseNotFoundError: "Arquivo de licença ({0}) não encontrado."

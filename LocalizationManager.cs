@@ -12,47 +12,82 @@ namespace LargeFolderFinder
     /// </summary>
     public enum LanguageKey
     {
-        // --- Header (Menu) ---
         Title,
+        // ####### Header (Menu) #######
+        // ## File
         MenuFile,
         MenuOpenConfig,
         MenuOpenLogSub,
-        MenuExit,
         MenuRestartAdmin,
-        MenuHelp,
-        MenuOpenReadme,
-        MenuAbout,
-        MenuLicense,
-        MenuAppLicense,
+        MenuRestartAdminToolTip,
+        MenuExit,
+        // # View
         MenuView,
         MenuLayout,
         MenuLayoutVertical,
         MenuLayoutHorizontal,
+        // # Help
+        MenuHelp,
+        MenuOpenReadme,
+        MenuLicense,
+        MenuAppLicense,
+        MenuThirdPartyLicenses,
+        MenuAbout,
 
-        // --- Body (ScanSettings) ---
+        // # Viewer (Log, Readme, License)
+        ViewerCopy,
+        ViewerOpenFolder,
+        ViewerClose,
+        // # Version Modal
+        AboutTitle,
+        AboutMessage,
+        DialogInfo,
+
+        // ####### Scan Settings #######
+        // ## Line 1 (Folder Browser)
         FolderLabel,
         BrowseButton,
-        SearchSizeLabel,
-        SearchSizeToolTip,
+        // # Scan Button
+        ScanButtonToolTip,
+        CancelButtonToolTip,
+        // # Advance Setting Button
+        OpenConfigToolTip,
+
+        // ####### View #######
+        ViewLabel,
+        // # MinSize
+        MinSizeLabel,
+        MinSizeToolTip,
+        // # FolderName<---Space--->Size
         SeparatorLabel,
         SeparatorToolTip,
-        ScanButton,
-        CancelButton,
-        CancelToolTip,
-        OpenConfigToolTip,
+        TabWidthLabel,
+        // # Clipboard Copy Button
         CopyToolTip,
         IncludeFiles,
-        ViewLabel,
-        MinSizeLabel,
-        TabWidthLabel,
-        // --- Footer (Status & Progress) ---
+        // # Sort
+        SortLabel,
+        SortSize,
+        SortName,
+        SortDate,
+        DirectionAsc,
+        DirectionDesc,
+
+        // ####### Result #######
+        LiveScanningMessage,
+
+        // ####### Footer (Status & Progress) #######
         ReadyStatus,
         ScanningStatus,
         CancelledStatus,
         FinishedStatus,
         NotFoundMessage,
-        CopyNotification,
         FolderCountStatus,
+        RenderingStatus,
+        Unknown, // 進捗率表示用: 総数を把握していない時に表示されます。
+        LabelError,
+        UnitFolder,
+        // # time
         RemainingTimeH,
         RemainingTimeM,
         RemainingTimeS,
@@ -63,43 +98,23 @@ namespace LargeFolderFinder
         UnitSecond,
         UnitMillisecond,
         UnitElapsed,
-        Unknown,
-        LabelError,
-        UnitFolder,
-        AboutTitle,
-        AboutMessage,
-        DialogInfo,
-        DetailLabel,
-        LiveScanningMessage,
+        // # View Formatter
         ScanningProgressFormat,
         ScanningProgressIndeterminateFormat,
         ScanningStatusWithCountFormat,
         ElapsedFormat,
         TimeStatusFormat,
 
-        // --- Error Messages ---
+        // # tempolaty Notification
+        CopyNotification,
+
+        // ####### Error Messages #######
         ConfigError,
         ReadmeError,
-        ReadmeNotFound,
         PathInvalidError,
         ThresholdInvalidError,
         InitializationError,
         ClipboardError,
-        ProgressErrorLabel,
-        RenderErrorLabel,
-        RenderingStatus,
-        DebugInfoTitle,
-        MenuThirdPartyLicenses,
-        LicenseNotFoundError,
-        ViewerCopy,
-        ViewerOpenFolder,
-        ViewerClose,
-        SortLabel,
-        TargetSize,
-        TargetName,
-        TargetDate,
-        DirectionAsc,
-        DirectionDesc
     }
 
     /// <summary>
