@@ -16,43 +16,11 @@
         <!-- Settings Area -->
         <Grid Grid.Row="0">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/> <!-- Row 0: Path -->
-                <RowDefinition Height="Auto"/> <!-- Row 1: Scan execution (Size) -->
-                <RowDefinition Height="Auto"/> <!-- Row 2: Separator line -->
-                <RowDefinition Height="Auto"/> <!-- Row 3: Display settings -->
+                <RowDefinition Height="Auto"/> <!-- Row 0: Display settings -->
             </Grid.RowDefinitions>
 
-            <!-- Row 0: Folder Path Input Area -->
-            <Grid Grid.Row="0" Margin="0,0,0,10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBox x:Name="pathTextBox" Text="c:\\" Grid.Column="0" Height="26" VerticalContentAlignment="Center" Margin="0,0,1,0" KeyDown="Input_KeyDown" />
-                <Button x:Name="browseButton" Grid.Column="1" Content="..." Width="40" Height="26" Click="BrowseButton_Click" />
-
-                <!-- Scan buttons -->
-                <Button x:Name="runButton" Grid.Column="2" ToolTip="Scan" Width="50" Height="25" FontWeight="Bold" Background="#0078D7" Foreground="White" Margin="10,0,0,0" Click="ScanButton_Click">
-                    <Path Data="{StaticResource RunIconGeometry}" Fill="White" Stretch="Uniform" Margin="6" />
-                </Button>
-                <!-- Cancel buttons -->
-                <Button x:Name="cancelButton" Grid.Column="3" Width="50" Height="25" IsEnabled="False" Margin="5,0,0,0" Click="CancelButton_Click" ToolTip="Cancel">
-                    <Path Data="{StaticResource StopIconGeometry}" Fill="#444" Stretch="Uniform" Margin="6" />
-                </Button>
-                <!-- Config buttons -->
-                <Button x:Name="configButton" Grid.Column="4" Width="25" Height="25" Margin="5,0,0,0" Click="MenuConfig_Click" ToolTip="Settings">
-                    <Path Data="{StaticResource ConfigIconGeometry}" Fill="#444" Stretch="Uniform" Margin="5" />
-                </Button>
-            </Grid>
-
-            <!-- Row 2: Genre Separator -->
-            <Border Grid.Row="2" Height="1" Background="#EEE" Margin="0,0,0,5"/>
-
             <!-- Row 3: Display Settings Row -->
-            <Grid Grid.Row="3" Margin="0,0,0,5">
+            <Grid Grid.Row="0" Margin="0,0,0,5">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock x:Name="viewHeaderLabel" Text="表示" VerticalAlignment="Center" Margin="0,0,10,0"/>
 

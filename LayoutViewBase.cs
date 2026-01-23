@@ -12,17 +12,10 @@ namespace LargeFolderFinder
             _mainWindow = view;
         }
 
-        public TextBox PathTextBox => _mainWindow.PathTextBox;
-
         public TextBox SearchSizeTextBox => _mainWindow.SearchSizeTextBox;
 
         public ComboBox UnitComboBox => _mainWindow.UnitComboBox;
 
-        public Button RunButton => _mainWindow.RunButton;
-
-        public Button CancelButton => _mainWindow.CancelButton;
-
-        public Button ConfigButton => _mainWindow.ConfigButton;
         public Button CopyButton => _mainWindow.CopyButton;
 
         public TextBox OutputTextBox => _mainWindow.OutputTextBox;
@@ -51,8 +44,6 @@ namespace LargeFolderFinder
         {
             if (_mainWindow == null) return;
 
-            CancelButton.ToolTip = lm.GetText(LanguageKey.CancelToolTip);
-            ConfigButton.ToolTip = lm.GetText(LanguageKey.OpenConfigToolTip);
             CopyButton.ToolTip = lm.GetText(LanguageKey.CopyToolTip);
 
             SearchSizeLabel.Text = lm.GetText(LanguageKey.SearchSizeLabel).Replace(" ({0})", "");

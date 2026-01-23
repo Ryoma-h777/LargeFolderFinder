@@ -21,8 +21,16 @@ namespace LargeFolderFinder
         /// </summary>
         public static string LogsDirectoryPath =>
             System.IO.Path.Combine(AppDataDirectory, LogsDirectoryName);
-        public const string CacheFileName = "Cache.txt";
+
+        // 設定ファイル関連の定数
+        public const string CacheFileName = "Cache.txt"; // 旧形式（互換性のため残す）
+        public const string SettingsFileName = "Settings.msgpack"; // 新しいMessagePack形式の設定ファイル
+        public const string SessionsDirectoryName = "Sessions"; // セッションファイル保存ディレクトリ
         public const string LogsDirectoryName = "Logs";
+        public const string LogsFileNameWithoutExtension = "yyyyMMdd_HHmm_ss";
+        public const string LogsExtension = "log";
+        public const int LogFilesMax = 4;
+
         public static string GetReadmeFileName(string lang) => $"Readme_{lang}.txt";
         public const string ReadmeDirectoryName = "Readme";
         public const string ConfigFileName = "Config.txt";
