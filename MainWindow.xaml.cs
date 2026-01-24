@@ -933,11 +933,11 @@ namespace LargeFolderFinder
             if (isRoot && node.Size < thresholdBytes)
             {
                 yield return new FolderRowItem
-                {
-                    Node = node,
-                    DisplayText = AppConstants.TreeLastBranch + LocalizationManager.Instance.GetText(LanguageKey.NotFoundMessage),
-                    SizeText = ""
-                };
+                (
+                    node: node,
+                    displayText: AppConstants.TreeLastBranch + LocalizationManager.Instance.GetText(LanguageKey.NotFoundMessage),
+                    sizeText: ""
+                );
                 yield break;
             }
 
@@ -972,11 +972,11 @@ namespace LargeFolderFinder
             }
 
             yield return new FolderRowItem
-            {
-                Node = node,
-                DisplayText = line + sizeStr,
-                SizeText = sizeStr
-            };
+            (
+                node: node,
+                displayText: line + sizeStr,
+                sizeText: sizeStr
+            );
 
             if (node.Children != null)
             {
@@ -1618,6 +1618,20 @@ namespace LargeFolderFinder
         public string SizeText { get; set; }
         public bool IsExpanded => Node.IsExpanded;
         public bool IsFile => Node.IsFile;
+
+        private FolderRowItem()
+        {
+            Node = null!;
+            DisplayText = "";
+            SizeText = "";
+        }
+
+        public FolderRowItem(FolderInfo node, string displayText, string sizeText)
+        {
+            Node = node;
+            DisplayText = displayText;
+            SizeText = sizeText;
+        }
 
         public override string ToString()
         {
