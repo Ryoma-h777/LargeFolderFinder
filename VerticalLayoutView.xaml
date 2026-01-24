@@ -95,14 +95,14 @@
                         
                         <Style.Triggers>
                             <Trigger Property="ItemsControl.AlternationIndex" Value="1">
-                                <Setter Property="Background" Value="#FAFAFA"/>
+                                <Setter Property="Background" Value="#F4F4F4"/>
                             </Trigger>
                              <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding IsExpanded}" Value="False"/>
                                     <Condition Binding="{Binding IsFile}" Value="False"/>
                                 </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" Value="#E6F7FF"/>
+                                <Setter Property="Background" Value="#7eee87"/>
                             </MultiDataTrigger>
                         </Style.Triggers>
                     </Style>
