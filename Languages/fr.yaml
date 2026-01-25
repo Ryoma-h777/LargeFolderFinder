@@ -51,13 +51,12 @@ TabWidthLabel: "Largeur :"
 # Clipboard Copy Button
 CopyToolTip: "Copier dans le presse-papiers"
 IncludeFiles: "Afficher les fichiers"
-# Sort
-SortLabel: "Trier par :"
-SortSize: "Taille"
-SortName: "Nom"
-SortDate: "Date"
-DirectionAsc: "Croissant"
-DirectionDesc: "Décroissant"
+# Header
+HeaderName: "Nom"
+HeaderSize: "Taille"
+HeaderDate: "Date"
+HeaderType: "Type"
+ContextOpen: "Ouvrir"
 
 ####### Result #######
 LiveScanningMessage: "Analyse en cours... La taille ({0}) affiche des résultats intermédiaires."

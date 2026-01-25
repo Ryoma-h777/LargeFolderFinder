@@ -51,13 +51,12 @@ TabWidthLabel: "Ширина:"
 # Clipboard Copy Button
 CopyToolTip: "Копировать результаты в буфер обмена"
 IncludeFiles: "Показать файлы"
-# Sort
-SortLabel: "Сортировка:"
-SortSize: "Размер"
-SortName: "Имя"
-SortDate: "Дата изменения"
-DirectionAsc: "По возрастанию"
-DirectionDesc: "По убыванию"
+# Header
+HeaderName: "Имя"
+HeaderSize: "Размер"
+HeaderDate: "Дата изменения"
+HeaderType: "Тип"
+ContextOpen: "Открыть"
 
 ####### Result #######
 LiveScanningMessage: "Сканирование... Размер (ГБ) показывает промежуточные результаты."

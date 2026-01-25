@@ -13,6 +13,7 @@
     <Copyright>Copyright (C) 2026 Ryoma Henzan / Cat &amp; Chocolate Laboratory</Copyright>
     <AssemblyName>LargeFolderFinder</AssemblyName>
     <RootNamespace>LargeFolderFinder</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);TestPerf\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

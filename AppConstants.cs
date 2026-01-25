@@ -54,7 +54,8 @@ namespace LargeFolderFinder
         {
             Size,
             Name,
-            Date
+            Date,
+            Type
         }
         public enum SortDirection
         {

@@ -51,13 +51,14 @@ TabWidthLabel: "Width:"
 # Clipboard Copy Button
 CopyToolTip: "Copy result to clipboard"
 IncludeFiles: "Show Files"
-# Sort
-SortLabel: "Sort:"
-SortSize: "Size"
-SortName: "Name"
-SortDate: "Date"
-DirectionAsc: "Asc"
-DirectionDesc: "Desc"
+# Header
+HeaderName: "Name"
+HeaderSize: "Size"
+HeaderDate: "Date"
+HeaderType: "Type"
+HeaderOwner: "Owner"
+ContextShowOwner: "Show Owner"
+ContextOpen: "Open"
 
 ####### Result #######
 LiveScanningMessage: "Scanning... Size({0}) shows intermediate results."

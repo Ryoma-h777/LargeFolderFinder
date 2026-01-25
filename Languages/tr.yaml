@@ -51,13 +51,12 @@ TabWidthLabel: "Genişlik:"
 # Clipboard Copy Button
 CopyToolTip: "Sonuçları panoya kopyala"
 IncludeFiles: "Dosyaları göster"
-# Sort
-SortLabel: "Sırala:"
-SortSize: "Boyut"
-SortName: "Ad"
-SortDate: "Tarih"
-DirectionAsc: "Artan"
-DirectionDesc: "Azalan"
+# Header
+HeaderName: "Ad"
+HeaderSize: "Boyut"
+HeaderDate: "Tarih"
+HeaderType: "Tür"
+ContextOpen: "Aç"
 
 ####### Result #######
 LiveScanningMessage: "Taranıyor... Boyut ({0}) ara sonuçları gösterir."

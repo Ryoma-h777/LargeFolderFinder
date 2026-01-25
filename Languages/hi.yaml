@@ -51,13 +51,12 @@ TabWidthLabel: "चौड़ाई:"
 # Clipboard Copy Button
 CopyToolTip: "क्लिपबोर्ड पर कॉपी करें"
 IncludeFiles: "फ़ाइलें दिखाएं"
-# Sort
-SortLabel: "क्रमबद्ध करें:"
-SortSize: "आकार"
-SortName: "नाम"
-SortDate: "दिनांक"
-DirectionAsc: "आरोही"
-DirectionDesc: "अवरोही"
+# Header
+HeaderName: "नाम"
+HeaderSize: "आकार"
+HeaderDate: "दिनांक"
+HeaderType: "प्रकार"
+ContextOpen: "खोलें"
 
 ####### Result #######
 LiveScanningMessage: "स्कैन किया जा रहा है... आकार ({0}) मध्यवर्ती परिणाम दिखाता है।"

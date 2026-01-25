@@ -51,13 +51,14 @@ TabWidthLabel: "幅:"
 # Clipboard Copy Button
 CopyToolTip: "結果をクリップボードにコピー"
 IncludeFiles: "ファイルも表示"
-# Sort
-SortLabel: "ソート:"
-SortSize: "サイズ"
-SortName: "名前"
-SortDate: "更新日時"
-DirectionAsc: "昇順"
-DirectionDesc: "降順"
+# Header
+HeaderName: "名前"
+HeaderSize: "サイズ"
+HeaderDate: "更新日時"
+HeaderType: "種類"
+HeaderOwner: "所有者"
+ContextShowOwner: "所有者を表示"
+ContextOpen: "開く"
 
 ####### Result #######
 LiveScanningMessage: "スキャン中…… サイズは途中結果を表示しています。"
