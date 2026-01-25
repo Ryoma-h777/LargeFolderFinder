@@ -51,13 +51,12 @@ TabWidthLabel: "너비:"
 # Clipboard Copy Button
 CopyToolTip: "결과를 클립보드에 복사"
 IncludeFiles: "파일도 표시"
-# Sort
-SortLabel: "정렬:"
-SortSize: "크기"
-SortName: "이름"
-SortDate: "수정 날짜"
-DirectionAsc: "오름차순"
-DirectionDesc: "내림차순"
+# Header
+HeaderName: "이름"
+HeaderSize: "크기"
+HeaderDate: "수정 날짜"
+HeaderType: "유형"
+ContextOpen: "열기"
 
 ####### Result #######
 LiveScanningMessage: "스캔 중... 크기({0})는 중간 결과를 표시합니다."

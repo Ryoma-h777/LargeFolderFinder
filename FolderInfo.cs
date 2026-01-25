@@ -22,6 +22,9 @@ namespace LargeFolderFinder
         [Key(2)]
         public System.DateTime LastModified { get; set; }
 
+        [Key(6)]
+        public string Owner { get; set; }
+
         [IgnoreMember]
         private long _size;
 
@@ -42,12 +45,14 @@ namespace LargeFolderFinder
         public FolderInfo()
         {
             Name = "";
+            Owner = "";
             LastModified = System.DateTime.MinValue;
         }
 
         public FolderInfo(string name, long size, bool isFile = false, System.DateTime? lastModified = null)
         {
             Name = name;
+            Owner = "";
             _size = size;
             IsFile = isFile;
             LastModified = lastModified ?? System.DateTime.MinValue;
@@ -60,6 +65,23 @@ namespace LargeFolderFinder
         {
             System.Threading.Interlocked.Add(ref _size, bytes);
             Parent?.AddSize(bytes);
+        }
+
+        public string GetFullPath()
+        {
+            if (Parent == null) return Name; // Root holds full path
+            return System.IO.Path.Combine(Parent.GetFullPath(), Name);
+        }
+        public void RestoreParentReferences()
+        {
+            if (Children != null)
+            {
+                foreach (var child in Children)
+                {
+                    child.Parent = this;
+                    child.RestoreParentReferences();
+                }
+            }
         }
     }
 }

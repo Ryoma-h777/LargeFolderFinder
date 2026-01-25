@@ -49,7 +49,7 @@ namespace LargeFolderFinder
 
         /// <summary>フォントサイズ</summary>
         [Key(9)]
-        public double FontSize { get; set; } = 12.0;
+        public double FontSize { get; set; } = 16.0;
 
         private static string SettingsFilePath =>
             Path.Combine(AppConstants.AppDataDirectory, AppConstants.SettingsFileName);

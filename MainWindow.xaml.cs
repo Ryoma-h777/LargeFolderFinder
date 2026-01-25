@@ -19,6 +19,7 @@ using MessagePack;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
 
 namespace LargeFolderFinder
 {
@@ -69,6 +70,9 @@ namespace LargeFolderFinder
                 InitializeComponent();
                 this.DataContext = this;
 
+                // Register Commands
+                this.CommandBindings.Add(new CommandBinding(LocalCommands.ShowOwner, ShowOwner_Executed));
+
                 InitializeLocalization();
                 LoadCache();
                 UpdateLanguageMenu();
@@ -111,14 +115,6 @@ namespace LargeFolderFinder
             foreach (var u in Enum.GetNames(typeof(AppConstants.SizeUnit)))
                 view.UnitComboBox.Items.Add(u);
 
-            view.SortComboBox.Items.Clear();
-            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.SortSize));
-            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.SortName));
-            view.SortComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.SortDate));
-
-            view.SortDirectionComboBox.Items.Clear();
-            view.SortDirectionComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.DirectionAsc));
-            view.SortDirectionComboBox.Items.Add(LocalizationManager.Instance.GetText(LanguageKey.DirectionDesc));
 
             view.SeparatorComboBox.Items.Clear();
             view.SeparatorComboBox.Items.Add("Tab");
@@ -135,8 +131,6 @@ namespace LargeFolderFinder
 
             view.MinSizeTextBox.TextChanged += (s, e) => { _ = RenderResult(session); };
             view.UnitComboBox.SelectionChanged += (s, e) => { _ = RenderResult(session); };
-            view.SortComboBox.SelectionChanged += (s, e) => { _ = RenderResult(session); };
-            view.SortDirectionComboBox.SelectionChanged += (s, e) => { _ = RenderResult(session); };
             view.IncludeFilesCheckBox.Click += (s, e) => { _ = RenderResult(session); };
             view.TabWidthTextBox.TextChanged += (s, e) => { _ = RenderResult(session); };
 
@@ -155,8 +149,6 @@ namespace LargeFolderFinder
             // Set Initial Values from Session
             view.MinSizeTextBox.Text = session.Threshold.ToString();
             view.UnitComboBox.SelectedIndex = (int)session.Unit;
-            view.SortComboBox.SelectedIndex = (int)session.SortTarget;
-            view.SortDirectionComboBox.SelectedIndex = (int)session.SortDirection;
             view.IncludeFilesCheckBox.IsChecked = session.IncludeFiles;
             view.SeparatorComboBox.SelectedIndex = session.SeparatorIndex;
             view.TabWidthTextBox.Text = session.TabWidth.ToString();
@@ -284,8 +276,6 @@ namespace LargeFolderFinder
             // Store Settings Back to Session
             session.Threshold = thresholdVal;
             session.Unit = selectedUnit;
-            session.SortTarget = (AppConstants.SortTarget)view.SortComboBox.SelectedIndex;
-            session.SortDirection = (AppConstants.SortDirection)view.SortDirectionComboBox.SelectedIndex;
             session.IncludeFiles = view.IncludeFilesCheckBox.IsChecked == true;
             session.SeparatorIndex = view.SeparatorComboBox.SelectedIndex;
             if (int.TryParse(view.TabWidthTextBox.Text, out int tw)) session.TabWidth = tw;
@@ -476,6 +466,32 @@ namespace LargeFolderFinder
             }
         }
 
+        private void SyncCurrentViewToSession()
+        {
+            var session = CurrentSession;
+            var view = CurrentLayoutView;
+            if (session == null || view == null) return;
+
+            if (double.TryParse(view.MinSizeTextBox.Text, out double thresholdVal))
+            {
+                session.Threshold = thresholdVal;
+            }
+
+            if (view.UnitComboBox.SelectedIndex >= 0)
+            {
+                session.Unit = (AppConstants.SizeUnit)view.UnitComboBox.SelectedIndex;
+            }
+
+            session.IncludeFiles = view.IncludeFilesCheckBox.IsChecked == true;
+            session.SeparatorIndex = view.SeparatorComboBox.SelectedIndex;
+            if (int.TryParse(view.TabWidthTextBox.Text, out int tw))
+            {
+                session.TabWidth = tw;
+            }
+
+            session.Path = pathTextBox.Text;
+        }
+
         internal async void CopyButton_Click(object sender, RoutedEventArgs e)
         {
             var view = CurrentLayoutView;
@@ -610,8 +626,9 @@ namespace LargeFolderFinder
                 AppConstants.SizeUnit unit = (AppConstants.SizeUnit)view.UnitComboBox.SelectedIndex;
                 long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(unit));
                 bool includeFiles = view.IncludeFilesCheckBox.IsChecked == true;
-                var sortTarget = (AppConstants.SortTarget)view.SortComboBox.SelectedIndex;
-                var sortDirection = (AppConstants.SortDirection)view.SortDirectionComboBox.SelectedIndex;
+                var sortTarget = session.SortTarget;     // Use Session
+                var sortDirection = session.SortDirection; // Use Session
+                view.UpdateSortVisuals(sortTarget, sortDirection);
                 bool useSpaces = view.SeparatorComboBox.SelectedIndex == (int)AppConstants.Separator.Space;
 
                 int tabWidth = AppConstants.DefaultTabWidth;
@@ -936,46 +953,49 @@ namespace LargeFolderFinder
                 (
                     node: node,
                     displayText: AppConstants.TreeLastBranch + LocalizationManager.Instance.GetText(LanguageKey.NotFoundMessage),
-                    sizeText: ""
+                    sizeText: "",
+                    indentedName: AppConstants.TreeLastBranch + LocalizationManager.Instance.GetText(LanguageKey.NotFoundMessage),
+                    displayType: ""
                 );
                 yield break;
             }
 
             string sizeStr = $"{(double)node.Size / AppConstants.GetBytesPerUnit(unit):N0} {unit}".PadLeft(AppConstants.BaseSizeLength);
-            string line = isRoot
+            string baseLine = isRoot
                 ? node.Name
                 : indent + (isLast ? AppConstants.TreeLastBranch : AppConstants.TreeBranch) + node.Name;
 
-            // Padding
-            int curLen = GetStringWidth(line);
+            // Padding calculation for DisplayText (Legacy/Clipboard support)
+            string paddedLine = baseLine;
+            int curLen = GetStringWidth(baseLine);
             int paddingNeeded = targetColumn - curLen;
             if (paddingNeeded > 0)
             {
                 if (useSpaces)
                 {
-                    line += new string(' ', paddingNeeded);
+                    paddedLine += new string(' ', paddingNeeded);
                 }
                 else
                 {
-                    // Reusing strict logic from PrintTreeRecursive:
-                    var sb = new StringBuilder(); // Temporary for padding
+                    var sb = new StringBuilder();
                     while (curLen < targetColumn)
                     {
-                        if (useSpaces)
-                            sb.Append(' ');
-                        else
-                            sb.Append('\t');
+                        if (useSpaces) sb.Append(' '); else sb.Append('\t');
                         curLen += (useSpaces ? 1 : tabWidth - (curLen % tabWidth));
                     }
-                    line += sb.ToString();
+                    paddedLine += sb.ToString();
                 }
             }
+
+            string displayType = node.IsFile ? System.IO.Path.GetExtension(node.Name) : "";
 
             yield return new FolderRowItem
             (
                 node: node,
-                displayText: line + sizeStr,
-                sizeText: sizeStr
+                displayText: paddedLine + sizeStr,
+                sizeText: sizeStr,
+                indentedName: baseLine,
+                displayType: displayType
             );
 
             if (node.Children != null)
@@ -1060,6 +1080,11 @@ namespace LargeFolderFinder
                             query = sortDirection == AppConstants.SortDirection.Ascending
                                 ? query.OrderBy(c => c.LastModified)
                                 : query.OrderByDescending(c => c.LastModified);
+                            break;
+                        case AppConstants.SortTarget.Type:
+                            query = sortDirection == AppConstants.SortDirection.Ascending
+                                ? query.OrderBy(c => c.IsFile ? System.IO.Path.GetExtension(c.Name) : "")
+                                : query.OrderByDescending(c => c.IsFile ? System.IO.Path.GetExtension(c.Name) : "");
                             break;
                     }
                     visible = query.ToList();
@@ -1203,9 +1228,11 @@ namespace LargeFolderFinder
         {
             try
             {
+                SyncCurrentViewToSession();
+
                 var settings = new AppSettings();
                 settings.Language = LocalizationManager.Instance.CurrentLanguage;
-                settings.LayoutMode = MenuLayoutHorizontal.IsChecked ? AppConstants.LayoutType.Horizontal : AppConstants.LayoutType.Vertical;
+                settings.LayoutMode = MenuLayoutHorizontal.IsChecked == true ? AppConstants.LayoutType.Horizontal : AppConstants.LayoutType.Vertical;
 
                 settings.WindowTop = this.Top;
                 settings.WindowLeft = this.Left;
@@ -1217,6 +1244,19 @@ namespace LargeFolderFinder
                 else settings.WindowState = 0;
 
                 settings.SelectedIndex = SelectedIndex;
+
+                // Sync FontSize from View
+                var view = CurrentLayoutView;
+                if (view != null && double.TryParse(view.FontSizeTextBox.Text, out double fs))
+                {
+                    settings.FontSize = fs;
+                }
+                else
+                {
+                    // Fallback to existing or default
+                    var old = AppSettings.Load();
+                    settings.FontSize = old?.FontSize ?? 14.0;
+                }
 
                 var fileNames = new List<string>();
                 foreach (var s in Sessions)
@@ -1296,6 +1336,120 @@ namespace LargeFolderFinder
             settings.Save();
 
             UpdateLanguageMenu();
+        }
+
+        public void SortBy(AppConstants.SortTarget target)
+        {
+            var session = CurrentSession;
+            if (session == null || session.CurrentView == null) return;
+
+            // Toggle direction if same target, otherwise default to Ascending (or Descending for Size/Date?)
+            // Usually Size/Date -> Descending, Name/Type -> Ascending
+            if (session.SortTarget == target)
+            {
+                session.SortDirection = session.SortDirection == AppConstants.SortDirection.Ascending
+                    ? AppConstants.SortDirection.Descending
+                    : AppConstants.SortDirection.Ascending;
+            }
+            else
+            {
+                if (target == AppConstants.SortTarget.Size || target == AppConstants.SortTarget.Date)
+                    session.SortDirection = AppConstants.SortDirection.Descending;
+                else
+                    session.SortDirection = AppConstants.SortDirection.Ascending;
+
+                session.SortTarget = target;
+            }
+
+            // Sync with UI - Removed (UI controls removed)
+            // var view = session.CurrentView as IMainLayoutView;
+
+            // Re-render
+            _ = RenderResult(session);
+        }
+
+        // Show Owner Logic
+        private async void ShowOwner_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            var view = CurrentLayoutView;
+            if (view == null) return;
+
+            var selectedItems = view.OutputListBox.SelectedItems.OfType<FolderRowItem>().ToList();
+            if (!selectedItems.Any() && e.Parameter is FolderRowItem singleItem)
+            {
+                selectedItems.Add(singleItem);
+            }
+
+            if (selectedItems.Any())
+            {
+                try
+                {
+                    // Process in parallel, or limitations?
+                    // Batch them
+                    await Task.Run(() =>
+                    {
+                        Parallel.ForEach(selectedItems, item =>
+                        {
+                            try
+                            {
+                                string path = item.Node.GetFullPath();
+                                string owner = "";
+                                try
+                                {
+                                    if (item.IsFile)
+                                    {
+                                        owner = File.GetAccessControl(path).GetOwner(typeof(System.Security.Principal.NTAccount)).ToString();
+                                    }
+                                    else
+                                    {
+                                        owner = new DirectoryInfo(path).GetAccessControl().GetOwner(typeof(System.Security.Principal.NTAccount)).ToString();
+                                    }
+                                }
+                                catch
+                                {
+                                    owner = "(Unknown)";
+                                }
+
+                                // Update UI on UI thread
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    item.Owner = owner;
+                                    item.Node.Owner = owner;
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Log($"Error processing owner for {item.Node.Name}: {ex.Message}");
+                            }
+                        });
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Error getting owner parallel", ex);
+                }
+            }
+        }
+
+        public void OpenItem(FolderInfo node)
+        {
+            try
+            {
+                string path = node.GetFullPath();
+                if (System.IO.Directory.Exists(path) || System.IO.File.Exists(path))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = path,
+                        UseShellExecute = true
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to open item: " + node.Name, ex);
+                // System.Windows.MessageBox.Show("Failed to open: " + ex.Message); // Optional
+            }
         }
 
         // AddTab Logic
@@ -1611,8 +1765,14 @@ namespace LargeFolderFinder
         }
     }
 
-    public class FolderRowItem
+    public class FolderRowItem : System.ComponentModel.INotifyPropertyChanged
     {
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+        {
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
+        }
+
         public FolderInfo Node { get; set; }
         public string DisplayText { get; set; }
         public string SizeText { get; set; }
@@ -1624,18 +1784,46 @@ namespace LargeFolderFinder
             Node = null!;
             DisplayText = "";
             SizeText = "";
+            IndentedName = "";
+            DisplayType = "";
+            DisplaySize = "";
+            Owner = "";
         }
 
-        public FolderRowItem(FolderInfo node, string displayText, string sizeText)
+        public string IndentedName { get; set; }
+        public DateTime DisplayDate { get; set; }
+        public string DisplayType { get; set; }
+        public string DisplaySize { get; set; }
+
+        private string _owner;
+        public string Owner
+        {
+            get => _owner;
+            set
+            {
+                if (_owner != value)
+                {
+                    _owner = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public FolderRowItem(FolderInfo node, string displayText, string sizeText, string indentedName, string displayType)
         {
             Node = node;
             DisplayText = displayText;
             SizeText = sizeText;
+            IndentedName = indentedName;
+            DisplayDate = node.LastModified;
+            DisplayType = displayType;
+            DisplaySize = sizeText.Trim();
+            _owner = node.Owner ?? "";
         }
 
         public override string ToString()
         {
-            return DisplayText + SizeText;
+            return DisplayText;
         }
     }
 }

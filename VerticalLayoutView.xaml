@@ -6,6 +6,18 @@
              xmlns:local="clr-namespace:LargeFolderFinder"
              mc:Ignorable="d" 
              d:DesignHeight="600" d:DesignWidth="400">
+    <UserControl.Resources>
+        <ContextMenu x:Key="ItemContextMenu">
+            <MenuItem Header="Open" 
+                      Command="ApplicationCommands.Open"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+            <MenuItem Header="Show Owner" 
+                      Command="{x:Static local:LocalCommands.ShowOwner}"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+        </ContextMenu>
+    </UserControl.Resources>
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- Settings Area -->
@@ -42,16 +54,6 @@
                         <ComboBoxItem>GB</ComboBoxItem>
                         <ComboBoxItem>TB</ComboBoxItem>
                     </ComboBox> 
-                    <!-- Sort -->
-                    <TextBlock x:Name="sortLabel" Text="ソート:" VerticalAlignment="Center" Margin="0,0,5,0" />
-                    <ComboBox x:Name="sortComboBox" Width="100" Height="24" VerticalContentAlignment="Center" SelectedIndex="0" Margin="0,0,0,0">
-                        <ComboBoxItem>Size</ComboBoxItem>
-                        <ComboBoxItem>Name</ComboBoxItem>
-                    </ComboBox>
-                    <ComboBox x:Name="sortDirectionComboBox" Width="80" Height="24" VerticalContentAlignment="Center" SelectedIndex="1" Margin="0,0,20,0">
-                        <ComboBoxItem>Asc</ComboBoxItem>
-                        <ComboBoxItem>Desc</ComboBoxItem>
-                    </ComboBox>
                     <!-- Separator Option (Space/Tab) -->
                     <TextBlock x:Name="separatorLabel" Text="Space:" VerticalAlignment="Center" Margin="0,0,0,0"/>
                     <ComboBox x:Name="separatorComboBox" Width="60" VerticalContentAlignment="Center" SelectedIndex="0" Margin="0,0,5,0">
@@ -74,45 +76,67 @@
         <!-- Results Area -->
         <Grid Grid.Row="1">
             <!-- Output ListBox (Virtualizing) -->
-            <ListBox x:Name="outputListBox" 
+            <!-- Output ListView -->
+            <ListView x:Name="outputListBox" 
                      VirtualizingStackPanel.IsVirtualizing="True"
                      VirtualizingStackPanel.VirtualizationMode="Recycling"
                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                      FontFamily="MS Gothic"
-                     FontSize="14"
+                     FontSize="16"
                      BorderThickness="1"
                      BorderBrush="#ABADB3"
                      AlternationCount="2"
                      SelectionMode="Extended"
-                     PreviewKeyDown="ListBox_PreviewKeyDown">
-                <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
+                     PreviewKeyDown="ListBox_PreviewKeyDown"
+                     SizeChanged="ListView_SizeChanged"
+                     KeyDown="Input_KeyDown">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
                         <Setter Property="Padding" Value="0,0"/>
                         <Setter Property="MinHeight" Value="8"/>
                         <!-- Event Handlers -->
                         <EventSetter Event="MouseDoubleClick" Handler="ListBoxItem_MouseDoubleClick"/>
+                        <Setter Property="ContextMenu" Value="{DynamicResource ItemContextMenu}"/>
                         
-                        <Style.Triggers>
-                            <Trigger Property="ItemsControl.AlternationIndex" Value="1">
-                                <Setter Property="Background" Value="#F4F4F4"/>
-                            </Trigger>
-                             <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding IsExpanded}" Value="False"/>
-                                    <Condition Binding="{Binding IsFile}" Value="False"/>
-                                </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" Value="#7eee87"/>
-                            </MultiDataTrigger>
-                        </Style.Triggers>
+                    <Style.Triggers>
+                        <!-- 1. Alternation (Lowest Priority) -->
+                        <Trigger Property="ItemsControl.AlternationIndex" Value="1">
+                            <Setter Property="Background" Value="#F8F8F8"/>
+                        </Trigger>
+                        
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsExpanded}" Value="False"/>
+                                <Condition Binding="{Binding IsFile}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Background" Value="#7eee87"/>
+                        </MultiDataTrigger>
+
+                        <!-- 3. Selection (Highest Priority) -->
+                        <Trigger Property="IsSelected" Value="True">
+                             <Setter Property="Background" Value="#CCE8FF"/>
+                             <Setter Property="BorderBrush" Value="#99D1FF"/>
+                        </Trigger>
+                    </Style.Triggers>
                     </Style>
-                </ListBox.ItemContainerStyle>
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}" />
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+                </ListView.ItemContainerStyle>
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn x:Name="NameColumn" Header="Name" Width="400" DisplayMemberBinding="{Binding IndentedName}" />
+                        <GridViewColumn x:Name="SizeColumn" Header="Size" Width="100">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding DisplaySize}" TextAlignment="Right" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn x:Name="DateColumn" Header="Date Modified" Width="130" DisplayMemberBinding="{Binding DisplayDate, StringFormat=yyyy/MM/dd HH:mm}" />
+                        <GridViewColumn x:Name="TypeColumn" Header="Type" Width="80" DisplayMemberBinding="{Binding DisplayType}" />
+                        <GridViewColumn x:Name="OwnerColumn" Header="Owner" Width="150" DisplayMemberBinding="{Binding Owner}" />
+                    </GridView>
+                </ListView.View>
+            </ListView>
         </Grid>
 
         <!-- Footer (Status & Progress) -->

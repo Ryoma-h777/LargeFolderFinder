@@ -13,8 +13,6 @@ namespace LargeFolderFinder
         TextBlock NotificationTextBlock { get; }
 
         // Display Settings
-        ComboBox SortComboBox { get; }
-        ComboBox SortDirectionComboBox { get; }
         CheckBox IncludeFilesCheckBox { get; }
         ComboBox SeparatorComboBox { get; }
         TextBox TabWidthTextBox { get; }
@@ -24,12 +22,12 @@ namespace LargeFolderFinder
         // Labels (for localization)
         TextBlock MinSizeLabel { get; }
         TextBlock ViewHeaderLabel { get; }
-        TextBlock SortLabel { get; }
         TextBlock IncludeFilesLabel { get; }
         TextBlock SeparatorLabel { get; }
         TextBlock TabWidthLabel { get; }
 
         // Methods
         void ApplyLocalization(LocalizationManager lm);
+        void UpdateSortVisuals(AppConstants.SortTarget target, AppConstants.SortDirection direction);
     }
 }

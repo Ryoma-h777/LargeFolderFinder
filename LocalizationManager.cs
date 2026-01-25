@@ -65,13 +65,6 @@ namespace LargeFolderFinder
         // # Clipboard Copy Button
         CopyToolTip,
         IncludeFiles,
-        // # Sort
-        SortLabel,
-        SortSize,
-        SortName,
-        SortDate,
-        DirectionAsc,
-        DirectionDesc,
 
         // ####### Result #######
         LiveScanningMessage,
@@ -115,6 +108,13 @@ namespace LargeFolderFinder
         ThresholdInvalidError,
         InitializationError,
         ClipboardError,
+        ContextOpen,
+        HeaderName,
+        HeaderSize,
+        HeaderDate,
+        HeaderType,
+        HeaderOwner,
+        ContextShowOwner,
     }
 
     /// <summary>

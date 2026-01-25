@@ -51,13 +51,12 @@ TabWidthLabel: "Breite:"
 # Clipboard Copy Button
 CopyToolTip: "Ergebnisse in die Zwischenablage kopieren"
 IncludeFiles: "Dateien anzeigen"
-# Sort
-SortLabel: "Sortieren:"
-SortSize: "Größe"
-SortName: "Name"
-SortDate: "Datum"
-DirectionAsc: "Aufsteigend"
-DirectionDesc: "Absteigend"
+# Header
+HeaderName: "Name"
+HeaderSize: "Größe"
+HeaderDate: "Datum"
+HeaderType: "Typ"
+ContextOpen: "Öffnen"
 
 ####### Result #######
 LiveScanningMessage: "Scannen... Die Größe ({0}) zeigt Zwischenergebnisse an."

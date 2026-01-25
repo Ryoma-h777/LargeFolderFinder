@@ -51,13 +51,12 @@ TabWidthLabel: "寬度:"
 # Clipboard Copy Button
 CopyToolTip: "複製到剪貼簿"
 IncludeFiles: "顯示文件"
-# Sort
-SortLabel: "排序:"
-SortSize: "大小"
-SortName: "名稱"
-SortDate: "修改日期"
-DirectionAsc: "升序"
-DirectionDesc: "降序"
+# Header
+HeaderName: "名稱"
+HeaderSize: "大小"
+HeaderDate: "修改日期"
+HeaderType: "類型"
+ContextOpen: "開啟"
 
 ####### Result #######
 LiveScanningMessage: "正在掃描... 大小 ({0}) 顯示中間結果。"

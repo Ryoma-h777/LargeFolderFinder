@@ -51,13 +51,12 @@ TabWidthLabel: "Larghezza:"
 # Clipboard Copy Button
 CopyToolTip: "Copia i risultati negli appunti"
 IncludeFiles: "Mostra file"
-# Sort
-SortLabel: "Ordina:"
-SortSize: "Dimensione"
-SortName: "Nome"
-SortDate: "Data"
-DirectionAsc: "Crescente"
-DirectionDesc: "Decrescente"
+# Header
+HeaderName: "Nome"
+HeaderSize: "Dimensione"
+HeaderDate: "Data"
+HeaderType: "Tipo"
+ContextOpen: "Apri"
 
 ####### Result #######
 LiveScanningMessage: "Scansione in corso... La dimensione ({0}) mostra risultati intermedi."

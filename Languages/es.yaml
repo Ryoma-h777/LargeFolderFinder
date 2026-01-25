@@ -51,13 +51,12 @@ TabWidthLabel: "Ancho:"
 # Clipboard Copy Button
 CopyToolTip: "Copiar al portapapeles"
 IncludeFiles: "Mostrar archivos"
-# Sort
-SortLabel: "Ordenar:"
-SortSize: "Tamaño"
-SortName: "Nombre"
-SortDate: "Fecha"
-DirectionAsc: "Ascendente"
-DirectionDesc: "Descendente"
+# Header
+HeaderName: "Nombre"
+HeaderSize: "Tamaño"
+HeaderDate: "Fecha"
+HeaderType: "Tipo"
+ContextOpen: "Abrir"
 
 ####### Result #######
 LiveScanningMessage: "Escaneando... El tamaño ({0}) muestra resultados intermedios."

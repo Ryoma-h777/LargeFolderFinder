@@ -64,7 +64,9 @@ namespace LargeFolderFinder
                 }
 
                 byte[] bytes = File.ReadAllBytes(filePath);
-                return MessagePackSerializer.Deserialize<SessionData>(bytes, LZ4Options);
+                var session = MessagePackSerializer.Deserialize<SessionData>(bytes, LZ4Options);
+                session?.Result?.RestoreParentReferences();
+                return session;
             }
             catch (Exception ex)
             {
