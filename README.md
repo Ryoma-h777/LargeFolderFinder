@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[**🇯🇵 日本語 (Japanese Version) is here**](#-Large-Folder-Finder-Japanese)
+[**🇯🇵 日本語 (Japanese Version) is here**](#large-folder-finder-japanese)
 
 This desktop application quickly searches folders on Windows and visually displays their structure and size in a tree format.
 It excels at exploring network drives like NAS, helping you quickly pinpoint causes of disk space pressure.
