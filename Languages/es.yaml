@@ -51,6 +51,13 @@ TabWidthLabel: "Ancho:"
 # Clipboard Copy Button
 CopyToolTip: "Copiar al portapapeles"
 IncludeFiles: "Mostrar archivos"
+# Filter
+FilterLabel: "Filtro:"
+FilterMode_Normal: "Comodín"
+FilterMode_Regex: "Regex"
+FilterTooltip: "Filtra los resultados mostrados.\nComodín: Mismo filtro que el Explorador de Windows\nRegex: Filtrado avanzado"
+FilterPlaceholder: "Filtro..."
+
 # Header
 HeaderName: "Nombre"
 HeaderSize: "Tamaño"
@@ -67,7 +74,7 @@ ScanningStatus: "Escaneando..."
 CancelledStatus: "Cancelado"
 FinishedStatus: "Finalizado"
 NotFoundMessage: "No se encontraron carpetas que coincidan."
-FolderCountStatus: "Comprobando el número de carpetas..."
+FolderCountStatus: "Contando carpetas/archivos:"
 RenderingStatus: "Renderizando..."
 Unknown: "Desconocido" # Barra de progreso: Se muestra cuando el total es desconocido.
 LabelError: "Error"

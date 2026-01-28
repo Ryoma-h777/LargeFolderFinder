@@ -51,6 +51,13 @@ TabWidthLabel: "Larghezza:"
 # Clipboard Copy Button
 CopyToolTip: "Copia i risultati negli appunti"
 IncludeFiles: "Mostra file"
+# Filter
+FilterLabel: "Filtro:"
+FilterMode_Normal: "Carattere jolly"
+FilterMode_Regex: "Regex"
+FilterTooltip: "Filtra i risultati visualizzati.\nCarattere jolly: Stesso filtro di Esplora file di Windows\nRegex: Filtraggio avanzato"
+FilterPlaceholder: "Filtro..."
+
 # Header
 HeaderName: "Nome"
 HeaderSize: "Dimensione"
@@ -67,7 +74,7 @@ ScanningStatus: "Scansione in corso..."
 CancelledStatus: "Annullato"
 FinishedStatus: "Finito"
 NotFoundMessage: "Nessuna cartella corrispondente trovata."
-FolderCountStatus: "Verifica del numero di cartelle..."
+FolderCountStatus: "Conteggio cartelle/file:"
 RenderingStatus: "Rendering in corso..."
 Unknown: "Sconosciuto" # Barra di avanzamento: mostrato quando il totale è sconosciuto.
 LabelError: "Errore"

@@ -40,21 +40,31 @@ C:\                                                 378 GB   2026/01/27 01:00   
 ## ✨ Features
 
 - **Fast Multi-thread Scan**: Parallel processing allows for rapid scanning of drives containing a large number of files.
-- **Server Support**: Supports scanning via network (NAS).
-  - Achievement: **Scanned approx. 1TB of NAS data in 15 seconds.**
-  - Achievement: **Scanned approx. 20TB of NAS data in 30 minutes.** (Depends on file count)
+  - PC Example: **Approx. 400GB (approx. 1.17M files) on PC → 13 seconds**
+  - NAS Example 1: **Approx. 1TB (approx. 70K files) on NAS → 23 seconds**
+  - NAS Example 2: **Approx. 20TB (approx. 1.4M files) on NAS → Approx. 30 minutes**
+- **Server Support**: Supports scanning via network (NAS, etc.).
+- **Tabs and History Saving**: Scan results are automatically saved and can be viewed in multiple tab windows.
 - **Advanced Customization**:
-  - Toggle parallel processing, sector size consideration, skip pre-scan counting.
-  - Adjust output format (tab/space) and units (KB, MB, GB, TB).
-- **Multilingual Support**: Automatically detects OS language settings (Supports 13 languages including English, Japanese, Chinese, etc.).
+  - Enable/disable parallel processing, sector size consideration, skip pre-scan counting, etc.
+  - Output format & copy results to clipboard
+    - Show/hide files
+    - Filter function (wildcard or regular expression)
+    - Folder collapse feature (also reflected in clipboard output)
+    - Adjust display units (KB, MB, GB, TB)
+    - Font size adjustment
+
+- **Multilingual Support**: Automatically detects OS language settings (Supports 13 languages including Japanese, English, Chinese, etc.).
 
 ## 🚀 How to Use
 
 1. **Download**: Download and unzip the latest `LargeFolderFinder.zip` from the [Releases](https://github.com/Ryoma-h777/LargeFolderFinder/releases) page.
 2. **Run**: Launch `LargeFolderFinder.exe`.
 3. **Configure**: Select the path to scan and enter the minimum size to extract (e.g., 1 GB).
-4. **Scan**: Click "Scan".
+4. **Scan**: Click the ▶ button (Scan button).
 5. **Utilize**: Copy the results using the button and use them for disk space management.
+
+※For details, please refer to the Readme/Readme_{language}.txt file for each language.
 
 ## 💻 System Requirements
 
@@ -63,7 +73,17 @@ C:\                                                 378 GB   2026/01/27 01:00   
 
 ## 📄 License
 
-This project is released under the [MIT License](LICENSE). Anyone can use it freely for free, including for commercial purposes.
+This project is released under the [MIT License](LICENSE). Anyone may use it freely and at no cost, including for commercial purposes.
+
+If you are unable to display the MIT License attribution, you may use it under the following conditions:
+※ You do not need to wait for my reply to start using it; you may begin immediately.
+- Post on social media (e.g., X) stating you are using the tool, including the “Tool Name” and “Creator” (Ryoma Henzan, Cat & Chocolate Laboratory), and notify the developer.
+
+- If you do not have a social media account, you may obtain permission to post on the developer's social media, including your company name or personal name.
+
+- If you encounter any other issues, please contact us; we will accommodate you flexibly.
+
+Translated with DeepL.com (free version)
 
 ---
 
@@ -116,8 +136,9 @@ C:\                                                 378 GB   2026/01/27 01:00   
   - 並列処理・セクタサイズの配慮・事前スキャンのスキップなど有効化/無効化
   - 出力フォーマット & 結果のクリップボードへのコピー
     - ファイルの表示/非表示
-    - 表示単位（KB, MB, GB, TB）の調整
     - フォルダの折りたたみ機能(クリップボード出力にも反映)
+    - フィルタ機能(ワイルドカードor正規表現)
+    - 表示単位（KB, MB, GB, TB）の調整
     - フォントサイズの調整
 - **多言語対応**: OSの言語設定を自動認識（日本語・英語・中国語など、全13言語）。
 
@@ -126,8 +147,10 @@ C:\                                                 378 GB   2026/01/27 01:00   
 1. **ダウンロード**: [Releases](https://github.com/Ryoma-h777/LargeFolderFinder/releases) ページから最新の `LargeFolderFinder.zip` をダウンロード・解凍します。
 2. **実行**: `LargeFolderFinder.exe` を起動します。
 3. **設定**: スキャンしたいパスを選択し、抽出する最小サイズ（例: 1GB）を入力します。
-4. **スキャン**: 「スキャン開始」をクリックします。
+4. **スキャン**: ▶ボタン(スキャンボタン)をクリックします。
 5. **活用**: 結果をコピーボタンで取得し、容量整理の資料として利用できます。
+
+※詳しくは各言語の Readme/Readme_{language}.txt に記載されています。
 
 ## 💻 システム要件
 

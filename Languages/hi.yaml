@@ -51,6 +51,13 @@ TabWidthLabel: "चौड़ाई:"
 # Clipboard Copy Button
 CopyToolTip: "क्लिपबोर्ड पर कॉपी करें"
 IncludeFiles: "फ़ाइलें दिखाएं"
+# Filter
+FilterLabel: "फ़िल्टर:"
+FilterMode_Normal: "वाइल्डकार्ड"
+FilterMode_Regex: "रेगेक्स"
+FilterTooltip: "प्रदर्शित परिणामों को फ़िल्टर करता है।\nवाइल्डकार्ड: Windows एक्सप्लोरर के समान फ़िल्टर\nरेगेक्स: उन्नत फ़िल्टरिंग"
+FilterPlaceholder: "फ़िल्टर..."
+
 # Header
 HeaderName: "नाम"
 HeaderSize: "आकार"
@@ -67,7 +74,7 @@ ScanningStatus: "स्कैन किया जा रहा है..."
 CancelledStatus: "रद्द कर दिया गया"
 FinishedStatus: "पूरा हुआ"
 NotFoundMessage: "कोई मिलान करने वाला फ़ोल्डर नहीं मिला।"
-FolderCountStatus: "फ़ोल्डरों की संख्या जाँची जा रही है..."
+FolderCountStatus: "फ़ोल्डर/फ़ाइल गिनती की जाँच:"
 RenderingStatus: "रेंडर किया जा रहा है..."
 Unknown: "अज्ञात" # प्रोग्रेस बार डिस्प्ले: दिखाया जाता है जब कुल संख्या ज्ञात नहीं होती है।
 LabelError: "त्रुटि"

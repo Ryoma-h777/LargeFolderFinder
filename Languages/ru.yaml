@@ -51,6 +51,13 @@ TabWidthLabel: "Ширина:"
 # Clipboard Copy Button
 CopyToolTip: "Копировать результаты в буфер обмена"
 IncludeFiles: "Показать файлы"
+# Filter
+FilterLabel: "Фильтр:"
+FilterMode_Normal: "Wildcard"
+FilterMode_Regex: "RegEx"
+FilterTooltip: "Фильтрует отображаемые результаты.\nПодстановочные знаки: Тот же фильтр, что и в Проводнике Windows\nРегулярное выражение: Расширенная фильтрация"
+FilterPlaceholder: "Фильтр..."
+
 # Header
 HeaderName: "Имя"
 HeaderSize: "Размер"
@@ -67,7 +74,7 @@ ScanningStatus: "Сканирование..."
 CancelledStatus: "Отменено"
 FinishedStatus: "Завершено"
 NotFoundMessage: "Совпадающие папки не найдены."
-FolderCountStatus: "Проверка количества папок..."
+FolderCountStatus: "Подсчет папок/файлов:"
 RenderingStatus: "Отображение..."
 Unknown: "Неизвестно" # Шкала прогресса: отображается, когда общее количество неизвестно.
 LabelError: "Ошибка"

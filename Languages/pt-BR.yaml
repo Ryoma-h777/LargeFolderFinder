@@ -51,6 +51,13 @@ TabWidthLabel: "Largura:"
 # Clipboard Copy Button
 CopyToolTip: "Copiar para a área de transferência"
 IncludeFiles: "Mostrar arquivos"
+# Filter
+FilterLabel: "Filtro:"
+FilterMode_Normal: "Curinga"
+FilterMode_Regex: "Regex"
+FilterTooltip: "Filtra os resultados exibidos.\nCuringa: Mesmo filtro do Windows Explorer\nRegex: Filtragem avançada"
+FilterPlaceholder: "Filtro..."
+
 # Header
 HeaderName: "Nome"
 HeaderSize: "Tamanho"
@@ -67,7 +74,7 @@ ScanningStatus: "Escaneando..."
 CancelledStatus: "Cancelado"
 FinishedStatus: "Finalizado"
 NotFoundMessage: "Nenhuma pasta correspondente encontrada."
-FolderCountStatus: "Verificando o número de pastas..."
+FolderCountStatus: "Contando pastas/arquivos:"
 RenderingStatus: "Renderizando..."
 Unknown: "Desconhecido" # Barra de progresso: exibido quando o total é desconhecido.
 LabelError: "Erro"

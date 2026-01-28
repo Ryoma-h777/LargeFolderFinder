@@ -4,3 +4,4 @@ UseParallelScan: true
 SkipFolderCount: false
 MaxDepthForCount: 3
 UsePhysicalSize: true
+OldDataThresholdDays: 30

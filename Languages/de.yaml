@@ -51,6 +51,13 @@ TabWidthLabel: "Breite:"
 # Clipboard Copy Button
 CopyToolTip: "Ergebnisse in die Zwischenablage kopieren"
 IncludeFiles: "Dateien anzeigen"
+# Filter
+FilterLabel: "Filter:"
+FilterMode_Normal: "Platzhalter"
+FilterMode_Regex: "Regex"
+FilterTooltip: "Filtert die Anzeigeergebnisse.\nPlatzhalter: Gleicher Filter wie Windows Explorer\nRegex: Erweiterte Filterung"
+FilterPlaceholder: "Filter..."
+
 # Header
 HeaderName: "Name"
 HeaderSize: "Größe"
@@ -67,7 +74,7 @@ ScanningStatus: "Scannen..."
 CancelledStatus: "Abgebrochen"
 FinishedStatus: "Fertig"
 NotFoundMessage: "Keine passenden Ordner gefunden."
-FolderCountStatus: "Überprüfung der Anzahl der Ordner..."
+FolderCountStatus: "Zählen von Ordnern/Dateien:"
 RenderingStatus: "Rendern..."
 Unknown: "Unbekannt" # Fortschrittsanzeige: Wird angezeigt, wenn die Gesamtzahl unbekannt ist.
 LabelError: "Fehler"
