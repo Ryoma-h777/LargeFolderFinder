@@ -51,6 +51,13 @@ TabWidthLabel: "Largeur :"
 # Clipboard Copy Button
 CopyToolTip: "Copier dans le presse-papiers"
 IncludeFiles: "Afficher les fichiers"
+# Filter
+FilterLabel: "Filtre :"
+FilterMode_Normal: "Joker"
+FilterMode_Regex: "Regex"
+FilterTooltip: "Filtre les résultats affichés.\nCaractère générique : Même filtre que l'Explorateur Windows\nRegex : Filtrage avancé"
+FilterPlaceholder: "Filtre..."
+
 # Header
 HeaderName: "Nom"
 HeaderSize: "Taille"
@@ -67,7 +74,7 @@ ScanningStatus: "Analyse en cours..."
 CancelledStatus: "Annulé"
 FinishedStatus: "Terminé"
 NotFoundMessage: "Aucun dossier correspondant trouvé."
-FolderCountStatus: "Vérification du nombre de dossiers..."
+FolderCountStatus: "Comptage dossiers/fichiers :"
 RenderingStatus: "Rendu en cours..."
 Unknown: "Inconnu" # Barre de progression : affiché quand le total est inconnu.
 LabelError: "Erreur"

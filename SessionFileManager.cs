@@ -47,6 +47,27 @@ namespace LargeFolderFinder
         }
 
         /// <summary>
+        /// 指定したセッションファイルを削除する
+        /// </summary>
+        public static void Delete(string fileName)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(fileName)) return;
+
+                string filePath = Path.Combine(SessionsDirectory, fileName);
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"セッションファイルの削除に失敗しました: {fileName}", ex);
+            }
+        }
+
+        /// <summary>
         /// セッションデータを読み込む
         /// </summary>
         /// <param name="fileName">読み込むファイル名</param>
@@ -65,7 +86,16 @@ namespace LargeFolderFinder
 
                 byte[] bytes = File.ReadAllBytes(filePath);
                 var session = MessagePackSerializer.Deserialize<SessionData>(bytes, LZ4Options);
-                session?.Result?.RestoreParentReferences();
+                if (session != null)
+                {
+                    // Fix DateTime Kind for MessagePack (it deserializes as UTC by default)
+                    // This prevents GenerateFileName() from creating a different filename (offset by timezone)
+                    if (session.CreatedAt.Kind == DateTimeKind.Utc)
+                    {
+                        session.CreatedAt = session.CreatedAt.ToLocalTime();
+                    }
+                    session.Result?.RestoreParentReferences();
+                }
                 return session;
             }
             catch (Exception ex)
@@ -75,26 +105,7 @@ namespace LargeFolderFinder
             }
         }
 
-        /// <summary>
-        /// セッションファイルを削除する
-        /// </summary>
-        /// <param name="fileName">削除するファイル名</param>
-        public static void Delete(string fileName)
-        {
-            try
-            {
-                string filePath = Path.Combine(SessionsDirectory, fileName);
 
-                if (File.Exists(filePath))
-                {
-                    File.Delete(filePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"セッションファイルの削除に失敗しました: {fileName}", ex);
-            }
-        }
 
         /// <summary>
         /// 古いセッションファイルを削除する（オプション機能）

@@ -30,61 +30,75 @@
             </Grid.RowDefinitions>
 
             <!-- Row 3: Display Settings Row -->
-            <Grid Grid.Row="0" Margin="0,0,0,5">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock x:Name="viewHeaderLabel" Text="表示" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Grid Grid.Row="0" Margin="5,5,5,5">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Left side: Fixed width controls -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <TextBlock x:Name="viewHeaderLabel" Text="View" VerticalAlignment="Center" Margin="0,0,10,0"/>
 
-                    <!-- Font Size -->
-                    <TextBlock Text="Font:" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                    <TextBox x:Name="fontSizeTextBox" Width="30" VerticalContentAlignment="Center" Text="14" Margin="0,0,20,0" />
-                    <!-- Toggle File Visibility -->
-                    <StackPanel x:Name="includeFilesPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
-                        <TextBlock x:Name="includeFilesLabel" Text="View Files" VerticalAlignment="Center" Margin="0,0,2,0"/>
-                        <CheckBox x:Name="includeFilesCheckBox" VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <!-- Search Size -->
-                    <TextBlock x:Name="minSizeLabel" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <TextBox x:Name="minSizeTextBox" Width="52" VerticalContentAlignment="Center" Text="1" Margin="0,0,0,0"/>
-                    <ComboBox x:Name="unitComboBox" Width="45" VerticalContentAlignment="Center" Margin="0,0,20,0">
-                        <ComboBoxItem>B</ComboBoxItem>
-                        <ComboBoxItem>KB</ComboBoxItem>
-                        <ComboBoxItem>MB</ComboBoxItem>
-                        <ComboBoxItem>GB</ComboBoxItem>
-                        <ComboBoxItem>TB</ComboBoxItem>
-                    </ComboBox> 
-                    <!-- Separator Option (Space/Tab) -->
-                    <TextBlock x:Name="separatorLabel" Text="Space:" VerticalAlignment="Center" Margin="0,0,0,0"/>
-                    <ComboBox x:Name="separatorComboBox" Width="60" VerticalContentAlignment="Center" SelectedIndex="0" Margin="0,0,5,0">
-                        <ComboBoxItem>Tab</ComboBoxItem>
-                        <ComboBoxItem>Space</ComboBoxItem>
-                    </ComboBox>
-                    <!-- Tab Width (Only visible in Tab mode) -->
-                    <StackPanel x:Name="tabWidthArea" Orientation="Horizontal" Visibility="Visible">
-                        <TextBlock x:Name="tabWidthLabel" Text="Width:" VerticalAlignment="Center" Margin="0,0,0,0"/>
-                        <TextBox x:Name="tabWidthTextBox" Width="25" VerticalContentAlignment="Center" Text="8" />
+                        <!-- Font Size -->
+                        <TextBlock Text="Font:" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        <TextBox x:Name="fontSizeTextBox" Width="30" VerticalContentAlignment="Center" Text="14" Margin="0,0,20,0" />
+                        <!-- Toggle File Visibility -->
+                        <StackPanel x:Name="includeFilesPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock x:Name="includeFilesLabel" Text="View Files" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                            <CheckBox x:Name="includeFilesCheckBox" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <!-- Search Size -->
+                        <TextBlock x:Name="minSizeLabel" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="minSizeTextBox" Width="52" VerticalContentAlignment="Center" Text="1" Margin="0,0,0,0"/>
+                        <ComboBox x:Name="unitComboBox" Width="45" VerticalContentAlignment="Center" Margin="0,0,20,0">
+                            <ComboBoxItem>B</ComboBoxItem>
+                            <ComboBoxItem>KB</ComboBoxItem>
+                            <ComboBoxItem>MB</ComboBoxItem>
+                            <ComboBoxItem>GB</ComboBoxItem>
+                            <ComboBoxItem>TB</ComboBoxItem>
+                        </ComboBox> 
+                        <!-- Separator Option (Space/Tab) -->
+                        <TextBlock x:Name="separatorLabel" Text="Space:" VerticalAlignment="Center" Margin="0,0,0,0"/>
+                        <ComboBox x:Name="separatorComboBox" Width="60" VerticalContentAlignment="Center" SelectedIndex="0" Margin="0,0,5,0">
+                            <ComboBoxItem>Tab</ComboBoxItem>
+                            <ComboBoxItem>Space</ComboBoxItem>
+                        </ComboBox>
+                        <!-- Tab Width (Only visible in Tab mode) -->
+                        <StackPanel x:Name="tabWidthArea" Orientation="Horizontal" Visibility="Visible">
+                            <TextBlock x:Name="tabWidthLabel" Text="Width:" VerticalAlignment="Center" Margin="0,0,0,0"/>
+                            <TextBox x:Name="tabWidthTextBox" Width="25" VerticalContentAlignment="Center" Text="8" />
+                        </StackPanel>
                     </StackPanel>
                     
-                    <!-- Filter -->
-                    <StackPanel x:Name="filterPanel" Orientation="Horizontal" Margin="20,0,0,0">
-                         <TextBlock x:Name="filterLabel" Text="Filter:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                         <ComboBox x:Name="filterModeComboBox" Width="100" VerticalContentAlignment="Center" Margin="0,0,5,0">
+                    <!-- Right side: Filter panel that stretches -->
+                    <Grid x:Name="filterPanel" Grid.Column="1" Margin="20,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="filterLabel" Grid.Column="0" Text="Filter:" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                        <ComboBox x:Name="filterModeComboBox" Grid.Column="1" Width="100" MinWidth="80" VerticalContentAlignment="Center" Margin="0,0,0,0">
                             <ComboBoxItem Content="Normal Search" IsSelected="True"/>
                             <ComboBoxItem Content="Regular Expression"/>
                         </ComboBox>
-                        <TextBox x:Name="filterTextBox" Width="100" VerticalContentAlignment="Center"/>
-                    </StackPanel>                    
-                </StackPanel>
-                
-                <Button x:Name="copyButton" HorizontalAlignment="Right" Width="24" Height="24" VerticalAlignment="Center" Click="CopyButton_Click" ToolTip="Copy">
-                    <Path Data="{StaticResource CopyIconGeometry}" Fill="#444" Stretch="Uniform" Margin="4" />
-                </Button>
+                        <TextBox x:Name="filterTextBox" Grid.Column="2" VerticalContentAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Copy Button -->
+                    <Button Grid.Column="2" x:Name="copyButton" HorizontalAlignment="Right" Width="24" Height="24" VerticalAlignment="Center" Click="CopyButton_Click" ToolTip="Copy" Margin="15,0,0,0">
+                        <Path Data="{StaticResource CopyIconGeometry}" Fill="#444" Stretch="Uniform" Margin="4" />
+                    </Button>
+                </Grid>
             </Grid>
         </Grid>
 
         <!-- Results Area -->
         <Grid Grid.Row="1">
             <!-- Output ListBox (Virtualizing) -->
-            <!-- Output ListView -->
             <ListView x:Name="outputListBox" 
                      VirtualizingStackPanel.IsVirtualizing="True"
                      VirtualizingStackPanel.VirtualizationMode="Recycling"
@@ -130,7 +144,7 @@
                 </ListView.ItemContainerStyle>
                 <ListView.View>
                     <GridView>
-                        <GridViewColumn x:Name="NameColumn" Header="Name" Width="400" DisplayMemberBinding="{Binding IndentedName}" />
+                        <GridViewColumn x:Name="NameColumn" Header="Name" Width="600" DisplayMemberBinding="{Binding IndentedName}" />
                         <GridViewColumn x:Name="SizeColumn" Header="Size" Width="100">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
@@ -138,7 +152,7 @@
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
-                        <GridViewColumn x:Name="DateColumn" Header="Date Modified" Width="130" DisplayMemberBinding="{Binding DisplayDate, StringFormat=yyyy/MM/dd HH:mm}" />
+                        <GridViewColumn x:Name="DateColumn" Header="Date Modified" Width="140" DisplayMemberBinding="{Binding DisplayDate, StringFormat=yyyy/MM/dd HH:mm}" />
                         <GridViewColumn x:Name="TypeColumn" Header="Type" Width="80" DisplayMemberBinding="{Binding DisplayType}" />
                         <GridViewColumn x:Name="OwnerColumn" Header="Owner" Width="150" DisplayMemberBinding="{Binding Owner}" />
                     </GridView>

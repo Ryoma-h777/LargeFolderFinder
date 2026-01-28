@@ -51,6 +51,13 @@ TabWidthLabel: "寬度:"
 # Clipboard Copy Button
 CopyToolTip: "複製到剪貼簿"
 IncludeFiles: "顯示文件"
+# Filter
+FilterLabel: "篩選:"
+FilterMode_Normal: "萬用字元"
+FilterMode_Regex: "正規表示式"
+FilterTooltip: "篩選顯示結果。\n萬用字元: 與Windows檔案總管相同的篩選\n正規表示式: 進階篩選"
+FilterPlaceholder: "篩選..."
+
 # Header
 HeaderName: "名稱"
 HeaderSize: "大小"
@@ -67,7 +74,7 @@ ScanningStatus: "正在掃描..."
 CancelledStatus: "已取消"
 FinishedStatus: "已完成"
 NotFoundMessage: "未找到匹配的資料夾。"
-FolderCountStatus: "正在檢查資料夾數量..."
+FolderCountStatus: "正在確認資料夾/檔案數量:"
 RenderingStatus: "正在繪製..."
 Unknown: "未知" # 進捗率表示用: 総数を把握していない時に表示されます。
 LabelError: "錯誤"

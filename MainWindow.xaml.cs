@@ -350,6 +350,16 @@ namespace LargeFolderFinder
 
             var config = Config.Load();
             SaveCache(); // 検索履歴の保存
+
+            // Update session timestamp and rename file (User Requirement: Update date on re-scan)
+            if (!string.IsNullOrEmpty(session.FileName))
+            {
+                SessionFileManager.Delete(session.FileName);
+            }
+            session.CreatedAt = DateTime.Now;
+            // Update filename immediately
+            session.FileName = SessionFileManager.Save(session);
+
             _hasShownProgressError = false;
 
             session.Cts = new CancellationTokenSource();
@@ -485,11 +495,13 @@ namespace LargeFolderFinder
                 // UIの描画完了を待ってから時間を止める
                 await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
                 sw.Stop();
+                session.LastScanDuration = sw.Elapsed;
+                session.TotalFilesScanned = session.Result?.CountFolderRecursive() ?? 0;
 
                 if (view != null)
                 {
                     view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} " +
-                        $"[{string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(sw.Elapsed))}]";
+                        $"{string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(sw.Elapsed))}";
                 }
                 Logger.Log(string.Format(AppConstants.LogScanSuccess, _formatter.FormatDuration(sw.Elapsed)));
 
@@ -611,6 +623,24 @@ namespace LargeFolderFinder
             if (view.FilterModeComboBox != null)
             {
                 view.FilterModeComboBox.SelectedIndex = session.FilterModeIndex;
+            }
+
+            // Sync global pathTextBox
+            pathTextBox.Text = session.Path;
+
+            // Restore Status Bar
+            if (!session.IsScanning)
+            {
+                var lm = LocalizationManager.Instance;
+                if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
+                {
+                    string countText = session.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {(session.Result?.CountFolderRecursive() ?? 0):N0}";
+                    view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(session.LastScanDuration))} ({session.TotalFilesScanned:N0} files){countText}";
+                }
+                else
+                {
+                    view.StatusTextBlock.Text = lm.GetText(LanguageKey.ReadyStatus);
+                }
             }
         }
 
@@ -760,9 +790,13 @@ namespace LargeFolderFinder
             if (view.OutputListBox == null) return;
 
             // Update Progress Bar
-            view.ScanProgressBar.Visibility = Visibility.Visible;
-            view.ScanProgressBar.IsIndeterminate = true;
-            view.StatusTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.RenderingStatus);
+            // Only update status if NOT scanning (to avoid overwriting scan progress)
+            if (!session.IsScanning)
+            {
+                view.ScanProgressBar.Visibility = Visibility.Visible;
+                view.ScanProgressBar.IsIndeterminate = true;
+                view.StatusTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.RenderingStatus);
+            }
 
             // UI設定読み込み
             long sizeThreshold;
@@ -876,16 +910,28 @@ namespace LargeFolderFinder
                         view.ScanProgressBar.Visibility = Visibility.Collapsed;
                         view.ScanProgressBar.IsIndeterminate = false;
 
-                        var lm = LocalizationManager.Instance;
-                        string countText = session.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {session.Result.CountFolderRecursive():N0}";
-                        view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)}: {_formatter.FormatDuration(session.LastScanDuration)} ({session.TotalFilesScanned:N0} files){countText}";
+                        // Restore status if not scanning (e.g. after filter change)
+                        if (!session.IsScanning)
+                        {
+                            var lm = LocalizationManager.Instance;
+                            if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
+                            {
+                                string countText = session.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {session.Result.CountFolderRecursive():N0}";
+                                view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(session.LastScanDuration))} ({session.TotalFilesScanned:N0} files){countText}";
+                            }
+                            else
+                            {
+                                view.StatusTextBlock.Text = lm.GetText(LanguageKey.ReadyStatus);
+                            }
+                        }
                     });
                 }
                 catch (Exception ex)
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        view.StatusTextBlock.Text = "Error during rendering.";
+                        var lm = LocalizationManager.Instance;
+                        view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.LabelError)}{ex.Message}";
                         Logger.Log($"Render error: {ex}");
                         view.ScanProgressBar.Visibility = Visibility.Collapsed;
                     });
@@ -908,181 +954,124 @@ namespace LargeFolderFinder
 
         private void LoadCache()
         {
-            Logger.Log(AppConstants.LogCacheLoadStart);
+            Logger.Log("LoadCache: Start");
             try
             {
                 var settings = AppSettings.Load();
+                Logger.Log($"LoadCache: Settings loaded (Result: {(settings != null ? "Success" : "Null")})");
 
                 Sessions.Clear();
-
-                bool useAsyncLoading = false;
-                List<SessionInfo>? asyncLoadInfos = null;
 
                 if (settings != null)
                 {
                     // Restore Window Geometry and State
                     if (!double.IsNaN(settings.WindowTop)) this.Top = settings.WindowTop;
-                    if (!double.IsNaN(settings.WindowLeft)) this.Left = settings.WindowLeft;
-                    if (!double.IsNaN(settings.WindowWidth)) this.Width = settings.WindowWidth;
-                    if (!double.IsNaN(settings.WindowHeight)) this.Height = settings.WindowHeight;
-
-                    if (settings.WindowState == 1) this.WindowState = WindowState.Minimized;
-                    else if (settings.WindowState == 2) this.WindowState = WindowState.Maximized;
-
-                    // 1. Populate Sessions
-                    if (settings.SessionInfos != null && settings.SessionInfos.Count > 0)
-                    {
-                        // Use Placeholders
-                        useAsyncLoading = true;
-                        asyncLoadInfos = settings.SessionInfos;
-                        foreach (var info in settings.SessionInfos)
-                        {
-                            // Important: Set FileName so SaveCache knows it's an existing file
-                            Sessions.Add(new SessionData { Path = info.Path, IsLoading = true, FileName = info.FileName });
-                        }
-                    }
-                    else if (settings.SessionFileNames != null && settings.SessionFileNames.Length > 0)
-                    {
-                        // Legacy Sync Loading
-                        foreach (var name in settings.SessionFileNames)
-                        {
-                            var s = SessionFileManager.Load(name);
-                            if (s != null)
-                            {
-                                s.FileName = name;
-                                Sessions.Add(s);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // Settings exist but no sessions
-                        Sessions.Add(new SessionData());
-                    }
-
-                    // Apply Settings
-                    LocalizationManager.Instance.CurrentLanguage = settings.Language;
-                    ApplyLayout(settings.LayoutMode);
                     SelectedIndex = settings.SelectedIndex;
                 }
-                else
-                {
-                    // No Settings, try finding files on disk
-                    Logger.Log("Settings file not found. Attempting to restore sessions from disk.");
-                    var sessionFiles = SessionFileManager.GetAllSessionFileNames();
-                    if (sessionFiles != null && sessionFiles.Length > 0)
-                    {
-                        Array.Sort(sessionFiles);
-                        foreach (var name in sessionFiles)
-                        {
-                            var s = SessionFileManager.Load(name);
-                            if (s != null)
-                            {
-                                s.FileName = name;
-                                Sessions.Add(s);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Sessions.Add(new SessionData() { Path = "c:\\" });
-                    }
 
-                    ApplyLayout(AppConstants.LayoutType.Vertical);
-                    SelectedIndex = 0;
+                // Load All Sessions from Disk
+                var files = SessionFileManager.GetAllSessionFileNames();
+                Logger.Log($"LoadCache: Found {files.Length} session files.");
+                Array.Sort(files);
+
+                foreach (var file in files)
+                {
+                    Logger.Log($"LoadCache: Adding placeholder for {file}");
+                    Sessions.Add(new SessionData
+                    {
+                        Path = "Loading...",
+                        IsLoading = true,
+                        FileName = file
+                    });
                 }
 
-                if (Sessions.Count == 0) Sessions.Add(new SessionData() { Path = "c:\\" });
-                if (SelectedIndex < 0 || SelectedIndex >= Sessions.Count) SelectedIndex = 0;
+                if (Sessions.Count == 0)
+                {
+                    Logger.Log("LoadCache: No sessions found, adding default tab.");
+                    AddNewTab();
+                }
 
-                // Ensure the view for the selected session is created immediately (avoid white screen)
+                if (SelectedIndex < 0 || SelectedIndex >= Sessions.Count)
+                    SelectedIndex = Math.Min(Math.Max(0, Sessions.Count - 1), 0);
+                if (Sessions.Count > 0 && SelectedIndex < 0) SelectedIndex = 0;
+
+                // Ensure the view for the selected session is created immediately
                 if (SelectedIndex >= 0 && SelectedIndex < Sessions.Count)
                 {
                     EnsureViewCreated(Sessions[SelectedIndex]);
                 }
 
-                // 2. Start Async Loading if needed
-                if (useAsyncLoading && asyncLoadInfos != null)
+                InitializeLocalization();
+
+                // 3. Start Async Loading
+                var loadTargets = new List<SessionData>(Sessions);
+                int activeIdx = SelectedIndex;
+                Logger.Log($"LoadCache: Starting async load for {loadTargets.Count} sessions. ActiveIdx: {activeIdx}");
+
+                Task.Run(() =>
                 {
-                    int activeIndex = SelectedIndex;
-                    // Safety check
-                    if (activeIndex >= asyncLoadInfos.Count) activeIndex = 0;
-
-                    var activeInfo = asyncLoadInfos[activeIndex];
-
-                    Task.Run(() =>
+                    void LoadSingle(SessionData target)
                     {
-                        var loadedSession = SessionFileManager.Load(activeInfo.FileName);
-                        Dispatcher.Invoke(() =>
+                        if (string.IsNullOrEmpty(target.FileName))
                         {
-                            if (loadedSession != null && activeIndex < Sessions.Count)
-                            {
-                                // Update existing placeholder in-place to preserve Selection
-                                var placeholder = Sessions[activeIndex];
-                                placeholder.CopyFrom(loadedSession);
-                                placeholder.IsLoading = false;
+                            Logger.Log("LoadCache: LoadSingle skipped (empty filename)");
+                            return;
+                        }
 
-                                // ビューが既に存在する場合、UIを更新
-                                SyncSessionToView(placeholder);
-
-                                // Render if view exists
-                                if (placeholder.CurrentView != null)
-                                {
-                                    _ = RenderResult(placeholder);
-                                }
-                            }
-                            else
-                            {
-                                // If load failed, keep placeholder but stop loading
-                                if (activeIndex < Sessions.Count) Sessions[activeIndex].IsLoading = false;
-                            }
-                        });
-                    }).ContinueWith(t =>
-                    {
-                        // Load Other Sessions
-                        for (int i = 0; i < asyncLoadInfos.Count; i++)
+                        Logger.Log($"LoadCache: Loading file {target.FileName}");
+                        try
                         {
-                            if (i == activeIndex) continue;
-                            int targetIndex = i;
-                            var info = asyncLoadInfos[i];
-
-                            // Load sequentially or parallel
-                            var loadedSession = SessionFileManager.Load(info.FileName);
+                            var loaded = SessionFileManager.Load(target.FileName);
                             Dispatcher.Invoke(() =>
                             {
-                                if (loadedSession != null && targetIndex < Sessions.Count)
+                                if (loaded != null)
                                 {
-                                    var placeholder = Sessions[targetIndex];
-                                    placeholder.CopyFrom(loadedSession);
-                                    placeholder.IsLoading = false;
+                                    Logger.Log($"LoadCache: Loaded {target.FileName} successfully. Path: {loaded.Path}");
+                                    target.CopyFrom(loaded);
+                                    target.IsLoading = false;
+                                    // Ensure FileName is correct
+                                    target.FileName = target.FileName;
 
-                                    // ビューが既に存在する場合、UIを更新
-                                    SyncSessionToView(placeholder);
-
-                                    if (placeholder.CurrentView != null)
+                                    SyncSessionToView(target);
+                                    if (target.CurrentView != null)
                                     {
-                                        _ = RenderResult(placeholder);
+                                        _ = RenderResult(target);
                                     }
                                 }
                                 else
                                 {
-                                    if (targetIndex < Sessions.Count) Sessions[targetIndex].IsLoading = false;
+                                    Logger.Log($"LoadCache: Failed to load content for {target.FileName} (Load returned null)");
+                                    target.IsLoading = false;
+                                    target.Path = "Load Failed";
                                 }
                             });
                         }
-                    });
-                }
+                        catch (Exception ex)
+                        {
+                            Logger.Log($"LoadCache: Exception in LoadSingle for {target.FileName}", ex);
+                        }
+                    }
 
-                UpdateHeaderFromSession();
-                Logger.Log(AppConstants.LogCacheLoadSuccess);
+                    // Load Active First
+                    if (activeIdx >= 0 && activeIdx < loadTargets.Count)
+                    {
+                        LoadSingle(loadTargets[activeIdx]);
+                    }
+
+                    // Load Others
+                    for (int i = 0; i < loadTargets.Count; i++)
+                    {
+                        if (i == activeIdx) continue;
+                        LoadSingle(loadTargets[i]);
+                    }
+                });
             }
             catch (Exception ex)
             {
-                Logger.Log(AppConstants.LogCacheLoadError, ex);
-                Sessions.Clear();
-                Sessions.Add(new SessionData() { Path = "c:\\" });
-                SelectedIndex = 0;
-                ApplyLayout(AppConstants.LayoutType.Vertical);
+                string message = "Error during initialization: ";
+                Logger.Log(message, ex);
+                MessageBox.Show($"{message} {ex.Message}");
+                if (Sessions.Count == 0) AddNewTab();
             }
         }
 
@@ -1378,6 +1367,12 @@ namespace LargeFolderFinder
             InitializeView((IMainLayoutView)view, newSession);
             newSession.CurrentView = view;
 
+            // Set Ready Status
+            if (view is IMainLayoutView mainView)
+            {
+                mainView.StatusTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.ReadyStatus);
+            }
+
             UpdateHeaderFromSession();
             UpdateAddButtonState();
         }
@@ -1397,7 +1392,14 @@ namespace LargeFolderFinder
                 session.Cts?.Cancel();
 
                 // Delete cache file
-                SessionFileManager.Delete(session.GenerateFileName());
+                if (!string.IsNullOrEmpty(session.FileName))
+                {
+                    SessionFileManager.Delete(session.FileName);
+                }
+                else
+                {
+                    SessionFileManager.Delete(session.GenerateFileName());
+                }
 
                 int idx = Sessions.IndexOf(session);
                 Sessions.Remove(session);
@@ -1670,6 +1672,27 @@ namespace LargeFolderFinder
             Logger.Log($"Opened TextViewer for {Path.GetFileName(path)}");
             new TextViewer(path).Show();
         }
+        private void MenuOpenLogSub_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (Directory.Exists(AppConstants.LogsDirectoryPath))
+                {
+                    Process.Start(new ProcessStartInfo(AppConstants.LogsDirectoryPath) { UseShellExecute = true });
+                }
+                else
+                {
+                    MessageBox.Show(LocalizationManager.Instance.GetText(LanguageKey.InitializationError) + " (Log dir not found)",
+                        LocalizationManager.Instance.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to open logs directory.", ex);
+                MessageBox.Show(ex.Message, LocalizationManager.Instance.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
     }
 
     public class FolderRowItem : System.ComponentModel.INotifyPropertyChanged
@@ -1731,6 +1754,26 @@ namespace LargeFolderFinder
         public override string ToString()
         {
             return DisplayText;
+        }
+        private void MenuOpenLogSub_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (Directory.Exists(AppConstants.LogsDirectoryPath))
+                {
+                    Process.Start(new ProcessStartInfo(AppConstants.LogsDirectoryPath) { UseShellExecute = true });
+                }
+                else
+                {
+                    MessageBox.Show(LocalizationManager.Instance.GetText(LanguageKey.InitializationError) + " (Log dir not found)",
+                        LocalizationManager.Instance.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to open logs directory.", ex);
+                MessageBox.Show(ex.Message, LocalizationManager.Instance.GetText(LanguageKey.LabelError), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 }

@@ -53,9 +53,9 @@ CopyToolTip: "結果をクリップボードにコピー"
 IncludeFiles: "ファイルも表示"
 # Filter
 FilterLabel: "フィルタ:"
-FilterMode_Normal: "通常検索"
+FilterMode_Normal: "ワイルドカード"
 FilterMode_Regex: "正規表現"
-FilterTooltip: "表示結果をフィルタします。\nNormal Search: ワイルドカードによるフィルタリング(Windowsエクスプローラーと同じ)\nRegex Expression: 正規表現による高度なフィルタリング"
+FilterTooltip: "表示結果をフィルタします。\nワイルドカード: Windowsエクスプローラーと同じフィルタ\n正規表現: 高度なフィルタリング"
 FilterPlaceholder: "フィルタ..."
 
 # Header
@@ -76,7 +76,7 @@ ScanningStatus: "スキャン中..."
 CancelledStatus: "キャンセルされました"
 FinishedStatus: "完了"
 NotFoundMessage: "該当するフォルダは見つかりませんでした。"
-FolderCountStatus: "フォルダ数を確認中..."
+FolderCountStatus: "フォルダ/ファイル数:"
 RenderingStatus: "描画中..."
 Unknown: "不明" # 進捗率表示用: 総数を把握していない時に表示されます。
 LabelError: "エラー"

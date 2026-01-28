@@ -51,6 +51,13 @@ TabWidthLabel: "宽度:"
 # Clipboard Copy Button
 CopyToolTip: "复制到剪贴板"
 IncludeFiles: "显示文件"
+# Filter
+FilterLabel: "筛选:"
+FilterMode_Normal: "通配符"
+FilterMode_Regex: "正则表达式"
+FilterTooltip: "筛选显示结果。\n通配符: 与Windows资源管理器相同的筛选\n正则表达式: 高级筛选"
+FilterPlaceholder: "筛选..."
+
 # Header
 HeaderName: "名称"
 HeaderSize: "大小"
@@ -67,7 +74,7 @@ ScanningStatus: "正在扫描..."
 CancelledStatus: "已取消"
 FinishedStatus: "已完成"
 NotFoundMessage: "未找到匹配的文件夹。"
-FolderCountStatus: "正在检查文件夹数量..."
+FolderCountStatus: "正在确认文件夹/文件数量:"
 RenderingStatus: "正在渲染..."
 Unknown: "未知" # 进度条显示：总数未知时显示。
 LabelError: "错误"

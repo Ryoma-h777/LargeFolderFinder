@@ -14,6 +14,20 @@ namespace LargeFolderFinder
         public bool UseParallelScan { get; set; } = true;
         public bool SkipFolderCount { get; set; } = false;
         public bool UsePhysicalSize { get; set; } = true;
+        public int OldDataThresholdDays { get; set; } = 30;
+
+        private static Config? _instance;
+        public static Config Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    _instance = Load();
+                }
+                return _instance;
+            }
+        }
 
 
         private static string ConfigFilePath =>

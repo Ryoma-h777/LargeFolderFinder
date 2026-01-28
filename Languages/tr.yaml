@@ -51,6 +51,13 @@ TabWidthLabel: "Genişlik:"
 # Clipboard Copy Button
 CopyToolTip: "Sonuçları panoya kopyala"
 IncludeFiles: "Dosyaları göster"
+# Filter
+FilterLabel: "Filtre:"
+FilterMode_Normal: "Joker karakter"
+FilterMode_Regex: "Regex"
+FilterTooltip: "Görüntülenen sonuçları filtreler.\nJoker karakter: Windows Gezgini ile aynı filtre\nRegex: Gelişmiş filtreleme"
+FilterPlaceholder: "Filtre..."
+
 # Header
 HeaderName: "Ad"
 HeaderSize: "Boyut"
@@ -67,7 +74,7 @@ ScanningStatus: "Taranıyor..."
 CancelledStatus: "İptal Edildi"
 FinishedStatus: "Tamamlandı"
 NotFoundMessage: "Eşleşen klasör bulunamadı."
-FolderCountStatus: "Klasör sayısı kontrol ediliyor..."
+FolderCountStatus: "Klasör/Dosya sayma:"
 RenderingStatus: "Oluşturuluyor..."
 Unknown: "Bilinmiyor" # İlerleme çubuğu ekranı: Toplam sayı bilinmediğinde gösterilir.
 LabelError: "Hata"

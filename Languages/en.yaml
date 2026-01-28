@@ -51,6 +51,13 @@ TabWidthLabel: "Width:"
 # Clipboard Copy Button
 CopyToolTip: "Copy result to clipboard"
 IncludeFiles: "Show Files"
+# Filter
+FilterLabel: "Filter:"
+FilterMode_Normal: "Wildcard"
+FilterMode_Regex: "Regex"
+FilterTooltip: "Filter the display results.\nWildcard: Same filter as Windows Explorer\nRegex: Advanced filtering"
+FilterPlaceholder: "Filter..."
+
 # Header
 HeaderName: "Name"
 HeaderSize: "Size"
@@ -69,7 +76,7 @@ ScanningStatus: "Scanning..."
 CancelledStatus: "Cancelled"
 FinishedStatus: "Finished"
 NotFoundMessage: "No matching folders found."
-FolderCountStatus: "Checking number of folders..."
+FolderCountStatus: "Checking folder/file count:"
 RenderingStatus: "Rendering..."
 Unknown: "Unknown" # Progress bar display: Shown when the total count is unknown.
 LabelError: "Error"

@@ -34,6 +34,7 @@ namespace LargeFolderFinder
                 if (SetProperty(ref _path, value))
                 {
                     OnPropertyChanged(nameof(TabTitle));
+                    OnPropertyChanged(nameof(TabTooltip));
                 }
             }
         }
@@ -143,7 +144,7 @@ namespace LargeFolderFinder
         /// </summary>
         public string GenerateFileName()
         {
-            return $"Scan{CreatedAt:yyyyMMddHHmmssfff}.msgpack";
+            return string.Format(AppConstants.SessionFileFormat, CreatedAt);
         }
 
         /// <summary>
@@ -171,9 +172,17 @@ namespace LargeFolderFinder
             get
             {
                 var pathDisplay = string.IsNullOrEmpty(Path) ? "No Path" : Path;
-                return $"{CreatedAt:yyyy/MM/dd HH:mm:ss} - {pathDisplay}";
+                string prefix = IsOldData ? "古いデータ " : "";
+                return $"{prefix}{CreatedAt:yyyy/MM/dd HH:mm:ss} - {pathDisplay}";
             }
         }
+
+        /// <summary>
+        /// データが古いかどうか（1ヶ月以上経過）
+        /// UIバインディング用
+        /// </summary>
+        [IgnoreMember]
+        public bool IsOldData => (DateTime.Now - CreatedAt).TotalDays > Config.Instance.OldDataThresholdDays;
 
         [IgnoreMember]
         private object? _currentView;
@@ -211,10 +220,10 @@ namespace LargeFolderFinder
         [IgnoreMember]
         public System.Threading.CancellationTokenSource? CopyCts { get; set; }
 
-        [IgnoreMember]
+        [Key(12)]
         public TimeSpan LastScanDuration { get; set; }
 
-        [IgnoreMember]
+        [Key(13)]
         public long TotalFilesScanned { get; set; }
 
         [IgnoreMember]
@@ -246,7 +255,8 @@ namespace LargeFolderFinder
             this.FilterText = other.FilterText;
             this.FilterModeIndex = other.FilterModeIndex;
             this.Result = other.Result;
-            this.FileName = other.FileName;
+            this.LastScanDuration = other.LastScanDuration;
+            this.TotalFilesScanned = other.TotalFilesScanned;
             // Do not copy IsLoading, we handle it manually or it's implicitly false from loaded data? 
             // Loaded data usually has IsLoading=false (default). 
             // But we should explicit set it to false AFTER copy to trigger UI update last.
