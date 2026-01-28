@@ -4,8 +4,8 @@
 
 [**🇯🇵 日本語 (Japanese Version) is here**](#-large-folder-finder-japanese-version)
 
-A desktop application for Windows that rapidly searches for folders and visualizes their structure and size.
-It excels particularly in exploring network drives like NAS, helping you quickly identify the causes of disk space usage.
+This desktop application quickly searches folders on Windows and visually displays their structure and size in a tree format.
+It excels at exploring network drives like NAS, helping you quickly pinpoint causes of disk space pressure.
 
 ## 🔍 Scan Result Example
 
@@ -91,7 +91,7 @@ Translated with DeepL.com (free version)
 
 # Large Folder Finder (日本語)
 
-Windows上でフォルダーを高速に検索し、構造とサイズを視覚化するデスクトップアプリです。
+Windows上でフォルダーを高速に検索し、構造とサイズをTree状に視覚化するデスクトップアプリです。
 特にNASなどのネットワークドライブでの探索で活躍しており、ディスク容量の圧迫原因を素早く特定するのに役立ちます。
 
 ## 🔍 スキャン結果の表示例
