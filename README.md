@@ -16,9 +16,9 @@ Extracts and lists only folders larger than the specified size (e.g., 10 GB) in 
 ## ✨ Features
 
 - **Fast Multi-thread Scan**: Parallel processing allows for rapid scanning of drives containing a large number of files.
-  - PC Example: **Approx. 400GB (approx. 1.17M files) on PC → 13 seconds**
+  - PC Example: **Approx. 400GB (approx. 1.17M files) on PC → 5 ~ 10 seconds**
   - NAS Example 1: **Approx. 1TB (approx. 70K files) on NAS → 23 seconds**
-  - NAS Example 2: **Approx. 20TB (approx. 1.4M files) on NAS → Approx. 30 minutes**
+  - NAS Example 2: **Approx. 20TB (approx. 1.4M files) on NAS → Approx. 18 ~ 30 minutes**
 - **Server Support**: Supports scanning via network (NAS, etc.).
 - **Tabs and History Saving**: Scan results are automatically saved and can be viewed in multiple tab windows.
 - **Advanced Customization**:
@@ -79,9 +79,9 @@ Windows上でフォルダーを高速に検索し、構造とサイズをTree状
 ## ✨ 特徴
 
 - **高速マルチスレッドスキャン**: 並列処理により、大量のファイルを含むドライブも迅速にスキャンします。
-  - PC実績例  : **約400GB (約117万ファイル) PC上のデータ   → 13秒**
+  - PC実績例  : **約400GB (約117万ファイル) PC上のデータ   → 5 ~ 10秒**
   - NAS実績例1: **約1TB   (約7万ファイル)   NAS上のデータ  → 23秒**
-  - NAS実績例2: **約20TB  (約140万ファイル) NAS上のデータ  → 約30分**
+  - NAS実績例2: **約20TB  (約140万ファイル) NAS上のデータ  → 約18 ~ 30分**
 - **サーバー対応**: ネットワーク経由（NAS等）のスキャンも可能です。
 - **タブと履歴の保存**: スキャン結果は自動的に保存され、複数のタブWindowで閲覧できます。
 - **高度なカスタマイズ**:
