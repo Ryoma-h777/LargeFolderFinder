@@ -94,5 +94,17 @@ namespace LargeFolderFinder
                 Logger.Log("設定ファイルの保存に失敗しました。", ex);
             }
         }
+        /// <summary>セッション情報リスト（プレースホルダー作成用）</summary>
+        [Key(10)]
+        public System.Collections.Generic.List<SessionInfo> SessionInfos { get; set; } = new System.Collections.Generic.List<SessionInfo>();
+    }
+
+    [MessagePackObject]
+    public class SessionInfo
+    {
+        [Key(0)]
+        public string FileName { get; set; } = "";
+        [Key(1)]
+        public string Path { get; set; } = "";
     }
 }

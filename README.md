@@ -15,23 +15,26 @@ Extracts and lists only folders larger than the specified size (e.g., 10 GB) in 
 PATH: C:\   MinSize: 10 GB
 Finished [Time: 6s]
 
-C:\                                                   378 GB
-┣$Recycle.Bin                                          39 GB
-┃ ┗S-1-5-21-3796979980-2337565616-3929222400-1001      39 GB
-┣Users                                                123 GB
-┃ ┗O-PC-202304-005                                    123 GB
-┃   ┣AppData                                           87 GB
-┃   ┃ ┗Local                                           81 GB
-┃   ┃   ┣Google                                        14 GB
-┃   ┃   ┃ ┗Chrome                                      13 GB
-┃   ┃   ┃   ┗User Data                                 13 GB
-┃   ┃   ┃     ┗Default                                 11 GB
-┃   ┃   ┣Temp                                          20 GB
-┃   ┃   ┗wsl                                           23 GB
-┃   ┃     ┗{b85b4030-fb7f-40f0-8e56-33dc627f70ae}      23 GB
-┃   ┗Downloads                                         18 GB
-┗Windows                                               45 GB
-  ┗WinSxS                                              20 GB
+|                        Name                     |  Size  |  Date Modified  | Type |      Owner       |
+C:\                                                 378 GB   2026/01/27 01:00        NT SERVICE\TrustedI
+┣$Recycle.Bin                                        39 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
+┃ ┗S-1-5-21-3796979980-2337565616-3929222400-1001    39 GB   2026/01/27 01:00        UserName
+┣Users                                              123 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
+┃ ┗O-PC-202304-005                                  123 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
+┃   ┣AppData                                         87 GB   2026/01/27 01:00        UserName
+┃   ┃ ┗Local                                         81 GB   2026/01/27 01:00        UserName
+┃   ┃   ┣Google                                      14 GB   2026/01/27 01:00        UserName
+┃   ┃   ┃ ┗Chrome                                    13 GB   2026/01/27 01:00        UserName
+┃   ┃   ┃   ┗User Data                               13 GB   2026/01/27 01:00        UserName
+┃   ┃   ┃     ┗Default                               11 GB   2026/01/27 01:00        UserName
+┃   ┃   ┣Temp                                        20 GB   2026/01/27 01:12        UserName
+┃   ┃   ┃ ┣test.txt                                  20 GB   2026/01/27 01:02  .txt  UserName
+┃   ┃   ┃ ┗test2.png                                 20 GB   2026/01/27 01:12  .png  UserName
+┃   ┃   ┗wsl                                         23 GB   2026/01/27 01:00        BUILTIN\Administrat
+┃   ┃     ┗{b85b4030-fb7f-40f0-8e56-33dc627f70ae}    23 GB   2026/01/27 01:00        BUILTIN\Administrat
+┃   ┗Downloads                                       18 GB   2026/01/27 01:00        UserName
+┗Windows                                             45 GB   2026/01/27 01:00        NT SERVICE\TrustedI
+  ┗WinSxS                                            20 GB   2026/01/27 01:00        NT SERVICE\TrustedI
 ```
 
 ## ✨ Features
@@ -79,34 +82,43 @@ Windows上でフォルダーを高速に検索し、構造とサイズを視覚�
 PATH: C:\   MinSize: 10 GB
 完了 [処理時間: 6秒]
 
-C:\                                                   378 GB
-┣$Recycle.Bin                                          39 GB
-┃ ┗S-1-5-21-3796979980-2337565616-3929222400-1001      39 GB
-┣Users                                                123 GB
-┃ ┗O-PC-202304-005                                    123 GB
-┃   ┣AppData                                           87 GB
-┃   ┃ ┗Local                                           81 GB
-┃   ┃   ┣Google                                        14 GB
-┃   ┃   ┃ ┗Chrome                                      13 GB
-┃   ┃   ┃   ┗User Data                                 13 GB
-┃   ┃   ┃     ┗Default                                 11 GB
-┃   ┃   ┣Temp                                          20 GB
-┃   ┃   ┗wsl                                           23 GB
-┃   ┃     ┗{b85b4030-fb7f-40f0-8e56-33dc627f70ae}      23 GB
-┃   ┗Downloads                                         18 GB
-┗Windows                                               45 GB
-  ┗WinSxS                                              20 GB
+|                         名前                   　|  サイズ  |     更新日時   | 種類 |      所有者       |
+C:\                                                 378 GB   2026/01/27 01:00        NT SERVICE\TrustedI
+┣$Recycle.Bin                                        39 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
+┃ ┗S-1-5-21-3796979980-2337565616-3929222400-1001    39 GB   2026/01/27 01:00        UserName
+┣Users                                              123 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
+┃ ┗O-PC-202304-005                                  123 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
+┃   ┣AppData                                         87 GB   2026/01/27 01:00        UserName
+┃   ┃ ┗Local                                         81 GB   2026/01/27 01:00        UserName
+┃   ┃   ┣Google                                      14 GB   2026/01/27 01:00        UserName
+┃   ┃   ┃ ┗Chrome                                    13 GB   2026/01/27 01:00        UserName
+┃   ┃   ┃   ┗User Data                               13 GB   2026/01/27 01:00        UserName
+┃   ┃   ┃     ┗Default                               11 GB   2026/01/27 01:00        UserName
+┃   ┃   ┣Temp                                        20 GB   2026/01/27 01:12        UserName
+┃   ┃   ┃ ┣test.txt                                  20 GB   2026/01/27 01:02  .txt  UserName
+┃   ┃   ┃ ┗test2.png                                 20 GB   2026/01/27 01:12  .png  UserName
+┃   ┃   ┗wsl                                         23 GB   2026/01/27 01:00        BUILTIN\Administrat
+┃   ┃     ┗{b85b4030-fb7f-40f0-8e56-33dc627f70ae}    23 GB   2026/01/27 01:00        BUILTIN\Administrat
+┃   ┗Downloads                                       18 GB   2026/01/27 01:00        UserName
+┗Windows                                             45 GB   2026/01/27 01:00        NT SERVICE\TrustedI
+  ┗WinSxS                                            20 GB   2026/01/27 01:00        NT SERVICE\TrustedI
 ```
 
 ## ✨ 特徴
 
 - **高速マルチスレッドスキャン**: 並列処理により、大量のファイルを含むドライブも迅速にスキャンします。
+  - PC実績例  : **約400GB (約117万ファイル) PC上のデータ   → 13秒**
+  - NAS実績例1: **約1TB   (約7万ファイル)   NAS上のデータ  → 23秒**
+  - NAS実績例2: **約20TB  (約140万ファイル) NAS上のデータ  → 約30分**
 - **サーバー対応**: ネットワーク経由（NAS等）のスキャンも可能です。
-  - 実績例1: **約1TBのNAS上のデータを15秒でスキャン**
-  - 実績例2: **20TB規模のNAS上のデータを30分でスキャン**（※ファイル数による）
+- **タブと履歴の保存**: スキャン結果は自動的に保存され、複数のタブWindowで閲覧できます。
 - **高度なカスタマイズ**:
   - 並列処理・セクタサイズの配慮・事前スキャンのスキップなど有効化/無効化
-  - 出力フォーマット（タブ、スペース）、表示単位（KB, MB, GB, TB）の調整
+  - 出力フォーマット & 結果のクリップボードへのコピー
+    - ファイルの表示/非表示
+    - 表示単位（KB, MB, GB, TB）の調整
+    - フォルダの折りたたみ機能(クリップボード出力にも反映)
+    - フォントサイズの調整
 - **多言語対応**: OSの言語設定を自動認識（日本語・英語・中国語など、全13言語）。
 
 ## 🚀 使い方
@@ -125,6 +137,14 @@ C:\                                                   378 GB
 ## 📄 ライセンス
 
 このプロジェクトは [MIT ライセンス](LICENSE) の下で公開されています。商用利用を含め、どなたでも無料で自由にご利用いただけます。
+
+MITライセンスの表記ができない場合、以下の対応でもご利用可能です。
+※利用開始は、私からの返事を待つ必要はなく、すぐにご利用を開始して構いません。
+- X等SNSで「ツール名」と「作成者」(Ryoma Henzan, Cat & Chocolate Laboratory)を記載して利用していることを投稿していただき、開発者へその旨を伝える。
+
+-  SNSアカウントをお持ちでない際は、「開発者のSNSで利用していることを御社名または個人名を含んで投稿してもよい」と許可していただく。
+
+- その他不都合ございましたら、柔軟に対応いたしますので、ご連絡ください。
 
 ## ☕ 支援・スポンサーシップのお願い
 
