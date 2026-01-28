@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[**🇯🇵 日本語 (Japanese Version) is here**](#-large-folder-finder-japanese-version)
+[**🇯🇵 日本語 (Japanese Version) is here**](# Large Folder Finder (日本語))
 
 This desktop application quickly searches folders on Windows and visually displays their structure and size in a tree format.
 It excels at exploring network drives like NAS, helping you quickly pinpoint causes of disk space pressure.
@@ -49,7 +49,7 @@ Extracts and lists only folders larger than the specified size (e.g., 10 GB) in 
 
 ## 📄 License
 
-This project is released under the [MIT License](LICENSE). Anyone may use it freely and at no cost, including for commercial purposes.
+This project is released under the [MIT License](LICENSE/LICENSE.txt). Anyone may use it freely and at no cost, including for commercial purposes.
 
 If you are unable to display the MIT License attribution, you may use it under the following conditions:
 ※ You do not need to wait for my reply to start using it; you may begin immediately.
@@ -111,7 +111,7 @@ Windows上でフォルダーを高速に検索し、構造とサイズをTree状
 
 ## 📄 ライセンス
 
-このプロジェクトは [MIT ライセンス](LICENSE) の下で公開されています。商用利用を含め、どなたでも無料で自由にご利用いただけます。
+このプロジェクトは [MIT ライセンス](LICENSE/LICENSE.txt) の下で公開されています。商用利用を含め、どなたでも無料で自由にご利用いただけます。
 
 MITライセンスの表記ができない場合、以下の対応でもご利用可能です。
 ※利用開始は、私からの返事を待つ必要はなく、すぐにご利用を開始して構いません。
