@@ -11,31 +11,7 @@ It excels at exploring network drives like NAS, helping you quickly pinpoint cau
 
 Extracts and lists only folders larger than the specified size (e.g., 10 GB) in a Tree format.
 
-```text
-PATH: C:\   MinSize: 10 GB
-Finished [Time: 6s]
-
-|                        Name                     |  Size  |  Date Modified  | Type |      Owner       |
-C:\                                                 378 GB   2026/01/27 01:00        NT SERVICE\TrustedI
-┣$Recycle.Bin                                        39 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
-┃ ┗S-1-5-21-3796979980-2337565616-3929222400-1001    39 GB   2026/01/27 01:00        UserName
-┣Users                                              123 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
-┃ ┗O-PC-202304-005                                  123 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
-┃   ┣AppData                                         87 GB   2026/01/27 01:00        UserName
-┃   ┃ ┗Local                                         81 GB   2026/01/27 01:00        UserName
-┃   ┃   ┣Google                                      14 GB   2026/01/27 01:00        UserName
-┃   ┃   ┃ ┗Chrome                                    13 GB   2026/01/27 01:00        UserName
-┃   ┃   ┃   ┗User Data                               13 GB   2026/01/27 01:00        UserName
-┃   ┃   ┃     ┗Default                               11 GB   2026/01/27 01:00        UserName
-┃   ┃   ┣Temp                                        20 GB   2026/01/27 01:12        UserName
-┃   ┃   ┃ ┣test.txt                                  20 GB   2026/01/27 01:02  .txt  UserName
-┃   ┃   ┃ ┗test2.png                                 20 GB   2026/01/27 01:12  .png  UserName
-┃   ┃   ┗wsl                                         23 GB   2026/01/27 01:00        BUILTIN\Administrat
-┃   ┃     ┗{b85b4030-fb7f-40f0-8e56-33dc627f70ae}    23 GB   2026/01/27 01:00        BUILTIN\Administrat
-┃   ┗Downloads                                       18 GB   2026/01/27 01:00        UserName
-┗Windows                                             45 GB   2026/01/27 01:00        NT SERVICE\TrustedI
-  ┗WinSxS                                            20 GB   2026/01/27 01:00        NT SERVICE\TrustedI
-```
+![Application Screenshot (English)](README.md_Resource/AppScreenshot_en.png)
 
 ## ✨ Features
 
@@ -98,31 +74,7 @@ Windows上でフォルダーを高速に検索し、構造とサイズをTree状
 
 指定したサイズ（例: 10GB）以上のフォルダーのみを抽出し、Tree形式で表示します。
 
-```text
-PATH: C:\   MinSize: 10 GB
-完了 [処理時間: 6秒]
-
-|                         名前                   　|  サイズ  |     更新日時   | 種類 |      所有者       |
-C:\                                                 378 GB   2026/01/27 01:00        NT SERVICE\TrustedI
-┣$Recycle.Bin                                        39 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
-┃ ┗S-1-5-21-3796979980-2337565616-3929222400-1001    39 GB   2026/01/27 01:00        UserName
-┣Users                                              123 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
-┃ ┗O-PC-202304-005                                  123 GB   2026/01/27 01:00        NT AUTHORITY\SYSTEM
-┃   ┣AppData                                         87 GB   2026/01/27 01:00        UserName
-┃   ┃ ┗Local                                         81 GB   2026/01/27 01:00        UserName
-┃   ┃   ┣Google                                      14 GB   2026/01/27 01:00        UserName
-┃   ┃   ┃ ┗Chrome                                    13 GB   2026/01/27 01:00        UserName
-┃   ┃   ┃   ┗User Data                               13 GB   2026/01/27 01:00        UserName
-┃   ┃   ┃     ┗Default                               11 GB   2026/01/27 01:00        UserName
-┃   ┃   ┣Temp                                        20 GB   2026/01/27 01:12        UserName
-┃   ┃   ┃ ┣test.txt                                  20 GB   2026/01/27 01:02  .txt  UserName
-┃   ┃   ┃ ┗test2.png                                 20 GB   2026/01/27 01:12  .png  UserName
-┃   ┃   ┗wsl                                         23 GB   2026/01/27 01:00        BUILTIN\Administrat
-┃   ┃     ┗{b85b4030-fb7f-40f0-8e56-33dc627f70ae}    23 GB   2026/01/27 01:00        BUILTIN\Administrat
-┃   ┗Downloads                                       18 GB   2026/01/27 01:00        UserName
-┗Windows                                             45 GB   2026/01/27 01:00        NT SERVICE\TrustedI
-  ┗WinSxS                                            20 GB   2026/01/27 01:00        NT SERVICE\TrustedI
-```
+![アプリケーションのスクリーンショット（日本語）](README.md_Resource/AppScreenshot_ja.png)
 
 ## ✨ 特徴
 
