@@ -26,7 +26,7 @@ namespace LargeFolderFinder
         public const string CacheFileName = "Cache.txt"; // 旧形式（互換性のため残す）
         public const string SettingsFileName = "Settings.msgpack"; // 新しいMessagePack形式の設定ファイル
         public const string SessionsDirectoryName = "Sessions"; // セッションファイル保存ディレクトリ
-        public const string SessionFileFormat = "Scan{0:yyyyMMddHHmmssfff}.msgpack";
+        public const string SessionFileFormat = "Scan{0:yyyyMMdd_HHmm_ssfff}.msgpack";
         public const string LogsDirectoryName = "Logs";
         public const string LogsFileNameWithoutExtension = "yyyyMMdd_HHmm_ss";
         public const string LogsExtension = "log";

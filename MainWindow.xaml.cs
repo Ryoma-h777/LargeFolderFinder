@@ -80,6 +80,7 @@ namespace LargeFolderFinder
                 InitializeLocalization();
                 LoadCache();
                 UpdateLanguageMenu();
+                ApplyLocalization();
 
                 // Initialize Debounce Timer
                 _filterDebounceTimer = new DispatcherTimer
@@ -354,7 +355,7 @@ namespace LargeFolderFinder
             // Update session timestamp and rename file (User Requirement: Update date on re-scan)
             if (!string.IsNullOrEmpty(session.FileName))
             {
-                SessionFileManager.Delete(session.FileName);
+                SessionFileManager.Delete(session.FileName!);
             }
             session.CreatedAt = DateTime.Now;
             // Update filename immediately
@@ -772,6 +773,7 @@ namespace LargeFolderFinder
             scanButton.ToolTip = lm.GetText(LanguageKey.ScanButtonToolTip);
             cancelButton.ToolTip = lm.GetText(LanguageKey.CancelButtonToolTip);
             configButton.ToolTip = lm.GetText(LanguageKey.OpenConfigToolTip);
+            viewHeaderLabel.Text = lm.GetText(LanguageKey.FolderLabel);
 
             foreach (var session in Sessions)
             {
@@ -898,6 +900,10 @@ namespace LargeFolderFinder
                     // UI Update
                     Dispatcher.Invoke(() =>
                     {
+                        // Preserve selection and focus state
+                        var previousNode = (view.OutputListBox.SelectedItem as FolderRowItem)?.Node;
+                        bool hadFocus = view.OutputListBox.IsKeyboardFocusWithin;
+
                         if (view.OutputListBox is ListView lv)
                         {
                             lv.ItemsSource = items;
@@ -907,12 +913,32 @@ namespace LargeFolderFinder
                             view.OutputListBox.ItemsSource = items;
                         }
 
-                        view.ScanProgressBar.Visibility = Visibility.Collapsed;
-                        view.ScanProgressBar.IsIndeterminate = false;
+                        // Restore selection
+                        if (previousNode != null)
+                        {
+                            var newItem = items.FirstOrDefault(x => x.Node == previousNode);
+                            if (newItem != null)
+                            {
+                                view.OutputListBox.SelectedItem = newItem;
+                                view.OutputListBox.ScrollIntoView(newItem);
 
-                        // Restore status if not scanning (e.g. after filter change)
+                                if (hadFocus)
+                                {
+                                    view.OutputListBox.UpdateLayout();
+                                    if (view.OutputListBox.ItemContainerGenerator.ContainerFromItem(newItem) is ListBoxItem container)
+                                    {
+                                        container.Focus();
+                                    }
+                                }
+                            }
+                        }
+
                         if (!session.IsScanning)
                         {
+                            view.ScanProgressBar.Visibility = Visibility.Collapsed;
+                            view.ScanProgressBar.IsIndeterminate = false;
+
+                            // Restore status if not scanning (e.g. after filter change)
                             var lm = LocalizationManager.Instance;
                             if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
                             {
@@ -1021,7 +1047,7 @@ namespace LargeFolderFinder
                         Logger.Log($"LoadCache: Loading file {target.FileName}");
                         try
                         {
-                            var loaded = SessionFileManager.Load(target.FileName);
+                            var loaded = SessionFileManager.Load(target.FileName!);
                             Dispatcher.Invoke(() =>
                             {
                                 if (loaded != null)
@@ -1394,7 +1420,7 @@ namespace LargeFolderFinder
                 // Delete cache file
                 if (!string.IsNullOrEmpty(session.FileName))
                 {
-                    SessionFileManager.Delete(session.FileName);
+                    SessionFileManager.Delete(session.FileName!);
                 }
                 else
                 {

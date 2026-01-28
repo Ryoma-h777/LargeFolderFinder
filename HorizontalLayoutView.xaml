@@ -11,11 +11,11 @@
         <!-- 右クリックメニュー -->
         <ContextMenu x:Key="ItemContextMenu">
             <MenuItem Header="プログラムで開く" 
-                      Command="ApplicationCommands.Open"
-                      CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=PlacementTarget.SelectedItem}"/>
+                      Command="{x:Static ApplicationCommands.Open}"
+                      CommandParameter="{Binding}"/>
             <MenuItem Header="所有者を表示" 
                       Click="OwnerMenuItem_Click"
-                      CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=PlacementTarget.SelectedItem}"/>
+                      CommandParameter="{Binding}"/>
         </ContextMenu>
     </local:LayoutViewBase.Resources>
     <Grid>

@@ -8,6 +8,14 @@
         Title="Large Folder Finder" Height="800" Width="1200"
         MinWidth="400" MinHeight="300"
         Background="#F5F5F7">
+
+    <Window.Resources>
+        <DataTemplate x:Key="SessionContentTemplate">
+            <Border BorderBrush="#CCC" BorderThickness="1" Padding="0" Background="White">
+                <ContentControl Content="{Binding CurrentView}"/>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
     
     <DockPanel>
         <!-- Menu Bar (Common) -->
@@ -37,34 +45,8 @@
             </MenuItem>
         </Menu>
 
-        <!-- Global Header (Path, Scan, etc.) -->
-        <Grid DockPanel.Dock="Bottom" Margin="10,10,10,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBox x:Name="pathTextBox" Grid.Column="0" Height="26" VerticalContentAlignment="Center" Margin="0,0,1,0" KeyDown="Input_KeyDown" />
-            <Button x:Name="browseButton" Grid.Column="1" Content="..." Width="40" Height="26" Click="BrowseButton_Click" />
-
-            <!-- Scan buttons -->
-            <Button x:Name="scanButton" Grid.Column="2" ToolTip="Scan" Width="50" Height="25" FontWeight="Bold" Background="#0078D7" Foreground="White" Margin="10,0,0,0" Click="ScanButton_Click">
-                <Path Data="{StaticResource RunIconGeometry}" Fill="White" Stretch="Uniform" Margin="6" />
-            </Button>
-            <!-- Cancel buttons -->
-            <Button x:Name="cancelButton" Grid.Column="3" Width="50" Height="25" IsEnabled="False" Margin="5,0,0,0" Click="CancelButton_Click" ToolTip="Cancel">
-                <Path Data="{StaticResource StopIconGeometry}" Fill="#444" Stretch="Uniform" Margin="6" />
-            </Button>
-            <!-- Config buttons -->
-            <Button x:Name="configButton" Grid.Column="4" Width="25" Height="25" Margin="5,0,0,0" Click="Config_Click" ToolTip="Settings">
-                <Path Data="{StaticResource ConfigIconGeometry}" Fill="#444" Stretch="Uniform" Margin="5" />
-            </Button>
-        </Grid>
-
-        <!-- Tab Control -->
-        <Grid Margin="5">
+        <!-- Tab Control (Headers Only) -->
+        <Grid DockPanel.Dock="Top" Margin="5,5,5,0">
             <TabControl x:Name="SessionTabControl" 
                         ItemsSource="{Binding Sessions}" 
                         SelectedIndex="{Binding SelectedIndex}"
@@ -167,7 +149,6 @@
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <!-- Tab Header Area -->
                             <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="#CCC">
@@ -187,9 +168,6 @@
                                     </Button>
                                 </Grid>
                             </Border>
-                            
-                            <!-- Tab Content -->
-                            <ContentPresenter x:Name="PART_SelectedContentHost" Grid.Row="1" ContentSource="SelectedContent" Margin="0"/>
                         </Grid>
                     </ControlTemplate>
                 </TabControl.Template>
@@ -211,16 +189,40 @@
                         </Grid>
                     </DataTemplate>
                 </TabControl.ItemTemplate>
-
-                <!-- Content Template (The Result View) -->
-                <TabControl.ContentTemplate>
-                    <DataTemplate>
-                        <Border BorderBrush="#CCC" BorderThickness="1" Padding="0" Background="White">
-                           <ContentControl Content="{Binding CurrentView}"/>
-                        </Border>
-                    </DataTemplate>
-                </TabControl.ContentTemplate>
             </TabControl>
         </Grid>
+
+        <!-- Global Header (Path, Scan, etc.) -->
+        <Grid DockPanel.Dock="Top" Margin="10,5,10,5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="viewHeaderLabel" Grid.Column="0" Text="Scan Folder" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <TextBox x:Name="pathTextBox" Grid.Column="1" Height="26" VerticalContentAlignment="Center" Margin="0,0,1,0" KeyDown="Input_KeyDown" />
+            <Button x:Name="browseButton" Grid.Column="2" Content="..." Width="40" Height="26" Click="BrowseButton_Click" />
+
+            <!-- Scan buttons -->
+            <Button x:Name="scanButton" Grid.Column="3" ToolTip="Scan" Width="50" Height="25" FontWeight="Bold" Background="#0078D7" Foreground="White" Margin="10,0,0,0" Click="ScanButton_Click">
+                <Path Data="{StaticResource RunIconGeometry}" Fill="White" Stretch="Uniform" Margin="6" />
+            </Button>
+            <!-- Cancel buttons -->
+            <Button x:Name="cancelButton" Grid.Column="4" Width="50" Height="25" IsEnabled="False" Margin="5,0,0,0" Click="CancelButton_Click" ToolTip="Cancel">
+                <Path Data="{StaticResource StopIconGeometry}" Fill="#444" Stretch="Uniform" Margin="6" />
+            </Button>
+            <!-- Config buttons -->
+            <Button x:Name="configButton" Grid.Column="5" Width="25" Height="25" Margin="5,0,0,0" Click="Config_Click" ToolTip="Settings">
+                <Path Data="{StaticResource ConfigIconGeometry}" Fill="#444" Stretch="Uniform" Margin="5" />
+            </Button>
+        </Grid>
+
+        <!-- Content Body -->
+        <ContentControl Content="{Binding SelectedItem, ElementName=SessionTabControl}"
+                        ContentTemplate="{StaticResource SessionContentTemplate}"
+                        Margin="5,0,5,5"/>
     </DockPanel>
 </Window>

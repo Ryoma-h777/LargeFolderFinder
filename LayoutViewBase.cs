@@ -284,9 +284,17 @@ namespace LargeFolderFinder
 
         protected void OwnerMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is MenuItem menuItem && menuItem.CommandParameter is FolderRowItem item)
+            var selectedItems = OutputListBox.SelectedItems.OfType<FolderRowItem>().ToList();
+
+            // If no items are selected in ListView, fall back to CommandParameter (shouldn't happen normally)
+            if (!selectedItems.Any() && sender is MenuItem menuItem && menuItem.CommandParameter is FolderRowItem item)
             {
-                ShowOwner(item.Node);
+                selectedItems.Add(item);
+            }
+
+            foreach (var selectedItem in selectedItems)
+            {
+                ShowOwner(selectedItem.Node);
             }
         }
 

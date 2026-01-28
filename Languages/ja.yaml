@@ -31,7 +31,7 @@ DialogInfo: "情報"
 
 ####### Scan Settings #######
 ## Line 1 (Folder Browser)
-FolderLabel: "フォルダ:"
+FolderLabel: "スキャンするフォルダ:"
 BrowseButton: "..."
 # Scan Button
 ScanButtonToolTip: "Scan"
