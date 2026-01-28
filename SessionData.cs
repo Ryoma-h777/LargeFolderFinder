@@ -109,6 +109,26 @@ namespace LargeFolderFinder
         }
 
         [IgnoreMember]
+        private string _filterText = "";
+        /// <summary>フィルタ文字列</summary>
+        [Key(10)]
+        public string FilterText
+        {
+            get => _filterText;
+            set => SetProperty(ref _filterText, value);
+        }
+
+        [IgnoreMember]
+        private int _filterModeIndex = 0;
+        /// <summary>フィルタモード（0: Normal, 1: Regex）</summary>
+        [Key(11)]
+        public int FilterModeIndex
+        {
+            get => _filterModeIndex;
+            set => SetProperty(ref _filterModeIndex, value);
+        }
+
+        [IgnoreMember]
         private FolderInfo? _result;
         /// <summary>検索結果（FolderInfoツリー）</summary>
         [Key(9)]
@@ -191,18 +211,57 @@ namespace LargeFolderFinder
         [IgnoreMember]
         public System.Threading.CancellationTokenSource? CopyCts { get; set; }
 
+        [IgnoreMember]
+        public TimeSpan LastScanDuration { get; set; }
+
+        [IgnoreMember]
+        public long TotalFilesScanned { get; set; }
+
+        [IgnoreMember]
+        public bool IsCounting { get; set; }
+
+        [IgnoreMember]
+        private bool _isLoading;
+        [IgnoreMember]
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set => SetProperty(ref _isLoading, value);
+        }
+
+        [IgnoreMember]
+        public string? FileName { get; set; }
+
+        public void CopyFrom(SessionData other)
+        {
+            this.CreatedAt = other.CreatedAt;
+            this.Path = other.Path;
+            this.Threshold = other.Threshold;
+            this.Unit = other.Unit;
+            this.IncludeFiles = other.IncludeFiles;
+            this.SortTarget = other.SortTarget;
+            this.SortDirection = other.SortDirection;
+            this.SeparatorIndex = other.SeparatorIndex;
+            this.TabWidth = other.TabWidth;
+            this.FilterText = other.FilterText;
+            this.FilterModeIndex = other.FilterModeIndex;
+            this.Result = other.Result;
+            this.FileName = other.FileName;
+            // Do not copy IsLoading, we handle it manually or it's implicitly false from loaded data? 
+            // Loaded data usually has IsLoading=false (default). 
+            // But we should explicit set it to false AFTER copy to trigger UI update last.
+        }
+
         #region INotifyPropertyChanged Implementation
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-
         protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
         {
             if (System.Collections.Generic.EqualityComparer<T>.Default.Equals(storage, value))
             {
                 return false;
             }
-
             storage = value;
             OnPropertyChanged(propertyName);
             return true;

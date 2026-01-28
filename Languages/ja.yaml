@@ -51,6 +51,13 @@ TabWidthLabel: "幅:"
 # Clipboard Copy Button
 CopyToolTip: "結果をクリップボードにコピー"
 IncludeFiles: "ファイルも表示"
+# Filter
+FilterLabel: "フィルタ:"
+FilterMode_Normal: "通常検索"
+FilterMode_Regex: "正規表現"
+FilterTooltip: "表示結果をフィルタします。\nNormal Search: ワイルドカードによるフィルタリング(Windowsエクスプローラーと同じ)\nRegex Expression: 正規表現による高度なフィルタリング"
+FilterPlaceholder: "フィルタ..."
+
 # Header
 HeaderName: "名前"
 HeaderSize: "サイズ"

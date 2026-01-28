@@ -83,5 +83,18 @@ namespace LargeFolderFinder
                 }
             }
         }
+        public long CountFolderRecursive()
+        {
+            long count = 1; // Self
+            if (Children != null)
+            {
+                foreach (var child in Children)
+                {
+                    count += child.CountFolderRecursive();
+                }
+            }
+            return count;
+        }
+
     }
 }

@@ -65,6 +65,12 @@ namespace LargeFolderFinder
         // # Clipboard Copy Button
         CopyToolTip,
         IncludeFiles,
+        // # Filter
+        FilterLabel,
+        FilterMode_Normal,
+        FilterMode_Regex,
+        FilterTooltip,
+        FilterPlaceholder,
 
         // ####### Result #######
         LiveScanningMessage,
