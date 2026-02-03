@@ -11,6 +11,7 @@ It excels at exploring network drives like NAS, helping you quickly pinpoint cau
 
 Extracts and lists only folders larger than the specified size (e.g., 10 GB) in a Tree format.
 
+(Once scanned, display settings can be changed without rescan.)
 ![Application Screenshot (English)](README.md_Resource/AppScreenshot_en.png)
 
 ## ✨ Features
@@ -20,7 +21,8 @@ Extracts and lists only folders larger than the specified size (e.g., 10 GB) in 
   - NAS Example 1: **Approx. 1TB (approx. 70K files) on NAS → 23 seconds**
   - NAS Example 2: **Approx. 20TB (approx. 1.4M files) on NAS → Approx. 18 ~ 30 minutes**
 - **Server Support**: Supports scanning via network (NAS, etc.).
-- **Tabs and History Saving**: Scan results are automatically saved and can be viewed in multiple tab windows.
+- **Tabs and History Saving**: Scan results are saved locally and can be viewed in multiple tab windows.
+  - Once scanned, you can easily modify the display results anytime—such as filtering or sorting—to make them easier to view.
 - **Advanced Customization**:
   - Enable/disable parallel processing, sector size consideration, skip pre-scan counting, etc.
   - Output format & copy results to clipboard
@@ -53,13 +55,13 @@ This project is released under the [MIT License](License/LICENSE.txt). Anyone ma
 
 If you are unable to display the MIT License attribution, you may use it under the following conditions:
 ※ You do not need to wait for my reply to start using it; you may begin immediately.
+- Support via GitHub Sponsors (https://github.com/sponsors/Ryoma-h777) exempts you from the MIT license attribution requirement.
+
 - Post on social media (e.g., X) stating you are using the tool, including the “Tool Name” and “Creator” (Ryoma Henzan, Cat & Chocolate Laboratory), and notify the developer.
 
 - If you do not have a social media account, you may obtain permission to post on the developer's social media, including your company name or personal name.
 
-- If you encounter any other issues, please contact us; we will accommodate you flexibly.
-
-Translated with DeepL.com (free version)
+- If you encounter any other issues, feel free to use the app. We'll be flexible in our response.
 
 ---
 
@@ -74,6 +76,8 @@ Windows上でフォルダーを高速に検索し、構造とサイズをTree状
 
 指定したサイズ（例: 10GB）以上のフォルダーのみを抽出し、Tree形式で表示します。
 
+(一度スキャンすれば、再スキャンなしで表示条件は変更可能です。)
+
 ![アプリケーションのスクリーンショット（日本語）](README.md_Resource/AppScreenshot_ja.png)
 
 ## ✨ 特徴
@@ -83,7 +87,8 @@ Windows上でフォルダーを高速に検索し、構造とサイズをTree状
   - NAS実績例1: **約1TB   (約7万ファイル)   NAS上のデータ  → 23秒**
   - NAS実績例2: **約20TB  (約140万ファイル) NAS上のデータ  → 約18 ~ 30分**
 - **サーバー対応**: ネットワーク経由（NAS等）のスキャンも可能です。
-- **タブと履歴の保存**: スキャン結果は自動的に保存され、複数のタブWindowで閲覧できます。
+- **履歴の保存**: スキャン結果はローカル内に保存され、複数のタブWindowで閲覧できます。
+  - 一度スキャンすれば、フィルタリングやソートなど表示結果をいつでも見やすく変更できます。
 - **高度なカスタマイズ**:
   - 並列処理・セクタサイズの配慮・事前スキャンのスキップなど有効化/無効化
   - 出力フォーマット & 結果のクリップボードへのコピー
@@ -115,11 +120,13 @@ Windows上でフォルダーを高速に検索し、構造とサイズをTree状
 
 MITライセンスの表記ができない場合、以下の対応でもご利用可能です。
 ※利用開始は、私からの返事を待つ必要はなく、すぐにご利用を開始して構いません。
+- [GitHub Sponsors で支援する](https://github.com/sponsors/Ryoma-h777)にてMITライセンス表記の免除を行う。
+
 - X等SNSで「ツール名」と「作成者」(Ryoma Henzan, Cat & Chocolate Laboratory)を記載して利用していることを投稿していただき、開発者へその旨を伝える。
 
 -  SNSアカウントをお持ちでない際は、「開発者のSNSで利用していることを御社名または個人名を含んで投稿してもよい」と許可していただく。
 
-- その他不都合ございましたら、柔軟に対応いたしますので、ご連絡ください。
+- その他不都合ございましたら、気軽にご利用くださって大丈夫です。柔軟に対応いたします。
 
 ## ☕ 支援・スポンサーシップのお願い
 
