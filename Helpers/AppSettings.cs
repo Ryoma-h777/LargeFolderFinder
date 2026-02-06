@@ -20,7 +20,7 @@ namespace LargeFolderFinder
 
         /// <summary>レイアウトモード（Vertical/Horizontal）</summary>
         [Key(1)]
-        public AppConstants.LayoutType LayoutMode { get; set; } = AppConstants.LayoutType.Vertical;
+        public LargeFolderFinder.AppConstants.LayoutType LayoutMode { get; set; } = LargeFolderFinder.AppConstants.LayoutType.Vertical;
 
         /// <summary>アクティブなセッションファイル名のリスト</summary>
         [Key(2)]
@@ -52,7 +52,7 @@ namespace LargeFolderFinder
         public double FontSize { get; set; } = 16.0;
 
         private static string SettingsFilePath =>
-            Path.Combine(AppConstants.AppDataDirectory, AppConstants.SettingsFileName);
+            Path.Combine(LargeFolderFinder.AppConstants.AppDataDirectory, LargeFolderFinder.AppConstants.SettingsFileName);
 
         /// <summary>
         /// 設定ファイルを読み込む
@@ -81,9 +81,9 @@ namespace LargeFolderFinder
         {
             try
             {
-                if (!Directory.Exists(AppConstants.AppDataDirectory))
+                if (!Directory.Exists(LargeFolderFinder.AppConstants.AppDataDirectory))
                 {
-                    Directory.CreateDirectory(AppConstants.AppDataDirectory);
+                    Directory.CreateDirectory(LargeFolderFinder.AppConstants.AppDataDirectory);
                 }
 
                 byte[] bytes = MessagePackSerializer.Serialize(this, LZ4Options);

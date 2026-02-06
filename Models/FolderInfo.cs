@@ -10,24 +10,42 @@ namespace LargeFolderFinder
     [MessagePackObject(AllowPrivate = true)]
     public class FolderInfo
     {
+        /// <summary>
+        /// フォルダ名またはファイル名
+        /// </summary>
         [Key(0)]
         public string Name { get; set; }
 
+        /// <summary>
+        /// ツリービューで展開されているかどうか
+        /// </summary>
         [Key(5)]
         public bool IsExpanded { get; set; } = true;
 
+        /// <summary>
+        /// ファイルかどうか（true: ファイル, false: フォルダ）
+        /// </summary>
         [Key(1)]
         public bool IsFile { get; set; } = false;
 
+        /// <summary>
+        /// 最終更新日時
+        /// </summary>
         [Key(2)]
         public System.DateTime LastModified { get; set; }
 
+        /// <summary>
+        /// 所有者（Windowsアカウント名）
+        /// </summary>
         [Key(6)]
         public string Owner { get; set; }
 
         [IgnoreMember]
         private long _size;
 
+        /// <summary>
+        /// サイズ（バイト）
+        /// </summary>
         [Key(3)]
         public long Size
         {
@@ -35,6 +53,9 @@ namespace LargeFolderFinder
             set => _size = value;
         }
 
+        /// <summary>
+        /// 子要素のリスト
+        /// </summary>
         [Key(4)]
         public List<FolderInfo> Children { get; set; } = new List<FolderInfo>();
 
@@ -42,6 +63,9 @@ namespace LargeFolderFinder
         [IgnoreMember]
         public FolderInfo? Parent { get; set; }
 
+        /// <summary>
+        /// コンストラクタ（デフォルト）
+        /// </summary>
         public FolderInfo()
         {
             Name = "";
@@ -49,6 +73,13 @@ namespace LargeFolderFinder
             LastModified = System.DateTime.MinValue;
         }
 
+        /// <summary>
+        /// パラメータを指定して初期化します。
+        /// </summary>
+        /// <param name="name">フォルダまたはファイル名</param>
+        /// <param name="size">サイズ（バイト）</param>
+        /// <param name="isFile">ファイルの場合はtrue</param>
+        /// <param name="lastModified">最終更新日時</param>
         public FolderInfo(string name, long size, bool isFile = false, System.DateTime? lastModified = null)
         {
             Name = name;

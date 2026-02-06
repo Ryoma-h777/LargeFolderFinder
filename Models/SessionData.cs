@@ -241,6 +241,9 @@ namespace LargeFolderFinder
         [IgnoreMember]
         public string? FileName { get; set; }
 
+        [IgnoreMember]
+        public object? ViewModel { get; set; }
+
         public void CopyFrom(SessionData other)
         {
             this.CreatedAt = other.CreatedAt;
