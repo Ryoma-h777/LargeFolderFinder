@@ -131,6 +131,7 @@ namespace LargeFolderFinder
         private static LocalizationManager? _instance;
         private Dictionary<string, Dictionary<string, string>> _loadedTexts = new();
         private List<LanguageConfig> _availableLanguages = new();
+        private HashSet<string> _failedLanguages = new();
         private string _currentLanguage = "";
 
         public static LocalizationManager Instance
@@ -162,10 +163,13 @@ namespace LargeFolderFinder
         {
             try
             {
-                string languagesDirPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Languages");
+                string languagesDirPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.LanguagesDir);
+                Logger.Log($"Localization: Initializing from {languagesDirPath}");
+
                 if (Directory.Exists(languagesDirPath))
                 {
                     var files = Directory.GetFiles(languagesDirPath, "*.yaml");
+                    Logger.Log($"Localization: Found {files.Length} language files.");
                     foreach (var filePath in files)
                     {
                         var code = Path.GetFileNameWithoutExtension(filePath);
@@ -187,6 +191,10 @@ namespace LargeFolderFinder
                         _availableLanguages.Add(new LanguageConfig { Code = code, MenuText = menuText });
                     }
                 }
+                else
+                {
+                    Logger.Log($"Localization: Languages directory not found at {languagesDirPath}");
+                }
 
                 // 初期言語の決定（設定がない場合）
                 if (string.IsNullOrEmpty(_currentLanguage))
@@ -194,6 +202,7 @@ namespace LargeFolderFinder
                     try
                     {
                         var currentCulture = CultureInfo.CurrentUICulture;
+                        Logger.Log($"Localization: Current Culture: {currentCulture.Name}");
 
                         // 1. 完全一致 (例: ja-JP)
                         if (_availableLanguages.Any(l => l.Code.Equals(currentCulture.Name, StringComparison.OrdinalIgnoreCase)))
@@ -215,29 +224,34 @@ namespace LargeFolderFinder
                         {
                             _currentLanguage = _availableLanguages[0].Code;
                         }
+                        Logger.Log($"Localization: Selected Language: {_currentLanguage}");
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Logger.Log("Localization: Error selecting initial language", ex);
                         // エラー時は英語にフォールバック
                         if (_availableLanguages.Any(l => l.Code == "en")) _currentLanguage = "en";
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // エラー時は何もしない
+                Logger.Log("Localization: Initialization Fatal Error", ex);
             }
         }
 
         private void EnsureLoaded(string languageName)
         {
-            if (string.IsNullOrEmpty(languageName) || _loadedTexts.ContainsKey(languageName)) return;
+            if (string.IsNullOrEmpty(languageName)) return;
+            if (_loadedTexts.ContainsKey(languageName)) return;
+            if (_failedLanguages.Contains(languageName)) return;
 
             try
             {
-                string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Languages", languageName + ".yaml");
+                string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.LanguagesDir, languageName + ".yaml");
                 if (File.Exists(filePath))
                 {
+                    // Logger.Log($"Localization: Loading {languageName} from {filePath}");
                     using (var reader = new StreamReader(filePath))
                     {
                         var deserializer = new DeserializerBuilder().Build();
@@ -245,17 +259,25 @@ namespace LargeFolderFinder
                         if (dict != null)
                         {
                             _loadedTexts[languageName] = dict;
+                            // Logger.Log($"Localization: Loaded {languageName} successfully.");
+                        }
+                        else
+                        {
+                            Logger.Log($"Localization: Failed to deserialize {languageName} (dict is null).");
+                            _failedLanguages.Add(languageName);
                         }
                     }
                 }
+                else
+                {
+                    Logger.Log($"Localization: File not found for {languageName} at {filePath}");
+                    _failedLanguages.Add(languageName);
+                }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // ロード失敗
-            }
-            finally
-            {
-                GC.Collect();
+                Logger.Log($"Localization: Error loading {languageName}", ex);
+                _failedLanguages.Add(languageName);
             }
         }
 

@@ -14,10 +14,7 @@ namespace LargeFolderFinder
             AppInfo.Title);
 
         /// <summary>
-        /// ログ保存先ディレクトリ ("User/AppData/Local/組織名/アプリ名/Logs)
-        /// </summary>
-        /// <summary>
-        /// ログ保存先ディレクトリ ("User/AppData/Local/アプリ名/Logs)
+        /// ログ保存先ディレクトリ ("User/AppData/Local/組織名/アプリ名/Logs")
         /// </summary>
         public static string LogsDirectoryPath =>
             System.IO.Path.Combine(AppDataDirectory, LogsDirectoryName);
@@ -33,11 +30,13 @@ namespace LargeFolderFinder
         public const int LogFilesMax = 4;
 
         public static string GetReadmeFileName(string lang) => $"Readme_{lang}.txt";
-        public const string ReadmeDirectoryName = "Readme";
+        public const string ReadmeDirectoryName = "Resources/Readme";
         public const string ConfigFileName = "Config.txt";
-        public const string LicenseDirectoryName = "License";
+        public const string LicenseDirectoryName = "Resources/License";
         public const string AppLicenseFileName = "LICENSE.txt";
         public const string ThirdPartyNoticesFileName = "ThirdPartyNotices.txt";
+        public const string LanguagesDir = "Resources/Languages";
+        public const string AppIconFileName = "appicon.ico";
         // removed BytesInGB
         public const double DefaultThreshold = 100.0;
         // removed SizeUnit

@@ -30,13 +30,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="License\**\*">
+    <Content Include="Resources\License\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Languages\**\*.yaml">
+    <Content Include="Resources\Languages\**\*.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Readme\**\*.txt">
+    <Content Include="Resources\Readme\**\*.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Config.txt">
