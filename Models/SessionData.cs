@@ -239,6 +239,9 @@ namespace LargeFolderFinder
         }
 
         [IgnoreMember]
+        public bool HasLoadError { get; set; }
+
+        [IgnoreMember]
         public string? FileName { get; set; }
 
         [IgnoreMember]
