@@ -118,9 +118,20 @@ namespace LargeFolderFinder.ViewModels
                 foreach (var file in files)
                 {
                     Logger.Log($"LoadCache: Adding placeholder for {file}");
+                    // Try to restore path from settings to show tab title immediately
+                    string initialPath = "Loading...";
+                    if (settings?.SessionInfos != null)
+                    {
+                        var info = settings.SessionInfos.FirstOrDefault(x => x.FileName == file);
+                        if (info != null && !string.IsNullOrEmpty(info.Path))
+                        {
+                            initialPath = info.Path;
+                        }
+                    }
+
                     Sessions.Add(new SessionData
                     {
-                        Path = "Loading...",
+                        Path = initialPath,
                         IsLoading = true,
                         FileName = file
                     });
@@ -180,6 +191,12 @@ namespace LargeFolderFinder.ViewModels
                         catch (Exception ex)
                         {
                             Logger.Log($"LoadCache: Exception in LoadSingle for {target.FileName}", ex);
+                            // Avoid infinite loading state
+                            dispatcher.Invoke(() =>
+                            {
+                                target.IsLoading = false;
+                                target.HasLoadError = true;
+                            });
                         }
                     }
 
@@ -250,7 +267,7 @@ namespace LargeFolderFinder.ViewModels
                 foreach (var session in Sessions)
                 {
                     string? filename;
-                    if (session.IsLoading && !string.IsNullOrEmpty(session.FileName))
+                    if ((session.IsLoading || session.HasLoadError) && !string.IsNullOrEmpty(session.FileName))
                     {
                         filename = session.FileName;
                     }
