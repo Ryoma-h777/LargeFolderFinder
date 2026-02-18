@@ -535,6 +535,9 @@ namespace LargeFolderFinder
                             (UserControl)new HorizontalLayoutView(this) :
                             (UserControl)new VerticalLayoutView(this);
 
+                        // 修正: ViewModelを再生成して新しいViewと紐付ける
+                        session.ViewModel = new SessionViewModel(session, (IMainLayoutView)view);
+
                         InitializeView((IMainLayoutView)view, session);
                         session.CurrentView = view;
                     }
