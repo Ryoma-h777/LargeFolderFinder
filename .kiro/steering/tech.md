@@ -28,14 +28,19 @@ WPF による単一プロセスのデスクトップアプリ。**MVVM を部分
 
 ### Win32 API 直接呼び出し
 
-`Helpers/Win32.cs` に `kernel32.dll` の P/Invoke を集約しています。`.NET` の `DirectoryInfo` 系ではなく `FindFirstFileEx` / `FindNextFile` を使うのは速度のためです。
+`Helpers/Win32.cs` に `kernel32.dll` の P/Invoke を集約しています。用途は限定的で、**列挙処理のすべてが Win32 経由なわけではありません**。
 
-- `FindExInfoBasic`（代替名を取得しない）
-- `FIND_FIRST_EX_LARGE_FETCH`（バッファを大きく取る）
-- ハンドルは必ず `try` / `finally` で `FindClose` する
-- リパースポイント（`FILE_ATTRIBUTE_REPARSE_POINT`）はスキップし、循環を避ける
+| 用途 | API | 使用箇所 |
+|---|---|---|
+| 進捗率の分母となるフォルダー数の事前カウント | `FindFirstFileEx` / `FindNextFile` / `FindClose` | `Scanner.CountFoldersRecursive` |
+| クラスタサイズ取得（ディスク上のサイズ計算用） | `GetDiskFreeSpace` | `Scanner.GetClusterSize` |
+| ワーキングセットの切り詰め | `SetProcessWorkingSetSize` | `MainWindow.OptimizeMemory` |
 
-**新しい列挙処理を書く場合も、この経路を使ってください。** 標準 API への置き換えは速度要件（product.md の優先順位 1）に反します。
+本スキャン（`Scanner.ScanRecursiveInternal`）は `DirectoryInfo.EnumerateFiles` / `EnumerateDirectories` を使っています。
+
+Win32 側では `FindExInfoBasic`（代替名を取得しない）と `FIND_FIRST_EX_LARGE_FETCH`（バッファ拡大）を指定し、ハンドルは必ず `try` / `finally` で `FindClose` します。リパースポイントは両経路とも除外します。
+
+走査性能に関わる変更を行う場合は、**performance.md を必ず参照してください。**
 
 ## 開発標準
 
