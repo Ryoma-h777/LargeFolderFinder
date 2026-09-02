@@ -93,7 +93,9 @@ dotnet build LargeFolderFinder.csproj -c Release
 - **.NET Framework 4.8 を維持** — Windows に標準搭載されており、利用者にランタイム導入を要求しないため。.NET 8+ への移行は「導入の手軽さ」を損なうため、安易に行わない
 - **MessagePack + LZ4** — キャッシュを 50〜70% 削減。起動時のセッション復元を速くするため
 - **Costura による単一 exe 化** — zip を解凍して exe をダブルクリックするだけ、という利用体験を守るため
-- **ローカライズは `enum LanguageKey` と YAML の順序一致で対応** — キー追加時は **enum と全 13 言語の YAML の両方を、同じ位置に**追加する必要がある（片方だけの変更はズレを生む）
+- **ローカライズは `enum LanguageKey` の名前を文字列キーとして YAML を辞書引き** — `GetText` は `key.ToString()` で解決し、見つからなければ `en.yaml` にフォールバックする。**順序は実際には無関係**（`LanguageKey` の宣言コメントは「YAML と順序を一致させること」と書いているが、実装は順序に依存しない）
+  - キー追加時は enum と**全 13 言語の YAML** に追加する。欠落しても例外にはならず英語表示に落ちるため、**翻訳漏れが発覚しにくい**
+  - 現に `HeaderOwner` / `ContextShowOwner` が en・ja 以外の 11 言語で欠落している
 
 ---
 _標準とパターンを記述する。依存の全列挙はしない_
