@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading;
+using LargeFolderFinder.GoldenBaseline.Compare;
 using LargeFolderFinder.GoldenBaseline.Io;
 using LargeFolderFinder.GoldenBaseline.Model;
 
@@ -27,6 +28,7 @@ internal static class SelfChecks
         RegisterModelChecks(runner);
         RegisterLongPathChecks(runner);
         RegisterGoldenSerializerChecks(runner);
+        RegisterBaselineComparerChecks(runner);
     }
 
     /// <summary>
@@ -675,5 +677,229 @@ internal static class SelfChecks
         {
             File.Delete(path);
         }
+    }
+
+    /// <summary>
+    /// Compare 層（BaselineComparer / DiffReport）の検証項目を登録する（タスク2.2）。
+    /// design.md の「比較の判定」フロー（走査条件の照合を突き合わせより先に行う）と、
+    /// DiffKind の4分類・Match/Different/SettingsMismatch の3値判定を検証する。
+    /// </summary>
+    private static void RegisterBaselineComparerChecks(SelfCheckRunner runner)
+    {
+        runner.Add("BaselineComparer がサイズ不一致を分類し、期待値と実測値の双方を報告する（要件4.2）", () =>
+        {
+            var expected = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"a\file.bin", GoldenEntryKind.File, 100L),
+            });
+            var actual = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"a\file.bin", GoldenEntryKind.File, 200L),
+            });
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.Different, $"サイズ不一致があるのに Verdict が Different ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 1, $"差分の件数が想定と異なります（実際: {report.Entries.Count}件）。");
+
+            var diff = report.Entries[0];
+            SelfAssert.That(diff.Kind == DiffKind.SizeMismatch, $"差分の種別が SizeMismatch ではありません（実際: {diff.Kind}）。");
+            SelfAssert.That(diff.RelativePath == @"a\file.bin", $"RelativePath が想定と異なります（実際: '{diff.RelativePath}'）。");
+            SelfAssert.That(diff.ExpectedValue == "100", $"ExpectedValue が期待されたサイズ '100' と一致しません（実際: '{diff.ExpectedValue}'）。");
+            SelfAssert.That(diff.ActualValue == "200", $"ActualValue が実際のサイズ '200' と一致しません（実際: '{diff.ActualValue}'）。");
+        });
+
+        runner.Add("BaselineComparer が欠落(Missing)を分類する（要件4.3）", () =>
+        {
+            var expected = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"gone\file.txt", GoldenEntryKind.File, 10L),
+            });
+            var actual = BuildComparerDocument(usePhysicalSize: false, entries: Array.Empty<GoldenEntry>());
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.Different, $"欠落があるのに Verdict が Different ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 1, $"差分の件数が想定と異なります（実際: {report.Entries.Count}件）。");
+
+            var diff = report.Entries[0];
+            SelfAssert.That(diff.Kind == DiffKind.Missing, $"差分の種別が Missing ではありません（実際: {diff.Kind}）。");
+            SelfAssert.That(diff.RelativePath == @"gone\file.txt", $"RelativePath が想定と異なります（実際: '{diff.RelativePath}'）。");
+        });
+
+        runner.Add("BaselineComparer が新規(Unexpected)を分類する（要件4.4）", () =>
+        {
+            var expected = BuildComparerDocument(usePhysicalSize: false, entries: Array.Empty<GoldenEntry>());
+            var actual = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"new\file.txt", GoldenEntryKind.File, 10L),
+            });
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.Different, $"新規があるのに Verdict が Different ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 1, $"差分の件数が想定と異なります（実際: {report.Entries.Count}件）。");
+
+            var diff = report.Entries[0];
+            SelfAssert.That(diff.Kind == DiffKind.Unexpected, $"差分の種別が Unexpected ではありません（実際: {diff.Kind}）。");
+            SelfAssert.That(diff.RelativePath == @"new\file.txt", $"RelativePath が想定と異なります（実際: '{diff.RelativePath}'）。");
+        });
+
+        runner.Add("BaselineComparer が種別不一致(KindMismatch)を分類し、双方の種別を報告する（要件4.5）", () =>
+        {
+            var expected = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"c", GoldenEntryKind.Folder, 0L),
+            });
+            var actual = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"c", GoldenEntryKind.File, 0L),
+            });
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.Different, $"種別不一致があるのに Verdict が Different ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 1, $"差分の件数が想定と異なります（実際: {report.Entries.Count}件）。");
+
+            var diff = report.Entries[0];
+            SelfAssert.That(diff.Kind == DiffKind.KindMismatch, $"差分の種別が KindMismatch ではありません（実際: {diff.Kind}）。");
+            SelfAssert.That(diff.RelativePath == @"c", $"RelativePath が想定と異なります（実際: '{diff.RelativePath}'）。");
+            SelfAssert.That(diff.ExpectedValue == "Folder", $"ExpectedValue が期待された種別 'Folder' と一致しません（実際: '{diff.ExpectedValue}'）。");
+            SelfAssert.That(diff.ActualValue == "File", $"ActualValue が実際の種別 'File' と一致しません（実際: '{diff.ActualValue}'）。");
+        });
+
+        runner.Add("BaselineComparer が差分のない入力を明示的に一致(Match)と判定する（要件4.6）", () =>
+        {
+            var sharedEntries = new[]
+            {
+                new GoldenEntry(@"same", GoldenEntryKind.Folder, 0L),
+                new GoldenEntry(@"same\file.txt", GoldenEntryKind.File, 42L),
+            };
+            var expected = BuildComparerDocument(usePhysicalSize: false, entries: sharedEntries);
+            var actual = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"same", GoldenEntryKind.Folder, 0L),
+                new GoldenEntry(@"same\file.txt", GoldenEntryKind.File, 42L),
+            });
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.Match, $"差分がないのに Verdict が Match ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 0, $"差分がないのに Entries が空ではありません（実際: {report.Entries.Count}件）。");
+        });
+
+        runner.Add("BaselineComparer が4種の差分を同時に含む入力を正しく列挙する（観測可能な完了状態）", () =>
+        {
+            var expected = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"common\same.txt", GoldenEntryKind.File, 10L),
+                new GoldenEntry(@"size\file.bin", GoldenEntryKind.File, 500L),
+                new GoldenEntry(@"missing\gone.txt", GoldenEntryKind.File, 7L),
+                new GoldenEntry(@"kind\thing", GoldenEntryKind.Folder, 0L),
+            });
+            var actual = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"common\same.txt", GoldenEntryKind.File, 10L),
+                new GoldenEntry(@"size\file.bin", GoldenEntryKind.File, 600L),
+                new GoldenEntry(@"new\fresh.txt", GoldenEntryKind.File, 3L),
+                new GoldenEntry(@"kind\thing", GoldenEntryKind.File, 0L),
+            });
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.Different, $"4種の差分があるのに Verdict が Different ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 4, $"差分の件数が想定（4件）と異なります（実際: {report.Entries.Count}件）。");
+
+            AssertContainsDiff(report, DiffKind.SizeMismatch, @"size\file.bin", "500", "600");
+            AssertContainsDiff(report, DiffKind.Missing, @"missing\gone.txt", "", "");
+            AssertContainsDiff(report, DiffKind.Unexpected, @"new\fresh.txt", "", "");
+            AssertContainsDiff(report, DiffKind.KindMismatch, @"kind\thing", "Folder", "File");
+        });
+
+        runner.Add("BaselineComparer が物理サイズ換算の設定差を、突き合わせより先に設定不一致として報告する（要件6.2, 6.3）", () =>
+        {
+            // 走査条件が異なるうえ、エントリ内容も明らかに食い違わせておく。
+            // 「突き合わせを行わない」ことを、Entries が空であることまで確認して証明する
+            // （判定値だけを見ると内部で突き合わせてしまっていても気づけないため）。
+            var expected = BuildComparerDocument(usePhysicalSize: true, entries: new[]
+            {
+                new GoldenEntry(@"a\file.bin", GoldenEntryKind.File, 100L),
+                new GoldenEntry(@"only-in-expected", GoldenEntryKind.Folder, 0L),
+            });
+            var actual = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"a\file.bin", GoldenEntryKind.File, 999L),
+                new GoldenEntry(@"only-in-actual", GoldenEntryKind.Folder, 0L),
+            });
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.SettingsMismatch, $"物理サイズ換算の設定が異なるのに Verdict が SettingsMismatch ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 0, $"設定不一致のとき、エントリの突き合わせが行われず Entries は空であるべきですが {report.Entries.Count}件の差分が報告されました。");
+        });
+
+        runner.Add("BaselineComparer の比較が対称であり、入力の順序に依存しない（Invariants）", () =>
+        {
+            var expected = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"only-expected\file.txt", GoldenEntryKind.File, 10L),
+                new GoldenEntry(@"size\file.bin", GoldenEntryKind.File, 100L),
+            });
+            var actual = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"only-actual\file.txt", GoldenEntryKind.File, 5L),
+                new GoldenEntry(@"size\file.bin", GoldenEntryKind.File, 200L),
+            });
+
+            var comparer = new BaselineComparer();
+            var forward = comparer.Compare(expected, actual);
+            var swapped = comparer.Compare(actual, expected);
+
+            // Missing と Unexpected が入れ替わることを確認する。
+            AssertContainsDiff(forward, DiffKind.Missing, @"only-expected\file.txt", "", "");
+            AssertContainsDiff(forward, DiffKind.Unexpected, @"only-actual\file.txt", "", "");
+            AssertContainsDiff(swapped, DiffKind.Missing, @"only-actual\file.txt", "", "");
+            AssertContainsDiff(swapped, DiffKind.Unexpected, @"only-expected\file.txt", "", "");
+
+            // SizeMismatch の期待値・実測値も入れ替わることを確認する。
+            AssertContainsDiff(forward, DiffKind.SizeMismatch, @"size\file.bin", "100", "200");
+            AssertContainsDiff(swapped, DiffKind.SizeMismatch, @"size\file.bin", "200", "100");
+
+            SelfAssert.That(forward.Verdict == swapped.Verdict, "入力を入れ替えると Verdict が変化しました。");
+            SelfAssert.That(forward.Entries.Count == swapped.Entries.Count, "入力を入れ替えると差分の件数が変化しました。");
+        });
+    }
+
+    /// <summary>
+    /// BaselineComparer の検証で使う、代表的な GoldenHeader を持つ GoldenDocument を組み立てる。
+    /// </summary>
+    private static GoldenDocument BuildComparerDocument(bool usePhysicalSize, IReadOnlyList<GoldenEntry> entries)
+    {
+        var header = new GoldenHeader(
+            formatVersion: 1,
+            baseFolderLabel: "fixture-v1",
+            generatedAt: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            usePhysicalSize: usePhysicalSize,
+            clusterSizeInBytes: usePhysicalSize ? 4096L : 0L,
+            fixtureComplete: true,
+            fixtureOmissions: Array.Empty<string>());
+
+        return new GoldenDocument(header, entries);
+    }
+
+    /// <summary>
+    /// DiffReport が、指定した種別・相対パス・期待値・実測値を持つ差分をちょうど1件含むことを確認する。
+    /// </summary>
+    private static void AssertContainsDiff(DiffReport report, DiffKind kind, string relativePath, string expectedValue, string actualValue)
+    {
+        var matches = report.Entries
+            .Where(e => e.Kind == kind && e.RelativePath == relativePath)
+            .ToList();
+
+        SelfAssert.That(matches.Count == 1, $"種別 {kind}・相対パス '{relativePath}' の差分がちょうど1件見つかりません（実際: {matches.Count}件）。");
+
+        var diff = matches[0];
+        SelfAssert.That(diff.ExpectedValue == expectedValue, $"種別 {kind}・相対パス '{relativePath}' の ExpectedValue が想定と異なります（期待: '{expectedValue}', 実際: '{diff.ExpectedValue}'）。");
+        SelfAssert.That(diff.ActualValue == actualValue, $"種別 {kind}・相対パス '{relativePath}' の ActualValue が想定と異なります（期待: '{expectedValue}', 実際: '{diff.ActualValue}'）。");
     }
 }
