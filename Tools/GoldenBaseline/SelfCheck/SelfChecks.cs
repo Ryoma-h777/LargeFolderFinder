@@ -31,6 +31,7 @@ internal static class SelfChecks
         RegisterGoldenSerializerChecks(runner);
         RegisterBaselineComparerChecks(runner);
         RegisterFixtureSpecChecks(runner);
+        RegisterAccessControlGateChecks(runner);
     }
 
     /// <summary>
@@ -1210,6 +1211,200 @@ internal static class SelfChecks
 
             SelfAssert.That(hasOrdinaryFolder, "Ordinary トレイトを持つフォルダ項目が存在しません。");
             SelfAssert.That(hasOrdinaryFile, "Ordinary トレイトを持つファイル項目が存在しません。");
+        });
+    }
+
+    /// <summary>
+    /// Fixture 層（AccessControlGate）の検証項目を登録する（タスク3.2）。
+    /// design.md の Service Interface（DenyRead / RestoreRead）の Postconditions と Invariants、
+    /// および research.md「権限のないフォルダの生成と後始末」で実測済みの2段階後始末が
+    /// 実際に機能していることを検証する。
+    /// すべての検証項目は finally で「解除 → 削除」の2段階の後始末を必ず行い、一時領域
+    /// （%TEMP% 配下、"gb_acl_" 接頭辞）にのみフォルダを作成する。
+    /// </summary>
+    private static void RegisterAccessControlGateChecks(SelfCheckRunner runner)
+    {
+        runner.Add("DenyRead を付与すると実行ユーザーによる列挙が UnauthorizedAccessException で拒否される（要件3.4）", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gb_acl_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            string target = Path.Combine(root, "denied");
+            var gate = new AccessControlGate();
+
+            try
+            {
+                Directory.CreateDirectory(target);
+                File.WriteAllText(Path.Combine(target, "marker.txt"), "x");
+
+                gate.DenyRead(target);
+
+                // 「例外が飛べば何でもよい」にしないため、拒否対象のフォルダ自体が実在することを先に確認する。
+                // 存在しないパスでも例外は飛ぶため、これを確認しないと権限起因の例外と取り違える恐れがある。
+                SelfAssert.That(Directory.Exists(target), "拒否設定を付与した対象フォルダが実在しません（存在しないパスとの混同を避けるための前提）。");
+
+                bool deniedAsExpected = false;
+                try
+                {
+                    Directory.GetFileSystemEntries(target);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    deniedAsExpected = true;
+                }
+
+                SelfAssert.That(deniedAsExpected, "DenyRead を付与したのに列挙が UnauthorizedAccessException になりませんでした。");
+            }
+            finally
+            {
+                // 後始末: 解除 → 削除の2段階（research.md）。例外の有無に関わらず必ず実行する。
+                gate.RestoreRead(target);
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+        });
+
+        runner.Add("RestoreRead で解除すると再び列挙できるようになる（要件3.4 / design.md: DenyRead の対）", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gb_acl_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            string target = Path.Combine(root, "denied");
+            var gate = new AccessControlGate();
+
+            try
+            {
+                Directory.CreateDirectory(target);
+                string markerPath = Path.Combine(target, "marker.txt");
+                File.WriteAllText(markerPath, "x");
+
+                gate.DenyRead(target);
+                gate.RestoreRead(target);
+
+                string[] entries = Directory.GetFileSystemEntries(target);
+                SelfAssert.That(
+                    entries.Length == 1 && string.Equals(entries[0], markerPath, StringComparison.OrdinalIgnoreCase),
+                    "解除後の列挙結果に、生成しておいたファイルが想定どおり含まれていません。");
+            }
+            finally
+            {
+                // 既に解除済みだが、検証失敗時の保険として再度解除を試みてから削除する。
+                gate.RestoreRead(target);
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+        });
+
+        runner.Add("RestoreRead は DenyRead を適用していないフォルダに対しても安全に呼べる（design.md: AccessControlGate の Invariants）", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gb_acl_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            var gate = new AccessControlGate();
+
+            try
+            {
+                Directory.CreateDirectory(root);
+                string markerPath = Path.Combine(root, "marker.txt");
+                File.WriteAllText(markerPath, "x");
+
+                // DenyRead を一度も呼んでいない状態で RestoreRead を呼ぶ。例外が飛ばないことが期待される。
+                gate.RestoreRead(root);
+
+                string[] entries = Directory.GetFileSystemEntries(root);
+                SelfAssert.That(
+                    entries.Length == 1 && string.Equals(entries[0], markerPath, StringComparison.OrdinalIgnoreCase),
+                    "未付与フォルダへの RestoreRead 呼び出し後、列挙結果が想定と異なります（安全に無視できていない可能性があります）。");
+            }
+            finally
+            {
+                gate.RestoreRead(root);
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+        });
+
+        runner.Add("Deny ACE を付けたフォルダは解除なしでは削除に失敗し、解除後は確実に削除できる（research.md: 2段階の後始末）", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gb_acl_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            var gate = new AccessControlGate();
+            bool cleanedUpAlready = false;
+
+            try
+            {
+                Directory.CreateDirectory(root);
+                File.WriteAllText(Path.Combine(root, "child.txt"), "x");
+
+                gate.DenyRead(root);
+
+                // 1段階目（解除なしでの再帰削除）は、子の列挙ができず失敗するはず（research.md実測）。
+                bool deleteWithoutRestoreFailed = false;
+                try
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    deleteWithoutRestoreFailed = true;
+                }
+
+                SelfAssert.That(
+                    deleteWithoutRestoreFailed,
+                    "拒否設定を解除せずに削除した際、想定どおり UnauthorizedAccessException になりませんでした（1段階では失敗するという前提を再現できていません）。");
+                SelfAssert.That(Directory.Exists(root), "1段階目の削除試行後、フォルダが実際には削除されずに残っているはずですが存在しません。");
+
+                // 2段階目: 解除してから削除する。これが確実に成功することを確認する。
+                gate.RestoreRead(root);
+                Directory.Delete(root, recursive: true);
+
+                SelfAssert.That(!Directory.Exists(root), "解除後に削除を行ったのに、フォルダが残っています。");
+                cleanedUpAlready = true;
+            }
+            finally
+            {
+                // 検証が失敗して2段階目まで到達しなかった場合の保険。解除してから削除する。
+                if (!cleanedUpAlready && Directory.Exists(root))
+                {
+                    gate.RestoreRead(root);
+                    if (Directory.Exists(root))
+                    {
+                        Directory.Delete(root, recursive: true);
+                    }
+                }
+            }
+        });
+
+        runner.Add("Deny ACE の付与・解除は管理者権限を必要としない（要件3.4）", () =>
+        {
+            // この自己検証全体が非昇格で実行されていることを前提とする。
+            // 昇格状態では「非昇格でも成功する」ことを証明できないため、まずそれ自体を確認する。
+            bool isAdmin = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent())
+                .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+
+            SelfAssert.That(!isAdmin, "この自己検証は非昇格実行を前提としています。現在の実行が管理者権限のため、非昇格での成功を証明できません。");
+
+            string root = Path.Combine(Path.GetTempPath(), "gb_acl_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            var gate = new AccessControlGate();
+
+            try
+            {
+                Directory.CreateDirectory(root);
+
+                // 非昇格のまま付与・解除が例外なく成功することを確認する。
+                gate.DenyRead(root);
+                gate.RestoreRead(root);
+
+                string[] entries = Directory.GetFileSystemEntries(root);
+                SelfAssert.That(entries.Length == 0, "解除後のフォルダの列挙結果が想定と異なります。");
+            }
+            finally
+            {
+                gate.RestoreRead(root);
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
         });
     }
 }
