@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Threading;
 using LargeFolderFinder.GoldenBaseline.Io;
 using LargeFolderFinder.GoldenBaseline.Model;
 
@@ -22,6 +26,7 @@ internal static class SelfChecks
 
         RegisterModelChecks(runner);
         RegisterLongPathChecks(runner);
+        RegisterGoldenSerializerChecks(runner);
     }
 
     /// <summary>
@@ -298,5 +303,377 @@ internal static class SelfChecks
                 }
             }
         });
+    }
+
+    /// <summary>
+    /// Io 層（GoldenSerializer）の検証項目を登録する（タスク2.1）。
+    /// 期待値データのテキスト形式での読み書きが、design.md の Service Interface と
+    /// Data Models の仕様どおりに振る舞うことを確認する。
+    /// </summary>
+    private static void RegisterGoldenSerializerChecks(SelfCheckRunner runner)
+    {
+        runner.Add("GoldenSerializer が同一のGoldenDocumentから常にバイト単位で同一のファイルを書き出す（Invariants）", () =>
+        {
+            string path1 = CreateTempGoldenFilePath();
+            string path2 = CreateTempGoldenFilePath();
+            try
+            {
+                var document = BuildSampleDocument();
+                var serializer = new GoldenSerializer();
+
+                serializer.Write(document, path1);
+                serializer.Write(document, path2);
+
+                byte[] bytes1 = File.ReadAllBytes(path1);
+                byte[] bytes2 = File.ReadAllBytes(path2);
+
+                SelfAssert.That(bytes1.SequenceEqual(bytes2), "同一の GoldenDocument から書き出した2つのファイルがバイト単位で一致しません。");
+            }
+            finally
+            {
+                DeleteIfExists(path1);
+                DeleteIfExists(path2);
+            }
+        });
+
+        runner.Add("GoldenSerializer がエントリの投入順序に依存せず同一の出力を生成する（要件1.3）", () =>
+        {
+            string pathAscending = CreateTempGoldenFilePath();
+            string pathDescending = CreateTempGoldenFilePath();
+            try
+            {
+                var header = new GoldenHeader(1, "fixture-v1", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), true, 4096L, true, Array.Empty<string>());
+
+                // "co-op" / "coop" / "cop" は、序数(Ordinal)比較と既定のカルチャ依存比較とで
+                // 明確に並び順が分かれる組み合わせ（'-' の扱いが異なるため）。
+                // 投入順序をさらに変えて、並べ替え後の出力に影響しないことを確認する。
+                var entriesAscending = BuildOrderDiscriminatingEntries(new[] { "cop", "co-op", "coop" });
+                var entriesDescending = BuildOrderDiscriminatingEntries(new[] { "coop", "cop", "co-op" });
+
+                var serializer = new GoldenSerializer();
+                serializer.Write(new GoldenDocument(header, entriesAscending), pathAscending);
+                serializer.Write(new GoldenDocument(header, entriesDescending), pathDescending);
+
+                byte[] bytesAscending = File.ReadAllBytes(pathAscending);
+                byte[] bytesDescending = File.ReadAllBytes(pathDescending);
+
+                SelfAssert.That(bytesAscending.SequenceEqual(bytesDescending), "エントリの投入順序を変えると出力が変化しました。");
+
+                // 出力そのものが「序数昇順」であることを、期待順序を文字列リテラルで列挙して照合する。
+                // 並び順が単に自己無矛盾なだけでなく、実際に Ordinal 比較であることを保証するための検証。
+                AssertOrdinalEntryOrder(serializer, pathAscending, "投入順序A");
+                AssertOrdinalEntryOrder(serializer, pathDescending, "投入順序B");
+            }
+            finally
+            {
+                DeleteIfExists(pathAscending);
+                DeleteIfExists(pathDescending);
+            }
+        });
+
+        runner.Add("GoldenSerializer が Write の後に Read すると等価な文書が得られる（Postconditions）", () =>
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                var document = BuildSampleDocument();
+                var serializer = new GoldenSerializer();
+
+                serializer.Write(document, path);
+                var roundTripped = serializer.Read(path);
+
+                SelfAssert.That(roundTripped.Header.FormatVersion == document.Header.FormatVersion, "往復後の FormatVersion が一致しません。");
+                SelfAssert.That(roundTripped.Header.BaseFolderLabel == document.Header.BaseFolderLabel, "往復後の BaseFolderLabel が一致しません。");
+                SelfAssert.That(roundTripped.Header.GeneratedAt == document.Header.GeneratedAt, "往復後の GeneratedAt が一致しません。");
+                SelfAssert.That(roundTripped.Header.UsePhysicalSize == document.Header.UsePhysicalSize, "往復後の UsePhysicalSize が一致しません。");
+                SelfAssert.That(roundTripped.Header.ClusterSizeInBytes == document.Header.ClusterSizeInBytes, "往復後の ClusterSizeInBytes が一致しません。");
+                SelfAssert.That(roundTripped.Header.FixtureComplete == document.Header.FixtureComplete, "往復後の FixtureComplete が一致しません。");
+                SelfAssert.That(
+                    roundTripped.Header.FixtureOmissions.SequenceEqual(document.Header.FixtureOmissions, StringComparer.Ordinal),
+                    "往復後の FixtureOmissions が一致しません。");
+
+                SelfAssert.That(roundTripped.Entries.Count == document.Entries.Count, "往復後のエントリ件数が一致しません。");
+                var originalByPath = document.Entries.ToDictionary(e => e.RelativePath, StringComparer.Ordinal);
+                foreach (var entry in roundTripped.Entries)
+                {
+                    SelfAssert.That(originalByPath.TryGetValue(entry.RelativePath, out var original), $"往復後のエントリ '{entry.RelativePath}' が元の文書に存在しません。");
+                    SelfAssert.That(original!.Kind == entry.Kind, $"往復後のエントリ '{entry.RelativePath}' の Kind が一致しません。");
+                    SelfAssert.That(original.SizeInBytes == entry.SizeInBytes, $"往復後のエントリ '{entry.RelativePath}' の SizeInBytes が一致しません。");
+                }
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+
+        runner.Add("GoldenSerializer が未知の形式バージョンの読み取りに失敗する（要件7.3）", () =>
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                string content =
+                    "# FormatVersion: 9999\n" +
+                    "# BaseFolderLabel: fixture-v1\n" +
+                    "# GeneratedAt: 2026-01-01T00:00:00.0000000+00:00\n" +
+                    "# UsePhysicalSize: true\n" +
+                    "# ClusterSizeInBytes: 4096\n" +
+                    "# FixtureComplete: true\n" +
+                    "D\troot\t0\n";
+                File.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(content));
+
+                var serializer = new GoldenSerializer();
+
+                bool threw = false;
+                try
+                {
+                    _ = serializer.Read(path);
+                }
+                catch (GoldenFormatException)
+                {
+                    threw = true;
+                }
+
+                SelfAssert.That(threw, "未知の形式バージョンを読んでも失敗しませんでした。");
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+
+        runner.Add("GoldenSerializer が相対パスにタブ文字を含むエントリの書き込みに失敗する", () =>
+        {
+            var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            var entries = new List<GoldenEntry>
+            {
+                new GoldenEntry("a\tb", GoldenEntryKind.File, 1L),
+            };
+            var document = new GoldenDocument(header, entries);
+            string path = CreateTempGoldenFilePath();
+
+            try
+            {
+                var serializer = new GoldenSerializer();
+
+                bool threw = false;
+                try
+                {
+                    serializer.Write(document, path);
+                }
+                catch (GoldenFormatException)
+                {
+                    threw = true;
+                }
+
+                SelfAssert.That(threw, "相対パスにタブ文字を含むエントリを書き込んでも失敗しませんでした。");
+                SelfAssert.That(!File.Exists(path), "書き込みが失敗したにもかかわらずファイルが作成されています。");
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+
+        runner.Add("GoldenSerializer が壊れたエントリ行（区切りの破損）の読み取りに失敗する", () =>
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                string content =
+                    "# FormatVersion: 1\n" +
+                    "# BaseFolderLabel: fixture-v1\n" +
+                    "# GeneratedAt: 2026-01-01T00:00:00.0000000+00:00\n" +
+                    "# UsePhysicalSize: true\n" +
+                    "# ClusterSizeInBytes: 4096\n" +
+                    "# FixtureComplete: true\n" +
+                    "F\ta\tb\tc\t1\n"; // タブが余分に含まれ、区切りが壊れている
+                File.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(content));
+
+                var serializer = new GoldenSerializer();
+
+                bool threw = false;
+                try
+                {
+                    _ = serializer.Read(path);
+                }
+                catch (GoldenFormatException)
+                {
+                    threw = true;
+                }
+
+                SelfAssert.That(threw, "区切りが壊れたエントリ行を読んでも失敗しませんでした。");
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+
+        runner.Add("GoldenSerializer の出力がBOMなし・LF固定である（要件1.4の一部）", () =>
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                var document = BuildSampleDocument();
+                var serializer = new GoldenSerializer();
+                serializer.Write(document, path);
+
+                byte[] bytes = File.ReadAllBytes(path);
+
+                bool startsWithBom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+                SelfAssert.That(!startsWithBom, "出力ファイルの先頭にUTF-8 BOMが付与されています。");
+
+                string text = new UTF8Encoding(false).GetString(bytes);
+                SelfAssert.That(!text.Contains("\r"), "出力に CR が含まれています。改行は LF に固定される必要があります。");
+                SelfAssert.That(text.Contains("\n"), "出力に改行(LF)が含まれていません。");
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+
+        runner.Add("GoldenSerializer の出力がカルチャに依存しない（数値・日時とも）", () =>
+        {
+            string pathInvariant = CreateTempGoldenFilePath();
+            string pathGerman = CreateTempGoldenFilePath();
+            var originalCulture = Thread.CurrentThread.CurrentCulture;
+            try
+            {
+                // BuildSampleDocument() の固定データ（root, root\a.txt 等）はたまたま
+                // Ordinal と既定のカルチャ依存比較で並び順が一致してしまうため、
+                // 数値・日時の表記に加えて、並び順でも比較規則の違いが必ず現れるデータを使う。
+                var document = BuildOrderDiscriminatingDocument();
+                var serializer = new GoldenSerializer();
+
+                Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+                serializer.Write(document, pathInvariant);
+
+                // de-DE は小数点がカンマ、桁区切りがピリオドになるロケール。数値・日時の表記が変化しないことを確認する。
+                Thread.CurrentThread.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+                serializer.Write(document, pathGerman);
+
+                byte[] bytesInvariant = File.ReadAllBytes(pathInvariant);
+                byte[] bytesGerman = File.ReadAllBytes(pathGerman);
+
+                SelfAssert.That(bytesInvariant.SequenceEqual(bytesGerman), "CurrentCulture を de-DE に切り替えると出力が変化しました。");
+
+                // 「Invariant と de-DE の出力が一致する」だけでは、両者が同じ既定比較（カルチャ依存）に
+                // 差し替わっていても検出できない（design.md: 序数昇順であること自体を照合する必要がある）。
+                AssertOrdinalEntryOrder(serializer, pathInvariant, "InvariantCulture");
+                AssertOrdinalEntryOrder(serializer, pathGerman, "de-DE");
+            }
+            finally
+            {
+                Thread.CurrentThread.CurrentCulture = originalCulture;
+                DeleteIfExists(pathInvariant);
+                DeleteIfExists(pathGerman);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 序数(Ordinal)比較と既定のカルチャ依存比較とで並び順が明確に分かれる相対パスの組み合わせ。
+    /// Ordinal: "co-op" &lt; "coop" &lt; "cop"（'-' はコードポイント45、'o' や 'p' より小さいため）。
+    /// 既定のカルチャ依存比較（InvariantCulture・de-DE のいずれも）: "coop" &lt; "co-op" &lt; "cop"
+    /// （ハイフンを実質的に無視する単語ソートのため）。
+    /// この差異により、GoldenSerializer の並び替えが StringComparer.Ordinal から
+    /// 既定の比較規則へ差し替わった場合に、検証項目が確実に失敗する。
+    /// </summary>
+    private static readonly string[] OrdinalExpectedOrder = { "co-op", "coop", "cop" };
+
+    /// <summary>
+    /// <see cref="OrdinalExpectedOrder"/> と同じ集合を、指定した投入順序で GoldenEntry の一覧として組み立てる。
+    /// </summary>
+    private static List<GoldenEntry> BuildOrderDiscriminatingEntries(IReadOnlyList<string> relativePathsInInsertionOrder)
+    {
+        var entries = new List<GoldenEntry>();
+        foreach (var relativePath in relativePathsInInsertionOrder)
+        {
+            entries.Add(new GoldenEntry(relativePath, GoldenEntryKind.Folder, 0L));
+        }
+
+        return entries;
+    }
+
+    /// <summary>
+    /// カルチャ非依存性の検証で使う、並び順が比較規則によって分かれるエントリ集合を持つ GoldenDocument を組み立てる。
+    /// ヘッダの数値・日時は BuildSampleDocument() と同様に代表的な値を使う。
+    /// </summary>
+    private static GoldenDocument BuildOrderDiscriminatingDocument()
+    {
+        var header = new GoldenHeader(
+            formatVersion: 1,
+            baseFolderLabel: "fixture-v1",
+            generatedAt: new DateTimeOffset(2026, 1, 1, 12, 34, 56, TimeSpan.Zero),
+            usePhysicalSize: true,
+            clusterSizeInBytes: 4096L,
+            fixtureComplete: false,
+            fixtureOmissions: new List<string> { @"denied\folder" });
+
+        var entries = BuildOrderDiscriminatingEntries(new[] { "cop", "co-op", "coop" });
+
+        return new GoldenDocument(header, entries);
+    }
+
+    /// <summary>
+    /// 指定した期待値ファイルを読み取り、エントリの並び順が <see cref="OrdinalExpectedOrder"/> と
+    /// 文字列リテラルの並びとして厳密に一致することを照合する（要件1.3・design.md「序数昇順」）。
+    /// 「並び順が自己無矛盾である」ことだけでなく、実際に Ordinal 比較であることを保証するための検証。
+    /// </summary>
+    private static void AssertOrdinalEntryOrder(GoldenSerializer serializer, string path, string context)
+    {
+        var document = serializer.Read(path);
+        var actualOrder = document.Entries.Select(entry => entry.RelativePath).ToArray();
+
+        SelfAssert.That(
+            actualOrder.SequenceEqual(OrdinalExpectedOrder, StringComparer.Ordinal),
+            $"{context}: エントリの並び順が期待する序数(Ordinal)昇順 [{string.Join(", ", OrdinalExpectedOrder)}] と一致しません" +
+            $"（実際: [{string.Join(", ", actualOrder)}]）。比較規則が StringComparer.Ordinal でない可能性があります。");
+    }
+
+    /// <summary>
+    /// GoldenSerializer の検証で共通して使う、代表的な GoldenDocument を組み立てる。
+    /// </summary>
+    private static GoldenDocument BuildSampleDocument()
+    {
+        var header = new GoldenHeader(
+            formatVersion: 1,
+            baseFolderLabel: "fixture-v1",
+            generatedAt: new DateTimeOffset(2026, 1, 1, 12, 34, 56, TimeSpan.Zero),
+            usePhysicalSize: true,
+            clusterSizeInBytes: 4096L,
+            fixtureComplete: false,
+            fixtureOmissions: new List<string> { @"denied\folder", @"deep\path\日本語" });
+
+        var entries = new List<GoldenEntry>
+        {
+            new GoldenEntry(@"root", GoldenEntryKind.Folder, 0L),
+            new GoldenEntry(@"root\日本語.txt", GoldenEntryKind.File, 123456789L),
+            new GoldenEntry(@"root\empty", GoldenEntryKind.Folder, 0L),
+            new GoldenEntry(@"root\a.txt", GoldenEntryKind.File, 0L),
+        };
+
+        return new GoldenDocument(header, entries);
+    }
+
+    /// <summary>
+    /// 検証用の一時的な期待値ファイルパスを生成する。ファイル自体はまだ作成しない。
+    /// </summary>
+    private static string CreateTempGoldenFilePath()
+    {
+        return Path.Combine(Path.GetTempPath(), "gb_ser_" + Guid.NewGuid().ToString("N") + ".golden.txt");
+    }
+
+    /// <summary>
+    /// 検証用の一時ファイルが存在すれば削除する。存在しなくても例外にしない。
+    /// </summary>
+    private static void DeleteIfExists(string path)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
     }
 }
