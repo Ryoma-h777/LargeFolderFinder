@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
+using LargeFolderFinder.GoldenBaseline.Io;
 using LargeFolderFinder.GoldenBaseline.Model;
 
 namespace LargeFolderFinder.GoldenBaseline.SelfCheck;
@@ -19,6 +21,7 @@ internal static class SelfChecks
         });
 
         RegisterModelChecks(runner);
+        RegisterLongPathChecks(runner);
     }
 
     /// <summary>
@@ -135,6 +138,165 @@ internal static class SelfChecks
             }
 
             SelfAssert.That(threw, "相対パスが重複するエントリを与えても例外が発生しませんでした。");
+        });
+    }
+
+    /// <summary>
+    /// Io 層（LongPath）の検証項目を登録する（タスク1.3）。
+    /// 260文字を超えるフォルダを実際にファイルシステム上へ作成し、変換の有無で成否が分かれることを確認する。
+    /// </summary>
+    private static void RegisterLongPathChecks(SelfCheckRunner runner)
+    {
+        runner.Add("LongPath.Extend が空のパスを拒否する", () =>
+        {
+            bool threw = false;
+            try
+            {
+                _ = LongPath.Extend(string.Empty);
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            SelfAssert.That(threw, "空のパスを渡しても例外が発生しませんでした。");
+        });
+
+        runner.Add("LongPath.Extend が正規化のうえで \\\\?\\ プレフィクスを付与する", () =>
+        {
+            string relative = ".";
+            string expected = @"\\?\" + Path.GetFullPath(relative);
+
+            string result = LongPath.Extend(relative);
+
+            SelfAssert.That(result.StartsWith(@"\\?\", StringComparison.Ordinal), $"戻り値が \\\\?\\ で始まっていません: '{result}'");
+            SelfAssert.That(result == expected, $"正規化とプレフィクス付与の結果が想定と異なります: '{result}'");
+        });
+
+        runner.Add("LongPath.Extend が付与前に相対表記（..）を正規化する（順序の検証）", () =>
+        {
+            // \\?\ は正規化されないため、Path.GetFullPath を先に通さなければ ".." が解決されない。
+            // 順序が逆であることを検出できるよう、".." を含む相対パスで確認する。
+            string baseDir = Path.GetTempPath();
+            string withDotDot = Path.Combine(baseDir, "gb_lp_dummy_subdir", "..", "gb_lp_dummy_file.txt");
+            string expectedPlain = Path.GetFullPath(withDotDot);
+
+            string result = LongPath.Extend(withDotDot);
+
+            SelfAssert.That(!result.Contains(".."), $"拡張長パスに '..' が残っています（正規化が付与前に行われていません）: '{result}'");
+            SelfAssert.That(result == @"\\?\" + expectedPlain, $"正規化後にプレフィクスを付与した結果と一致しません: '{result}'");
+        });
+
+        runner.Add("LongPath.Extend が既に拡張長形式のパスを二重に付与しない", () =>
+        {
+            string already = @"\\?\C:\already\extended\path";
+            string result = LongPath.Extend(already);
+
+            SelfAssert.That(result == already, $"既に拡張長形式のパスが変化しました: '{result}'");
+            SelfAssert.That(!result.Contains(@"\\?\\\?\"), $"拡張長プレフィクスが二重に付与されています: '{result}'");
+        });
+
+        runner.Add("LongPath.Extend が既に拡張長UNC形式のパスを二重に付与しない", () =>
+        {
+            string already = @"\\?\UNC\server\share\folder";
+            string result = LongPath.Extend(already);
+
+            SelfAssert.That(result == already, $"既に拡張長UNC形式のパスが変化しました: '{result}'");
+        });
+
+        runner.Add("LongPath.Extend がUNCパスを \\\\?\\UNC\\ 形式に変換する", () =>
+        {
+            string uncPath = @"\\server\share\folder";
+            string expected = @"\\?\UNC\server\share\folder";
+
+            string result = LongPath.Extend(uncPath);
+
+            SelfAssert.That(result == expected, $"UNCパスの変換結果が想定と異なります: '{result}'");
+        });
+
+        runner.Add("変換を通すと260文字を超えるフォルダの作成に成功し、変換を通さないと失敗する（要件3.1）", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gb_lp_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+
+            try
+            {
+                // 基準パス自体は短く保つ（design.md: FixtureBuilder.Build Preconditions と同じ考え方）。
+                Directory.CreateDirectory(root);
+
+                // 260文字を確実に超えるよう、実行環境の一時フォルダの長さから逆算する。
+                int desiredTotalLength = 300;
+                int segmentLength = Math.Max(desiredTotalLength - (root.Length + 1), 80);
+                string longName = new string('a', segmentLength);
+                string longPath = Path.Combine(root, longName);
+
+                SelfAssert.That(longPath.Length > 260, $"検証用パスが260文字を超えていません（{longPath.Length}文字）。");
+
+                // 1. 変換を通したパスでは260文字超のフォルダ作成が成功する
+                Directory.CreateDirectory(LongPath.Extend(longPath));
+                SelfAssert.That(Directory.Exists(LongPath.Extend(longPath)), "変換を通した260文字超のフォルダが作成されていません。");
+
+                // 2. 変換を通さないプレーンなパスでは、同じ深さのフォルダ作成が失敗する（対比）
+                string plainName = new string('b', segmentLength);
+                string plainPath = Path.Combine(root, plainName);
+                SelfAssert.That(plainPath.Length > 260, $"対比用パスが260文字を超えていません（{plainPath.Length}文字）。");
+
+                bool plainCreationFailed = false;
+                try
+                {
+                    Directory.CreateDirectory(plainPath);
+                }
+                catch (PathTooLongException)
+                {
+                    plainCreationFailed = true;
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    plainCreationFailed = true;
+                }
+                catch (IOException)
+                {
+                    plainCreationFailed = true;
+                }
+
+                SelfAssert.That(plainCreationFailed, "変換を通さないプレーンなパスでの260文字超フォルダ作成が、失敗せず成功してしまいました。");
+                SelfAssert.That(!Directory.Exists(plainPath), "変換を通さないプレーンなパスにもかかわらずフォルダが実際に作成されています。");
+            }
+            finally
+            {
+                // 後始末: 検証の成否に関わらず必ず行う。削除も変換を通した経路で行う。
+                if (Directory.Exists(root) || Directory.Exists(LongPath.Extend(root)))
+                {
+                    Directory.Delete(LongPath.Extend(root), recursive: true);
+                }
+            }
+        });
+
+        runner.Add("日本語を含む260文字超のフォルダを変換を通して作成できる（要件3.2）", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gb_lp_ja_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+
+            try
+            {
+                Directory.CreateDirectory(root);
+
+                // 数え方は文字数（UTF-16 の WCHAR）。日本語1文字は1コードユニットなので string.Length と一致する。
+                int desiredTotalLength = 300;
+                int segmentLength = Math.Max(desiredTotalLength - (root.Length + 1), 80);
+                string longName = new string('日', segmentLength);
+                string longPath = Path.Combine(root, longName);
+
+                SelfAssert.That(longPath.Length > 260, $"検証用パスが260文字を超えていません（{longPath.Length}文字）。");
+
+                Directory.CreateDirectory(LongPath.Extend(longPath));
+                SelfAssert.That(Directory.Exists(LongPath.Extend(longPath)), "日本語を含む260文字超のフォルダが作成されていません。");
+            }
+            finally
+            {
+                if (Directory.Exists(root) || Directory.Exists(LongPath.Extend(root)))
+                {
+                    Directory.Delete(LongPath.Extend(root), recursive: true);
+                }
+            }
         });
     }
 }
