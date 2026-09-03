@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -32,6 +33,7 @@ internal static class SelfChecks
         RegisterBaselineComparerChecks(runner);
         RegisterFixtureSpecChecks(runner);
         RegisterAccessControlGateChecks(runner);
+        RegisterFixtureBuilderChecks(runner);
     }
 
     /// <summary>
@@ -1406,5 +1408,326 @@ internal static class SelfChecks
                 }
             }
         });
+    }
+
+    /// <summary>
+    /// Fixture 層（FixtureBuilder）の検証項目を登録する（タスク3.3）。
+    /// design.md の Service Interface（Build / TearDown）の Postconditions と Invariants、
+    /// および要件3.1〜3.3・3.5・3.6 が求める「定義どおりの構造が生成され、後始末の実行後に
+    /// 残留物がない」ことを検証する。
+    /// すべての検証項目は finally で TearDown（および残留時の強制除去）を必ず呼び出し、
+    /// 一時領域（%TEMP% 配下、"gb_fix_" 接頭辞）にのみフォルダを作成する。
+    /// </summary>
+    private static void RegisterFixtureBuilderChecks(SelfCheckRunner runner)
+    {
+        runner.Add("FixtureBuilder が FixtureSpec.Standard の全項目を拡張長パス経由で実在確認できる形で生成し、ファイルサイズが定義と一致する（Postconditions、要件3.1〜3.3）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var result = builder.Build(FixtureSpec.Standard, root);
+
+                SelfAssert.That(
+                    result.IsComplete,
+                    $"生成が完了しませんでした。未生成: {string.Join(", ", result.Omissions.Select(o => $"{o.RelativePath} ({o.Reason})"))}");
+                SelfAssert.That(result.Omissions.Count == 0, "未生成の項目が存在するのに Omissions が空ではありません。");
+
+                int maxFolderLength = 0;
+                int maxFileLength = 0;
+
+                foreach (var item in FixtureSpec.Standard.Items)
+                {
+                    // 実在確認は必ず拡張長パス経由で行う。プレーンなパスでは260文字超の項目が
+                    // 「存在しない」と誤判定されるため（タスクの検証観点）。
+                    string extendedPath = LongPath.Extend(Path.Combine(root, item.RelativePath));
+
+                    if (item.Kind == GoldenEntryKind.Folder)
+                    {
+                        SelfAssert.That(Directory.Exists(extendedPath), $"フォルダ '{item.RelativePath}' が生成されていません（拡張長パス経由で確認）。");
+                        maxFolderLength = Math.Max(maxFolderLength, item.RelativePath.Length);
+                    }
+                    else
+                    {
+                        SelfAssert.That(File.Exists(extendedPath), $"ファイル '{item.RelativePath}' が生成されていません（拡張長パス経由で確認）。");
+
+                        var info = new FileInfo(extendedPath);
+                        SelfAssert.That(
+                            info.Length == item.ContentSizeInBytes,
+                            $"ファイル '{item.RelativePath}' のサイズが定義（{item.ContentSizeInBytes}バイト）と一致しません（実際: {info.Length}バイト）。");
+                        maxFileLength = Math.Max(maxFileLength, item.RelativePath.Length);
+                    }
+                }
+
+                SelfAssert.That(maxFolderLength > 248, $"検証対象の最長フォルダの相対パスが248文字を超えていません（実際: {maxFolderLength}文字）。");
+                SelfAssert.That(maxFileLength > 260, $"検証対象の最長ファイルの相対パスが260文字を超えていません（実際: {maxFileLength}文字）。");
+
+                // 対比: プレーンなパスでは260文字超のフォルダの実在確認自体ができないことを確認する。
+                // これにより、上記の確認が拡張長パス経由でなければ通らない検証であることを保証する。
+                var longFolderItem = FixtureSpec.Standard.Items
+                    .First(i => i.Kind == GoldenEntryKind.Folder && i.Traits.Contains(FixtureTrait.LongPath) && i.RelativePath.Length > 248);
+                string plainLongFolderPath = Path.Combine(root, longFolderItem.RelativePath);
+                SelfAssert.That(
+                    !Directory.Exists(plainLongFolderPath),
+                    "対比検証: プレーンなパスで248文字超のフォルダが「存在する」と判定されました（拡張長パス経由の確認でなければ意味を持たない検証になっています）。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // 後始末自体が失敗しても、以下の強制除去へフォールバックする。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("FixtureBuilder.TearDown の後、基準フォルダを含めて残留物が一切ない（観測可能な完了状態）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var result = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(result.IsComplete, "前提となる生成が完了しませんでした。");
+
+                builder.TearDown(FixtureSpec.Standard, root);
+                cleanedUp = true;
+
+                SelfAssert.That(!Directory.Exists(LongPath.Extend(root)), "TearDown の後も基準フォルダが（拡張長パス経由で見て）存在しています。");
+                SelfAssert.That(!Directory.Exists(root), "TearDown の後も基準フォルダが（プレーンパスで見て）存在しています。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("FixtureBuilder が一部の生成に失敗しても中断せず残りの項目の生成を継続し、Omissions に項目と理由を記録する（要件3.6）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                Directory.CreateDirectory(root);
+
+                // "normal" フォルダの生成先に、あらかじめ同名のファイルを置いておく。
+                // Directory.CreateDirectory は同名のファイルが存在すると失敗するため、
+                // FixtureBuilder の実装を一切改変せずに「一部が生成できない」状況を実際に再現できる。
+                string blockedPath = Path.Combine(root, "normal");
+                File.WriteAllText(blockedPath, "blocker");
+
+                var result = builder.Build(FixtureSpec.Standard, root);
+
+                SelfAssert.That(!result.IsComplete, "意図的に生成を妨げたのに IsComplete が真のままです。");
+                SelfAssert.That(result.Omissions.Count > 0, "意図的に生成を妨げたのに Omissions が空です。");
+
+                var blockedOmission = result.Omissions.FirstOrDefault(o => o.RelativePath == "normal");
+                SelfAssert.That(blockedOmission != null, "妨げた項目 'normal' が Omissions に含まれていません。");
+                // IsNullOrEmpty だけでは空白のみの「実質的に空の理由」を見逃す（変異テストで確認済み）。
+                // 意味のある内容が入っていることまで、最低限の長さで機械的に照合する。
+                SelfAssert.That(
+                    !string.IsNullOrWhiteSpace(blockedOmission!.Reason) && blockedOmission.Reason.Trim().Length >= 5,
+                    $"'normal' の Omission に意味のある理由が記録されていません（実際: '{blockedOmission!.Reason}'）。");
+
+                // "normal" の子は親フォルダが（ファイルに阻まれて）存在しないため、これも生成できず
+                // Omissions に含まれるはず。これにより「中断せず残りの項目の生成を継続した」ことを、
+                // 妨げた項目の周辺でも確認する。
+                var childOmission = result.Omissions.FirstOrDefault(o => o.RelativePath == @"normal\file_small.txt");
+                SelfAssert.That(childOmission != null, "妨げたフォルダの子 'normal\\file_small.txt' が Omissions に含まれていません。");
+                SelfAssert.That(
+                    !string.IsNullOrWhiteSpace(childOmission!.Reason) && childOmission.Reason.Trim().Length >= 5,
+                    $"子の Omission に意味のある理由が記録されていません（実際: '{childOmission!.Reason}'）。");
+
+                // "normal" とは無関係な項目は、妨げの影響を受けず生成が継続されているはず
+                // （中断せず残りの項目の生成を継続することの直接的な確認）。
+                string unrelatedFolder = LongPath.Extend(Path.Combine(root, "empty_folder"));
+                SelfAssert.That(Directory.Exists(unrelatedFolder), "妨げた項目と無関係な 'empty_folder' が生成されていません（生成が中断されている可能性があります）。");
+
+                string unrelatedJapaneseFile = LongPath.Extend(Path.Combine(root, @"日本語フォルダ\日本語ファイル.txt"));
+                SelfAssert.That(File.Exists(unrelatedJapaneseFile), "妨げた項目と無関係な日本語ファイルが生成されていません（生成が中断されている可能性があります）。");
+
+                var unrelatedOmission = result.Omissions.FirstOrDefault(o => o.RelativePath == "empty_folder");
+                SelfAssert.That(unrelatedOmission == null, "無関係な 'empty_folder' が誤って Omissions に含まれています。");
+
+                // TearDown が Build の部分的な失敗の後でも呼び出せることを、この状態のまま確認する（Invariants）。
+                builder.TearDown(FixtureSpec.Standard, root);
+                cleanedUp = true;
+
+                SelfAssert.That(!Directory.Exists(LongPath.Extend(root)), "部分的な失敗の後の TearDown で基準フォルダが削除されていません。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("FixtureBuilder が AccessDenied トレイトの項目に読み取り拒否を適用し、TearDown が2段階の後始末で確実に取り除く（要件3.4、research.md）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var result = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(
+                    result.IsComplete,
+                    $"前提となる生成が完了しませんでした。未生成: {string.Join(", ", result.Omissions.Select(o => o.RelativePath))}");
+
+                string deniedFolder = Path.Combine(root, "access_denied_folder");
+                SelfAssert.That(Directory.Exists(deniedFolder), "access_denied_folder が生成されていません。");
+
+                bool deniedAsExpected = false;
+                try
+                {
+                    Directory.GetFileSystemEntries(deniedFolder);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    deniedAsExpected = true;
+                }
+
+                SelfAssert.That(deniedAsExpected, "Build が AccessDenied トレイトの項目に読み取り拒否を適用していません。");
+
+                // 1段階（解除なし）での削除は失敗するはず（research.md「権限のないフォルダの生成と後始末」の再現）。
+                bool deleteWithoutRestoreFailed = false;
+                try
+                {
+                    Directory.Delete(LongPath.Extend(root), recursive: true);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    deleteWithoutRestoreFailed = true;
+                }
+
+                SelfAssert.That(
+                    deleteWithoutRestoreFailed,
+                    "拒否設定を解除せずに削除した際、想定どおり UnauthorizedAccessException になりませんでした（1段階では削除が失敗するという前提を再現できていません）。");
+                SelfAssert.That(Directory.Exists(LongPath.Extend(root)), "1段階目の削除試行後も基準フォルダが残っているはずですが、既に削除されています。");
+
+                // 2段階目: TearDown（解除→削除）で確実に取り除けることを確認する。
+                builder.TearDown(FixtureSpec.Standard, root);
+                cleanedUp = true;
+
+                SelfAssert.That(!Directory.Exists(LongPath.Extend(root)), "TearDown の後も基準フォルダが残っています。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+    }
+
+    /// <summary>
+    /// FixtureBuilder の検証で使う、一時領域の基準フォルダパスを組み立てる。
+    /// フォルダ自体はまだ作成しない。既存規約に合わせ "gb_fix_" 接頭辞を用いる。
+    /// </summary>
+    private static string CreateTempFixtureRoot()
+    {
+        return Path.Combine(Path.GetTempPath(), "gb_fix_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+    }
+
+    /// <summary>
+    /// FixtureBuilder の検証の後始末が何らかの理由で失敗した場合の最終手段。
+    /// icacls で ACL をリセットしてから再度削除を試みる
+    /// （tasks.md Implementation Notes: タスク3.2で4件の残留が発生した際の除去手順と同じ）。
+    /// 通常経路（TearDown が正しく機能している場合）では実質的に何もしない。
+    /// </summary>
+    private static void ForceCleanupFixtureResidue(string root)
+    {
+        string extendedRoot = LongPath.Extend(root);
+        bool existsPlain = Directory.Exists(root);
+        bool existsExtended = Directory.Exists(extendedRoot);
+
+        if (!existsPlain && !existsExtended)
+        {
+            return;
+        }
+
+        try
+        {
+            var psi = new ProcessStartInfo("icacls.exe", $"\"{extendedRoot}\" /reset /T /C /Q")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+
+            using (var process = Process.Start(psi))
+            {
+                process?.WaitForExit(30000);
+            }
+        }
+        catch
+        {
+            // icacls 自体が使えない環境でも、削除の再試行だけは行う。
+        }
+
+        try
+        {
+            if (Directory.Exists(extendedRoot))
+            {
+                Directory.Delete(extendedRoot, recursive: true);
+            }
+        }
+        catch
+        {
+            // ここで失敗した場合は、呼び出し側（自己検証の最終確認）が残留として検出する。
+        }
     }
 }
