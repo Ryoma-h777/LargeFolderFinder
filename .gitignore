@@ -67,5 +67,8 @@ msbuild.log
 Cache.bin
 /docs/
 
+# GoldenBaseline: 生成されるフィクスチャの実体を追跡対象外にする（期待値データは /baselines/ 配下として追跡する）
+/fixtures/
+
 # WPF temporary files
 *_wpftmp.csproj
