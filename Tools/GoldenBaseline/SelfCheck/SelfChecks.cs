@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using LargeFolderFinder.GoldenBaseline.Compare;
+using LargeFolderFinder.GoldenBaseline.Fixture;
 using LargeFolderFinder.GoldenBaseline.Io;
 using LargeFolderFinder.GoldenBaseline.Model;
 
@@ -29,6 +30,7 @@ internal static class SelfChecks
         RegisterLongPathChecks(runner);
         RegisterGoldenSerializerChecks(runner);
         RegisterBaselineComparerChecks(runner);
+        RegisterFixtureSpecChecks(runner);
     }
 
     /// <summary>
@@ -901,5 +903,313 @@ internal static class SelfChecks
         var diff = matches[0];
         SelfAssert.That(diff.ExpectedValue == expectedValue, $"種別 {kind}・相対パス '{relativePath}' の ExpectedValue が想定と異なります（期待: '{expectedValue}', 実際: '{diff.ExpectedValue}'）。");
         SelfAssert.That(diff.ActualValue == actualValue, $"種別 {kind}・相対パス '{relativePath}' の ActualValue が想定と異なります（期待: '{expectedValue}', 実際: '{diff.ActualValue}'）。");
+    }
+
+    /// <summary>
+    /// Fixture 層（FixtureSpec / FixtureItem / FixtureTrait）の検証項目を登録する（タスク3.1）。
+    /// design.md の State Management の型定義と Invariants、および
+    /// requirements.md 3.1〜3.4・3.5・5.2 が求める境界条件の網羅を検証する。
+    /// 「Trait のラベルと実体（実際の文字数・実際の文字種）を分けて検証する」ことを重視する
+    /// （tasks.md Implementation Notes: ラベルだけを見る検証は定義を短くしても通過してしまうため）。
+    /// </summary>
+    private static void RegisterFixtureSpecChecks(SelfCheckRunner runner)
+    {
+        runner.Add("FixtureItem が相対パス・種別・内容サイズ・境界条件の一覧を保持する", () =>
+        {
+            var item = new FixtureItem(@"a\b.txt", GoldenEntryKind.File, 123L, new[] { FixtureTrait.Ordinary });
+
+            SelfAssert.That(item.RelativePath == @"a\b.txt", "RelativePath が設定した値と一致しません。");
+            SelfAssert.That(item.Kind == GoldenEntryKind.File, "Kind が設定した値と一致しません。");
+            SelfAssert.That(item.ContentSizeInBytes == 123L, "ContentSizeInBytes が設定した値と一致しません。");
+            SelfAssert.That(item.Traits.Count == 1 && item.Traits[0] == FixtureTrait.Ordinary, "Traits が設定した値と一致しません。");
+        });
+
+        runner.Add("FixtureItem が空の相対パスを拒否する", () =>
+        {
+            bool threw = false;
+            try
+            {
+                _ = new FixtureItem(string.Empty, GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary });
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            SelfAssert.That(threw, "空の相対パスを渡しても例外が発生しませんでした。");
+        });
+
+        runner.Add("FixtureItem が負の内容サイズを拒否する", () =>
+        {
+            bool threw = false;
+            try
+            {
+                _ = new FixtureItem(@"a", GoldenEntryKind.File, -1L, new[] { FixtureTrait.Ordinary });
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                threw = true;
+            }
+
+            SelfAssert.That(threw, "負の内容サイズを渡しても例外が発生しませんでした。");
+        });
+
+        runner.Add("FixtureItem がフォルダに対する非ゼロの内容サイズを拒否する", () =>
+        {
+            bool threw = false;
+            try
+            {
+                _ = new FixtureItem(@"a", GoldenEntryKind.Folder, 1L, new[] { FixtureTrait.Ordinary });
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            SelfAssert.That(threw, "フォルダに非ゼロの内容サイズを渡しても例外が発生しませんでした。");
+        });
+
+        runner.Add("FixtureItem が境界条件を1件も持たない定義を拒否する", () =>
+        {
+            bool threw = false;
+            try
+            {
+                _ = new FixtureItem(@"a", GoldenEntryKind.Folder, 0L, Array.Empty<FixtureTrait>());
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            SelfAssert.That(threw, "境界条件が空のTraitsを渡しても例外が発生しませんでした。");
+        });
+
+        runner.Add("FixtureSpec が空の論理名を拒否する", () =>
+        {
+            bool threw = false;
+            try
+            {
+                _ = new FixtureSpec(string.Empty, new List<FixtureItem>
+                {
+                    new FixtureItem(@"a", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary }),
+                });
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            SelfAssert.That(threw, "空の論理名を渡しても例外が発生しませんでした。");
+        });
+
+        runner.Add("FixtureSpec が相対パスの重複を拒否する（Invariants）", () =>
+        {
+            bool threw = false;
+            try
+            {
+                _ = new FixtureSpec("dup-spec", new List<FixtureItem>
+                {
+                    new FixtureItem(@"dup", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary }),
+                    new FixtureItem(@"dup", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary }),
+                });
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            SelfAssert.That(threw, "相対パスが重複する項目を与えても例外が発生しませんでした。");
+        });
+
+        runner.Add("FixtureSpec が親フォルダを持たない項目を拒否する（Invariants: 親フォルダの包含）", () =>
+        {
+            bool threw = false;
+            try
+            {
+                // "a\b\c.txt" の親である "a" と "a\b" を一切含めない不正な定義。
+                _ = new FixtureSpec("no-parent-spec", new List<FixtureItem>
+                {
+                    new FixtureItem(@"a\b\c.txt", GoldenEntryKind.File, 1L, new[] { FixtureTrait.Ordinary }),
+                });
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            SelfAssert.That(threw, "親フォルダを持たない項目を与えても例外が発生しませんでした。");
+        });
+
+        runner.Add("FixtureSpec が親フォルダとして定義されていない同名項目（フォルダでない）を拒否する（Invariants）", () =>
+        {
+            bool threw = false;
+            try
+            {
+                // "a" が File として定義されており、"a\b.txt" の親としてフォルダの資格を持たない。
+                _ = new FixtureSpec("parent-not-folder-spec", new List<FixtureItem>
+                {
+                    new FixtureItem(@"a", GoldenEntryKind.File, 1L, new[] { FixtureTrait.Ordinary }),
+                    new FixtureItem(@"a\b.txt", GoldenEntryKind.File, 1L, new[] { FixtureTrait.Ordinary }),
+                });
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            SelfAssert.That(threw, "親がフォルダでない項目を与えても例外が発生しませんでした。");
+        });
+
+        runner.Add("FixtureSpec.CreateStandard を2回呼び出しても同一の項目列と内容が得られる（要件3.5）", () =>
+        {
+            var first = FixtureSpec.CreateStandard();
+            var second = FixtureSpec.CreateStandard();
+
+            SelfAssert.That(first.Name == second.Name, "2回の呼び出しで Name が一致しません。");
+            SelfAssert.That(first.Items.Count == second.Items.Count, $"2回の呼び出しで項目数が一致しません（{first.Items.Count} 件 vs {second.Items.Count} 件）。");
+
+            for (int i = 0; i < first.Items.Count; i++)
+            {
+                var a = first.Items[i];
+                var b = second.Items[i];
+
+                SelfAssert.That(a.RelativePath == b.RelativePath, $"インデックス{i}: RelativePath が一致しません（'{a.RelativePath}' vs '{b.RelativePath}'）。");
+                SelfAssert.That(a.Kind == b.Kind, $"インデックス{i}: Kind が一致しません（相対パス '{a.RelativePath}'）。");
+                SelfAssert.That(a.ContentSizeInBytes == b.ContentSizeInBytes, $"インデックス{i}: ContentSizeInBytes が一致しません（相対パス '{a.RelativePath}'）。");
+                SelfAssert.That(a.Traits.SequenceEqual(b.Traits), $"インデックス{i}: Traits が一致しません（相対パス '{a.RelativePath}'）。");
+            }
+        });
+
+        runner.Add("FixtureSpec.Standard の相対パスが重複しない（機械的検証）", () =>
+        {
+            var spec = FixtureSpec.Standard;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var item in spec.Items)
+            {
+                SelfAssert.That(seen.Add(item.RelativePath), $"相対パス '{item.RelativePath}' が重複しています。");
+            }
+        });
+
+        runner.Add("FixtureSpec.Standard の全項目について、親フォルダのパスが定義内に存在する（機械的検証、design.md Invariants）", () =>
+        {
+            var spec = FixtureSpec.Standard;
+
+            // FixtureSpec のコンストラクタとは独立に、この検証自身の力で祖先パスを再構築して照合する。
+            var byPath = new Dictionary<string, GoldenEntryKind>(StringComparer.Ordinal);
+            foreach (var item in spec.Items)
+            {
+                byPath[item.RelativePath] = item.Kind;
+            }
+
+            foreach (var item in spec.Items)
+            {
+                var segments = item.RelativePath.Split('\\');
+                for (int depth = 1; depth < segments.Length; depth++)
+                {
+                    string ancestorPath = string.Join("\\", segments, 0, depth);
+
+                    SelfAssert.That(byPath.ContainsKey(ancestorPath), $"項目 '{item.RelativePath}' の親フォルダ '{ancestorPath}' が定義に存在しません。");
+                    SelfAssert.That(byPath[ancestorPath] == GoldenEntryKind.Folder, $"項目 '{item.RelativePath}' の親 '{ancestorPath}' がフォルダとして定義されていません。");
+                }
+            }
+        });
+
+        runner.Add("FixtureSpec.Standard が FixtureTrait の全種類を少なくとも1件含む（要件3.1〜3.4の網羅）", () =>
+        {
+            var spec = FixtureSpec.Standard;
+
+            foreach (FixtureTrait trait in Enum.GetValues(typeof(FixtureTrait)))
+            {
+                bool exists = spec.Items.Any(item => item.Traits.Contains(trait));
+                SelfAssert.That(exists, $"境界条件 '{trait}' を持つ項目が1件も存在しません。");
+            }
+        });
+
+        runner.Add("FixtureSpec.Standard が248文字を超えるフォルダを実際の文字数として持つ（要件3.1、ディレクトリ境界248文字）", () =>
+        {
+            var spec = FixtureSpec.Standard;
+
+            // ラベル(Trait)だけでなく、RelativePath.Length という実体を数えて照合する。
+            // 「LongPath の Trait が付いている」だけの検証では、長さが足りない定義でも通過してしまう。
+            var longPathFolders = spec.Items
+                .Where(item => item.Kind == GoldenEntryKind.Folder && item.Traits.Contains(FixtureTrait.LongPath))
+                .ToList();
+
+            SelfAssert.That(longPathFolders.Count >= 1, "LongPath トレイトを持つフォルダ項目が1件も存在しません。");
+
+            foreach (var folder in longPathFolders)
+            {
+                SelfAssert.That(
+                    folder.RelativePath.Length > 248,
+                    $"LongPath トレイトを持つフォルダ '{folder.RelativePath}' の実際の文字数（{folder.RelativePath.Length}文字）が、ディレクトリ境界248文字を超えていません。");
+            }
+        });
+
+        runner.Add("FixtureSpec.Standard が260文字を超えるファイルパスを実際の文字数として持つ（要件3.1、ファイルパス境界260文字）", () =>
+        {
+            var spec = FixtureSpec.Standard;
+
+            var longPathFiles = spec.Items
+                .Where(item => item.Kind == GoldenEntryKind.File && item.Traits.Contains(FixtureTrait.LongPath))
+                .ToList();
+
+            SelfAssert.That(longPathFiles.Count >= 1, "LongPath トレイトを持つファイル項目が1件も存在しません。");
+
+            foreach (var file in longPathFiles)
+            {
+                SelfAssert.That(
+                    file.RelativePath.Length > 260,
+                    $"LongPath トレイトを持つファイル '{file.RelativePath}' の実際の文字数（{file.RelativePath.Length}文字）が、ファイルパス境界260文字を超えていません。");
+            }
+        });
+
+        runner.Add("FixtureSpec.Standard の Japanese トレイトを持つ項目が実際に日本語（ASCII以外の文字）を含む（要件3.2）", () =>
+        {
+            var spec = FixtureSpec.Standard;
+
+            var japaneseItems = spec.Items.Where(item => item.Traits.Contains(FixtureTrait.Japanese)).ToList();
+            SelfAssert.That(japaneseItems.Count >= 1, "Japanese トレイトを持つ項目が1件も存在しません。");
+
+            foreach (var item in japaneseItems)
+            {
+                // ラベルだけでなく、実際に非ASCII文字（コードポイント127超）を含むことを照合する。
+                bool containsNonAscii = item.RelativePath.Any(c => c > 127);
+                SelfAssert.That(containsNonAscii, $"Japanese トレイトを持つ項目 '{item.RelativePath}' に非ASCII文字が含まれていません。");
+            }
+        });
+
+        runner.Add("FixtureSpec.Standard の Empty/ZeroByte/AccessDenied トレイトが種別と整合する", () =>
+        {
+            var spec = FixtureSpec.Standard;
+
+            foreach (var item in spec.Items.Where(i => i.Traits.Contains(FixtureTrait.Empty)))
+            {
+                SelfAssert.That(item.Kind == GoldenEntryKind.Folder, $"Empty トレイトを持つ項目 '{item.RelativePath}' がフォルダではありません。");
+                SelfAssert.That(item.ContentSizeInBytes == 0L, $"Empty トレイトを持つ項目 '{item.RelativePath}' の内容サイズが0ではありません。");
+            }
+
+            foreach (var item in spec.Items.Where(i => i.Traits.Contains(FixtureTrait.ZeroByte)))
+            {
+                SelfAssert.That(item.Kind == GoldenEntryKind.File, $"ZeroByte トレイトを持つ項目 '{item.RelativePath}' がファイルではありません。");
+                SelfAssert.That(item.ContentSizeInBytes == 0L, $"ZeroByte トレイトを持つ項目 '{item.RelativePath}' の内容サイズが0ではありません。");
+            }
+
+            foreach (var item in spec.Items.Where(i => i.Traits.Contains(FixtureTrait.AccessDenied)))
+            {
+                SelfAssert.That(item.Kind == GoldenEntryKind.Folder, $"AccessDenied トレイトを持つ項目 '{item.RelativePath}' がフォルダではありません。");
+            }
+        });
+
+        runner.Add("FixtureSpec.Standard が対比用の通常のフォルダとファイルを含む（境界条件だけでなく普通の項目も検証できるように）", () =>
+        {
+            var spec = FixtureSpec.Standard;
+
+            bool hasOrdinaryFolder = spec.Items.Any(i => i.Kind == GoldenEntryKind.Folder && i.Traits.Contains(FixtureTrait.Ordinary));
+            bool hasOrdinaryFile = spec.Items.Any(i => i.Kind == GoldenEntryKind.File && i.Traits.Contains(FixtureTrait.Ordinary));
+
+            SelfAssert.That(hasOrdinaryFolder, "Ordinary トレイトを持つフォルダ項目が存在しません。");
+            SelfAssert.That(hasOrdinaryFile, "Ordinary トレイトを持つファイル項目が存在しません。");
+        });
     }
 }
