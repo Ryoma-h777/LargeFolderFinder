@@ -80,7 +80,7 @@
 
 - [ ] 4. 中核: 走査の実行と期待値への射影
 
-- [ ] 4.1 (P) 固定条件での走査実行を実装する
+- [x] 4.1 (P) 固定条件での走査実行を実装する
   - 抽出サイズの閾値をゼロ、ファイル表示を有効として走査する。表示条件を一切適用しない
   - 物理サイズ換算の有無を明示的に指定し、適用したクラスタサイズを結果に含める
   - アクセスできずスキップされた対象を記録する
@@ -192,3 +192,6 @@
 - 検証用の一時フォルダは `%TEMP%` 配下に `gb_` 接頭辞で作る規約になっている（`gb_acl_*` / `gb_lp_*` / `gb_ser_*` など）。残留確認はこの接頭辞で行える
 - 「理由・メッセージが入っているか」を検証する箇所では、`IsNullOrEmpty` だと空白のみの値をすり抜ける。タスク3.3の変異テストで実際に見逃しが起き、`IsNullOrWhiteSpace` ＋最小文字数へ強化した。同種の検証では同じ観点に注意すること
 - フィクスチャの生成は `%TEMP%` 配下の `gb_fix_*` に作る。生成・削除とも `LongPath.Extend` 経由で、後始末は `RestoreRead` → `Directory.Delete(extendedRoot, recursive: true)` の順（`FixtureBuilder.TearDown`）
+- 本体との統合で判明した制約（タスク4.1）: `Helpers/Win32.cs` は internal、`Scanner.GetClusterSize` は private でツールから呼べない。本体を変更せず、`ScanRunner` 内に同一シグネチャの P/Invoke と同一の計算式を持たせて独立に測定している。**本体側の計算が変わるとツールと乖離するため、`scan-performance` で本体を触る際は `ScanRunner.MeasureClusterSize` との整合を確認すること**
+- 本体の `Scanner` はアクセス拒否を `catch { }` で握りつぶし、スキップした対象を外部に知らせない。`ScanRunner` は基準フォルダを独立に列挙し直して `UnauthorizedAccessException` の経路のみを記録している。**レビュー指摘（非ブロッキング）: 本体は全例外を握りつぶすがツールは `UnauthorizedAccessException` のみ捕捉するため、別種の例外が起きる状況では非対称になる。** 現在のフィクスチャでは再現しないが、堅牢化を検討すること
+- `dotnet build` の増分ビルドはソースの mtime で判定するため、`cp` / `mv` でファイルを復元すると古いキャッシュが使われることがある。一時変異の復元後は `touch` してから再ビルドすること

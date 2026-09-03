@@ -11,6 +11,7 @@ using LargeFolderFinder.GoldenBaseline.Compare;
 using LargeFolderFinder.GoldenBaseline.Fixture;
 using LargeFolderFinder.GoldenBaseline.Io;
 using LargeFolderFinder.GoldenBaseline.Model;
+using LargeFolderFinder.GoldenBaseline.Scan;
 
 namespace LargeFolderFinder.GoldenBaseline.SelfCheck;
 
@@ -34,6 +35,7 @@ internal static class SelfChecks
         RegisterFixtureSpecChecks(runner);
         RegisterAccessControlGateChecks(runner);
         RegisterFixtureBuilderChecks(runner);
+        RegisterScanRunnerChecks(runner);
     }
 
     /// <summary>
@@ -1670,6 +1672,301 @@ internal static class SelfChecks
                 ForceCleanupFixtureResidue(root);
             }
         });
+    }
+
+    /// <summary>
+    /// Scan 層（ScanRunner）の検証項目を登録する（タスク4.1）。
+    /// 被テストアプリの Scanner を実際に呼び出す、初めての検証項目である。
+    /// FixtureBuilder で生成した FixtureSpec.Standard を走査対象として用いる。
+    /// </summary>
+    private static void RegisterScanRunnerChecks(SelfCheckRunner runner)
+    {
+        runner.Add("ScanRunner が同一のディスク状態に対して2回走査しても同一の集計結果を返す（要件2.3）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(
+                    buildResult.IsComplete,
+                    $"前提となるフィクスチャ生成が完了しませんでした。未生成: {string.Join(", ", buildResult.Omissions.Select(o => o.RelativePath))}");
+
+                var scanRunner = new ScanRunner();
+
+                var outcome1 = scanRunner.Run(root, usePhysicalSize: true);
+                var outcome2 = scanRunner.Run(root, usePhysicalSize: true);
+
+                var map1 = FlattenScanTree(outcome1.Root);
+                var map2 = FlattenScanTree(outcome2.Root);
+
+                SelfAssert.That(
+                    outcome1.Root.Size == outcome2.Root.Size,
+                    $"ルートの集計サイズが2回の走査で異なります（1回目: {outcome1.Root.Size}, 2回目: {outcome2.Root.Size}）。");
+                SelfAssert.That(
+                    map1.Count == map2.Count,
+                    $"走査結果のエントリ数が2回の走査で異なります（1回目: {map1.Count}, 2回目: {map2.Count}）。");
+
+                foreach (var kv in map1)
+                {
+                    SelfAssert.That(map2.TryGetValue(kv.Key, out var other), $"1回目に存在した '{kv.Key}' が2回目に存在しません。");
+                    SelfAssert.That(other.IsFile == kv.Value.IsFile, $"'{kv.Key}' の種別が2回の走査で異なります。");
+                    SelfAssert.That(
+                        other.Size == kv.Value.Size,
+                        $"'{kv.Key}' のサイズが2回の走査で異なります（1回目: {kv.Value.Size}, 2回目: {other.Size}）。");
+                }
+
+                SelfAssert.That(outcome1.ClusterSizeInBytes == outcome2.ClusterSizeInBytes, "クラスタサイズが2回の走査で異なります。");
+                SelfAssert.That(outcome1.SkippedPaths.Count == outcome2.SkippedPaths.Count, "スキップされた対象の件数が2回の走査で異なります。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("ScanRunner が表示条件を適用せず、サイズ0のファイルを含むすべてのファイルが走査結果に現れる（要件2.2）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(buildResult.IsComplete, "前提となるフィクスチャ生成が完了しませんでした。");
+
+                var scanRunner = new ScanRunner();
+                var outcome = scanRunner.Run(root, usePhysicalSize: false);
+                var map = FlattenScanTree(outcome.Root);
+
+                SelfAssert.That(
+                    map.TryGetValue(@"normal\file_zero_byte.dat", out var zeroByte),
+                    "サイズ0のファイル 'normal\\file_zero_byte.dat' が走査結果に現れていません（抽出サイズ閾値が適用されている可能性があります）。");
+                SelfAssert.That(zeroByte.IsFile, "'normal\\file_zero_byte.dat' がファイルとして記録されていません。");
+                SelfAssert.That(zeroByte.Size == 0L, $"'normal\\file_zero_byte.dat' のサイズが0ではありません（実際: {zeroByte.Size}）。");
+
+                SelfAssert.That(map.TryGetValue(@"normal\file_small.txt", out var small), "'normal\\file_small.txt' が走査結果に現れていません。");
+                SelfAssert.That(small.Size == 10L, $"'normal\\file_small.txt' のサイズが定義（10バイト）と一致しません（実際: {small.Size}）。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("ScanRunner が走査結果に手を加えず、260文字を超える項目は現行版のまま走査結果に現れない（要件5.1, 5.5）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(buildResult.IsComplete, "前提となるフィクスチャ生成が完了しませんでした。");
+
+                var scanRunner = new ScanRunner();
+                var outcome = scanRunner.Run(root, usePhysicalSize: false);
+                var map = FlattenScanTree(outcome.Root);
+
+                // 境界を超える項目（LongPath トレイト かつ 実際の文字数境界超過）を、FixtureSpec の定義から
+                // 機械的に抽出する。手作業の列挙はしない（tasks.md「手作業の注釈に頼らない」の趣旨に合わせる）。
+                var overBoundaryItems = FixtureSpec.Standard.Items
+                    .Where(i => i.Traits.Contains(FixtureTrait.LongPath))
+                    .Where(i => (i.Kind == GoldenEntryKind.Folder && i.RelativePath.Length > 248)
+                             || (i.Kind == GoldenEntryKind.File && i.RelativePath.Length > 260))
+                    .ToList();
+
+                SelfAssert.That(overBoundaryItems.Count > 0, "検証対象となる境界超過項目が定義から見つかりません（FixtureSpec.Standard の想定が変わった可能性があります）。");
+
+                foreach (var item in overBoundaryItems)
+                {
+                    SelfAssert.That(
+                        !map.ContainsKey(item.RelativePath),
+                        $"既知の不具合により現れないはずの項目 '{item.RelativePath}'（{item.RelativePath.Length}文字）が走査結果に現れました。" +
+                        "本体の挙動が変わった可能性があり、想定と異なるため報告が必要です。");
+                }
+
+                // 対比: 境界を超えない通常の項目（同じ長いパス連鎖の浅い階層）は正しく現れることを確認する。
+                // これにより、上の不在確認が「そもそも何も走査できていない」誤りでないことを保証する。
+                string shallowAsciiFolder = new string('a', 50);
+                SelfAssert.That(map.ContainsKey(shallowAsciiFolder), $"境界を超えない通常のフォルダ '{shallowAsciiFolder}' が走査結果に現れていません。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("ScanRunner が物理サイズ換算の有無を指定でき、結果とクラスタサイズに反映される（要件6.1, 6.4）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(buildResult.IsComplete, "前提となるフィクスチャ生成が完了しませんでした。");
+
+                var scanRunner = new ScanRunner();
+
+                var logical = scanRunner.Run(root, usePhysicalSize: false);
+                var physical = scanRunner.Run(root, usePhysicalSize: true);
+
+                SelfAssert.That(logical.ClusterSizeInBytes == 0L, $"物理サイズ換算なしのときクラスタサイズが0ではありません（実際: {logical.ClusterSizeInBytes}）。");
+                SelfAssert.That(physical.ClusterSizeInBytes > 0L, "物理サイズ換算ありのときクラスタサイズが0のままです。");
+
+                var logicalMap = FlattenScanTree(logical.Root);
+                var physicalMap = FlattenScanTree(physical.Root);
+
+                long clusterSize = physical.ClusterSizeInBytes;
+
+                SelfAssert.That(logicalMap.TryGetValue(@"normal\file_small.txt", out var logicalSmall), "論理サイズ走査結果に 'normal\\file_small.txt' が見つかりません。");
+                SelfAssert.That(physicalMap.TryGetValue(@"normal\file_small.txt", out var physicalSmall), "物理サイズ走査結果に 'normal\\file_small.txt' が見つかりません。");
+
+                SelfAssert.That(logicalSmall.Size == 10L, $"論理サイズが定義（10バイト）と一致しません（実際: {logicalSmall.Size}）。");
+
+                long expectedPhysicalSmall = ((10L + clusterSize - 1) / clusterSize) * clusterSize;
+                SelfAssert.That(
+                    physicalSmall.Size == expectedPhysicalSmall,
+                    $"物理サイズ換算の結果が想定（クラスタサイズ {clusterSize} バイトへの切り上げ = {expectedPhysicalSmall} バイト）と一致しません（実際: {physicalSmall.Size}）。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("ScanRunner がアクセスできずスキップされた対象を結果から確認できる形で記録する（要件2.4）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(buildResult.IsComplete, "前提となるフィクスチャ生成が完了しませんでした。");
+
+                var scanRunner = new ScanRunner();
+                var outcome = scanRunner.Run(root, usePhysicalSize: false);
+
+                string deniedFolder = Path.Combine(root, "access_denied_folder");
+                SelfAssert.That(
+                    outcome.SkippedPaths.Any(p => string.Equals(p, deniedFolder, StringComparison.OrdinalIgnoreCase)),
+                    $"読み取り拒否フォルダ '{deniedFolder}' が SkippedPaths に記録されていません。実際の SkippedPaths: {string.Join(", ", outcome.SkippedPaths)}");
+
+                // 走査自体は完了しており、拒否フォルダ自身は（中身が空の状態で）ツリーに現れているはず。
+                var map = FlattenScanTree(outcome.Root);
+                SelfAssert.That(
+                    map.TryGetValue("access_denied_folder", out var deniedNode),
+                    "access_denied_folder 自体が走査結果のツリーに現れていません（走査が完了していない可能性があります）。");
+                SelfAssert.That(!deniedNode.IsFile, "access_denied_folder がファイルとして記録されています。");
+
+                // 拒否対象と無関係な項目が正しく走査されていることを確認し、走査が中断していないことを示す。
+                SelfAssert.That(map.ContainsKey("empty_folder"), "拒否対象と無関係な 'empty_folder' が走査結果に現れていません（走査が中断している可能性があります）。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+    }
+
+    /// <summary>
+    /// ScanRunner の走査結果ツリーを、基準フォルダからの相対パスをキーとする平坦なマップへ変換する。
+    /// テスト専用のヘルパーであり、GoldenProjector（タスク4.2）の実装ではない
+    /// （相対パスの区切り文字は本ヘルパー内で \ に統一しているのみで、射影の正式な契約は別途 4.2 で定める）。
+    /// </summary>
+    private static Dictionary<string, (bool IsFile, long Size)> FlattenScanTree(FolderInfo root)
+    {
+        var map = new Dictionary<string, (bool IsFile, long Size)>(StringComparer.Ordinal);
+
+        void Walk(FolderInfo node, string relativePath)
+        {
+            if (!string.IsNullOrEmpty(relativePath))
+            {
+                map[relativePath] = (node.IsFile, node.Size);
+            }
+
+            foreach (var child in node.Children)
+            {
+                string childRelativePath = string.IsNullOrEmpty(relativePath) ? child.Name : relativePath + "\\" + child.Name;
+                Walk(child, childRelativePath);
+            }
+        }
+
+        Walk(root, string.Empty);
+        return map;
     }
 
     /// <summary>
