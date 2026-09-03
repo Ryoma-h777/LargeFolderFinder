@@ -90,7 +90,7 @@
   - _Requirements: 2.2, 2.3, 2.4, 5.1, 5.5, 6.1, 6.4_
   - _Boundary: ScanRunner_
 
-- [ ] 4.2 走査結果を期待値データへ射影する
+- [x] 4.2 走査結果を期待値データへ射影する
   - 基準からの相対パスを組み立て、区切りを統一する
   - サイズはバイト値をそのまま採り、整形経路を通さない
   - 更新日時と所有者を射影の対象に含めない
@@ -195,3 +195,5 @@
 - 本体との統合で判明した制約（タスク4.1）: `Helpers/Win32.cs` は internal、`Scanner.GetClusterSize` は private でツールから呼べない。本体を変更せず、`ScanRunner` 内に同一シグネチャの P/Invoke と同一の計算式を持たせて独立に測定している。**本体側の計算が変わるとツールと乖離するため、`scan-performance` で本体を触る際は `ScanRunner.MeasureClusterSize` との整合を確認すること**
 - 本体の `Scanner` はアクセス拒否を `catch { }` で握りつぶし、スキップした対象を外部に知らせない。`ScanRunner` は基準フォルダを独立に列挙し直して `UnauthorizedAccessException` の経路のみを記録している。**レビュー指摘（非ブロッキング）: 本体は全例外を握りつぶすがツールは `UnauthorizedAccessException` のみ捕捉するため、別種の例外が起きる状況では非対称になる。** 現在のフィクスチャでは再現しないが、堅牢化を検討すること
 - `dotnet build` の増分ビルドはソースの mtime で判定するため、`cp` / `mv` でファイルを復元すると古いキャッシュが使われることがある。一時変異の復元後は `touch` してから再ビルドすること
+- 射影ではルートノード自身をエントリに含めない（タスク4.2の判断）。本体の `Scanner.RunScan` が `new FolderInfo(dir.FullName, ...)` でルートの `Name` に絶対パスを格納するため、含めると相対パスに絶対パスが混入する。基準の論理名は `GoldenHeader.BaseFolderLabel` が別途保持する
+- 本体の型に触れるツール側のファイルは `Scan/ScanRunner.cs` と `Scan/GoldenProjector.cs` の2つに限定されている。`scan-performance` で `FolderInfo` の構造を変える際は、この2ファイルだけを直せばよい

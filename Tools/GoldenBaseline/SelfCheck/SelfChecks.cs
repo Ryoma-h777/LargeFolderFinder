@@ -36,6 +36,7 @@ internal static class SelfChecks
         RegisterAccessControlGateChecks(runner);
         RegisterFixtureBuilderChecks(runner);
         RegisterScanRunnerChecks(runner);
+        RegisterGoldenProjectorChecks(runner);
     }
 
     /// <summary>
@@ -1939,6 +1940,173 @@ internal static class SelfChecks
 
                 ForceCleanupFixtureResidue(root);
             }
+        });
+    }
+
+    /// <summary>
+    /// GoldenProjector（タスク4.2）の検証項目を登録する。
+    /// </summary>
+    private static void RegisterGoldenProjectorChecks(SelfCheckRunner runner)
+    {
+        runner.Add("GoldenProjector が実フィクスチャの走査結果から相対パス・種別・バイトサイズを正しく射影する（要件1.1, 1.2）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(
+                    buildResult.IsComplete,
+                    $"前提となるフィクスチャ生成が完了しませんでした。未生成: {string.Join(", ", buildResult.Omissions.Select(o => o.RelativePath))}");
+
+                var scanRunner = new ScanRunner();
+                var outcome = scanRunner.Run(root, usePhysicalSize: false);
+
+                var projector = new GoldenProjector();
+                var header = new GoldenHeader(
+                    formatVersion: 1,
+                    baseFolderLabel: "fixture-v1",
+                    generatedAt: DateTimeOffset.UtcNow,
+                    usePhysicalSize: false,
+                    clusterSizeInBytes: 0L,
+                    fixtureComplete: true,
+                    fixtureOmissions: Array.Empty<string>());
+
+                var document = projector.Project(outcome, header);
+                var byPath = document.Entries.ToDictionary(e => e.RelativePath, e => e, StringComparer.Ordinal);
+
+                // 相対パス・種別・サイズが正しく射影されていること（バイト値そのまま、整形経路を通さない）。
+                SelfAssert.That(byPath.TryGetValue(@"normal\file_small.txt", out var small), "'normal\\file_small.txt' が射影結果に見つかりません。");
+                SelfAssert.That(small!.Kind == GoldenEntryKind.File, "'normal\\file_small.txt' が File として射影されていません。");
+                SelfAssert.That(small.SizeInBytes == 10L, $"'normal\\file_small.txt' のサイズがバイト値そのまま（定義: 10）と一致しません（実際: {small.SizeInBytes}）。");
+
+                SelfAssert.That(byPath.TryGetValue(@"normal\file_one_cluster.bin", out var oneCluster), "'normal\\file_one_cluster.bin' が射影結果に見つかりません。");
+                SelfAssert.That(oneCluster!.SizeInBytes == 4096L, $"'normal\\file_one_cluster.bin' のサイズが定義（4096）と一致しません（実際: {oneCluster.SizeInBytes}）。");
+
+                SelfAssert.That(byPath.TryGetValue(@"normal\file_two_clusters.bin", out var twoClusters), "'normal\\file_two_clusters.bin' が射影結果に見つかりません。");
+                SelfAssert.That(twoClusters!.SizeInBytes == 4097L, $"'normal\\file_two_clusters.bin' のサイズが定義（4097）と一致しません（実際: {twoClusters.SizeInBytes}）。");
+
+                SelfAssert.That(byPath.TryGetValue(@"normal", out var normalFolder), "'normal' フォルダが射影結果に見つかりません。");
+                SelfAssert.That(normalFolder!.Kind == GoldenEntryKind.Folder, "'normal' が Folder として射影されていません。");
+
+                SelfAssert.That(byPath.TryGetValue(@"empty_folder", out var emptyFolder), "'empty_folder' が射影結果に見つかりません。");
+                SelfAssert.That(emptyFolder!.SizeInBytes == 0L, "'empty_folder' のサイズが0ではありません。");
+
+                // ルートノード自身は絶対パスを Name に持つため（Scanner.cs: new FolderInfo(dir.FullName, ...)）、
+                // エントリとして射影結果に現れてはならない。
+                SelfAssert.That(!byPath.ContainsKey(root), "ルートノード自身（絶対パス）がエントリとして射影結果に含まれています。");
+
+                foreach (var path in byPath.Keys)
+                {
+                    SelfAssert.That(!System.IO.Path.IsPathRooted(path), $"相対パス '{path}' が絶対パスとして現れています。");
+                    SelfAssert.That(!path.StartsWith(@"\\?\", StringComparison.Ordinal), $"相対パス '{path}' に拡張長プレフィクスが混入しています。");
+                    SelfAssert.That(!path.Contains('/'), $"相対パス '{path}' の区切りが '\\' に統一されていません。");
+                }
+
+                // 重複した相対パスが生じない（GoldenDocument のコンストラクタでも拒否されるが、ここでも独立に確認する）。
+                SelfAssert.That(
+                    document.Entries.Count == document.Entries.Select(e => e.RelativePath).Distinct(StringComparer.Ordinal).Count(),
+                    "射影結果に重複した相対パスが存在します。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("GoldenProjector が走査結果に手を加えず、260文字を超える項目は射影結果にも現れない（要件5.1）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(buildResult.IsComplete, "前提となるフィクスチャ生成が完了しませんでした。");
+
+                var scanRunner = new ScanRunner();
+                var outcome = scanRunner.Run(root, usePhysicalSize: false);
+
+                var projector = new GoldenProjector();
+                var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+                var document = projector.Project(outcome, header);
+                var paths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
+
+                // 境界を超える項目（LongPath トレイト かつ 実際の文字数境界超過）を、FixtureSpec の定義から機械的に抽出する。
+                var overBoundaryItems = FixtureSpec.Standard.Items
+                    .Where(i => i.Traits.Contains(FixtureTrait.LongPath))
+                    .Where(i => (i.Kind == GoldenEntryKind.Folder && i.RelativePath.Length > 248)
+                             || (i.Kind == GoldenEntryKind.File && i.RelativePath.Length > 260))
+                    .ToList();
+
+                SelfAssert.That(overBoundaryItems.Count > 0, "検証対象となる境界超過項目が定義から見つかりません（FixtureSpec.Standard の想定が変わった可能性があります）。");
+
+                foreach (var item in overBoundaryItems)
+                {
+                    SelfAssert.That(
+                        !paths.Contains(item.RelativePath),
+                        $"既知の不具合により走査結果に現れないはずの項目 '{item.RelativePath}'（{item.RelativePath.Length}文字）が射影結果に現れました。" +
+                        "GoldenProjector が走査結果に手を加えている（欠落を補完している）可能性があります。");
+                }
+
+                // 対比: 境界を超えない通常の項目（同じ長いパス連鎖の浅い階層）は射影結果に正しく現れることを確認する。
+                string shallowAsciiFolder = new string('a', 50);
+                SelfAssert.That(paths.Contains(shallowAsciiFolder), $"境界を超えない通常のフォルダ '{shallowAsciiFolder}' が射影結果に現れていません。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("GoldenEntry が更新日時・所有者を保持する手段を持たず、GoldenProjector もそれらを参照しない（要件1.5, 5.1）", () =>
+        {
+            var entryType = typeof(GoldenEntry);
+            var memberNames = entryType.GetProperties()
+                .Select(p => p.Name)
+                .Concat(entryType.GetFields().Select(f => f.Name))
+                .ToList();
+
+            SelfAssert.That(
+                !memberNames.Any(n => n.IndexOf("Modified", StringComparison.OrdinalIgnoreCase) >= 0
+                                    || n.IndexOf("Owner", StringComparison.OrdinalIgnoreCase) >= 0
+                                    || n.IndexOf("Date", StringComparison.OrdinalIgnoreCase) >= 0
+                                    || n.IndexOf("Time", StringComparison.OrdinalIgnoreCase) >= 0),
+                $"GoldenEntry に更新日時・所有者らしきメンバーが含まれています: {string.Join(", ", memberNames)}");
+
+            var expected = new[] { "RelativePath", "Kind", "SizeInBytes" };
+            SelfAssert.That(
+                memberNames.OrderBy(n => n, StringComparer.Ordinal).SequenceEqual(expected.OrderBy(n => n, StringComparer.Ordinal)),
+                $"GoldenEntry の公開メンバーが想定（{string.Join(", ", expected)}）と一致しません（実際: {string.Join(", ", memberNames)}）。");
         });
     }
 
