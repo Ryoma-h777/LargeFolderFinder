@@ -38,6 +38,7 @@ internal static class SelfChecks
         RegisterScanRunnerChecks(runner);
         RegisterGoldenProjectorChecks(runner);
         RegisterKnownIssueAnalyzerChecks(runner);
+        RegisterProgramChecks(runner);
     }
 
     /// <summary>
@@ -2412,5 +2413,390 @@ internal static class SelfChecks
         {
             // ここで失敗した場合は、呼び出し側（自己検証の最終確認）が残留として検出する。
         }
+    }
+
+    /// <summary>
+    /// CLI（Program）層の検証項目を登録する（タスク5.1）。
+    /// design.md の「終了コードの決定ロジックが検証対象に含まれること」という要求を満たすため、
+    /// ビルド済みの GoldenBaseline.exe を実際に別プロセスとして起動し、標準出力と終了コードの
+    /// 両方を観測する。内部の実行経路を直接呼ぶのではなく、Main のディスパッチも含めて検証する。
+    /// selfcheck サブコマンド自体はここでは起動しない（selfcheck の中で selfcheck を起動すると
+    /// 無限にプロセスが増殖するため）。selfcheck 自体の回帰確認は、実装後に手動で
+    /// `GoldenBaseline.exe selfcheck` を直接実行することで別途行う。
+    /// </summary>
+    private static void RegisterProgramChecks(SelfCheckRunner runner)
+    {
+        runner.Add("build-fixture がプロセスとして完走し、終了コード0を返し、実行後に基準フォルダが残留しない（要件3.6）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+
+            try
+            {
+                var result = RunGoldenBaselineProcess("build-fixture", "--root", root);
+
+                SelfAssert.That(result.ExitCode == 0, $"build-fixture の終了コードが0ではありません（実際: {result.ExitCode}）。標準エラー: {result.StdErr}");
+                SelfAssert.That(result.StdOut.Contains("[フィクスチャの生成]"), $"build-fixture の標準出力に見出しが含まれません: {result.StdOut}");
+                SelfAssert.That(result.StdOut.Contains(root), $"build-fixture の標準出力に基準フォルダのパスが含まれません: {result.StdOut}");
+                SelfAssert.That(
+                    !Directory.Exists(root) && !Directory.Exists(LongPath.Extend(root)),
+                    $"build-fixture の実行後にフィクスチャが残留しています: {root}");
+            }
+            finally
+            {
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("generate がプロセスとして完走し、終了コード0を返し、既知の欠落（長いパス由来）が報告に含まれ、期待値ファイルが書き出される（要件2.1, 3.7, 5.2）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            string outPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                var result = RunGoldenBaselineProcess("generate", "--out", outPath, "--root", root);
+
+                SelfAssert.That(result.ExitCode == 0, $"generate の終了コードが0ではありません（実際: {result.ExitCode}）。標準エラー: {result.StdErr}");
+                SelfAssert.That(File.Exists(outPath), $"generate が期待値ファイルを書き出していません: {outPath}");
+                SelfAssert.That(result.StdOut.Contains("[期待値の生成]"), $"generate の標準出力に見出しが含まれません: {result.StdOut}");
+
+                // 既知の欠落の識別結果は期待値の生成の報告に含める（tasks.md 5.1）。
+                // Standard フィクスチャは境界越えの長いパス項目を4件含み、現行版のバグにより
+                // 走査から漏れることが tasks.md Implementation Notes（タスク4.3）で確定済み。
+                SelfAssert.That(
+                    result.StdOut.Contains("既知の欠落"),
+                    $"generate の標準出力に既知の欠落の見出しが含まれません: {result.StdOut}");
+                int longPathMentionCount = CountOccurrences(result.StdOut, "原因: LongPath");
+                SelfAssert.That(
+                    longPathMentionCount == 4,
+                    $"既知の欠落として報告された LongPath 由来の件数が想定と異なります（実際: {longPathMentionCount} 件、想定: 4 件）。標準出力: {result.StdOut}");
+
+                var document = new GoldenSerializer().Read(outPath);
+                SelfAssert.That(document.Entries.Count > 0, "generate が書き出した期待値ファイルにエントリが1件もありません。");
+
+                SelfAssert.That(
+                    !Directory.Exists(root) && !Directory.Exists(LongPath.Extend(root)),
+                    $"generate の実行後にフィクスチャが残留しています: {root}");
+            }
+            finally
+            {
+                DeleteIfExists(outPath);
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("compare が一致判定で終了コード0を返す（要件4.1, 4.6, 4.7）", () =>
+        {
+            string genRoot = CreateTempFixtureRoot();
+            string cmpRoot = CreateTempFixtureRoot();
+            string goldenPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", genRoot);
+                SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
+
+                // 同一の標準フィクスチャは何度生成しても同一の構造になる（要件3.5）ため、
+                // 生成し直した走査結果は元の期待値と一致するはずである。
+                var cmpResult = RunGoldenBaselineProcess("compare", "--golden", goldenPath, "--root", cmpRoot);
+
+                SelfAssert.That(cmpResult.ExitCode == 0, $"compare（一致想定）の終了コードが0ではありません（実際: {cmpResult.ExitCode}）。標準出力: {cmpResult.StdOut} 標準エラー: {cmpResult.StdErr}");
+                SelfAssert.That(cmpResult.StdOut.Contains("判定: 一致"), $"compare の標準出力に一致の判定が含まれません: {cmpResult.StdOut}");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                ForceCleanupFixtureResidue(genRoot);
+                ForceCleanupFixtureResidue(cmpRoot);
+            }
+        });
+
+        runner.Add("compare が差分ありで終了コード1を返す（要件4.2, 4.7）", () =>
+        {
+            string genRoot = CreateTempFixtureRoot();
+            string cmpRoot = CreateTempFixtureRoot();
+            string goldenPath = CreateTempCliGoldenFilePath();
+            string tamperedPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", genRoot);
+                SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
+
+                // 生成された期待値データの1件を意図的に改ざんし、確実にサイズ不一致を発生させる。
+                var serializer = new GoldenSerializer();
+                var original = serializer.Read(goldenPath);
+                var targetEntry = original.Entries.First(e => e.Kind == GoldenEntryKind.File);
+                var tamperedEntries = original.Entries
+                    .Select(e => ReferenceEquals(e, targetEntry)
+                        ? new GoldenEntry(e.RelativePath, e.Kind, e.SizeInBytes + 1L)
+                        : e)
+                    .ToList();
+                var tamperedDocument = new GoldenDocument(original.Header, tamperedEntries);
+                serializer.Write(tamperedDocument, tamperedPath);
+
+                var cmpResult = RunGoldenBaselineProcess("compare", "--golden", tamperedPath, "--root", cmpRoot);
+
+                SelfAssert.That(cmpResult.ExitCode == 1, $"compare（差分あり想定）の終了コードが1ではありません（実際: {cmpResult.ExitCode}）。標準出力: {cmpResult.StdOut} 標準エラー: {cmpResult.StdErr}");
+                SelfAssert.That(cmpResult.StdOut.Contains("判定: 差分あり"), $"compare の標準出力に差分ありの判定が含まれません: {cmpResult.StdOut}");
+                SelfAssert.That(cmpResult.StdOut.Contains(targetEntry.RelativePath), $"compare の標準出力に改ざんした相対パスが含まれません: {cmpResult.StdOut}");
+                SelfAssert.That(cmpResult.StdOut.Contains("SizeMismatch"), $"compare の標準出力にサイズ不一致の種別が含まれません: {cmpResult.StdOut}");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                DeleteIfExists(tamperedPath);
+                ForceCleanupFixtureResidue(genRoot);
+                ForceCleanupFixtureResidue(cmpRoot);
+            }
+        });
+
+        runner.Add("compare が設定不一致で終了コード2を返し、エントリの突き合わせを行わない（要件6.2, 6.3, 4.7）", () =>
+        {
+            string genRoot = CreateTempFixtureRoot();
+            string cmpRoot = CreateTempFixtureRoot();
+            string goldenPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                // --physical-size を付けずに生成する（UsePhysicalSize=false の期待値）。
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", genRoot);
+                SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
+
+                // --physical-size を付けて比較する（UsePhysicalSize=true）ことで、走査条件を意図的に食い違わせる。
+                var cmpResult = RunGoldenBaselineProcess("compare", "--golden", goldenPath, "--root", cmpRoot, "--physical-size");
+
+                SelfAssert.That(cmpResult.ExitCode == 2, $"compare（設定不一致想定）の終了コードが2ではありません（実際: {cmpResult.ExitCode}）。標準出力: {cmpResult.StdOut} 標準エラー: {cmpResult.StdErr}");
+                SelfAssert.That(cmpResult.StdOut.Contains("設定不一致"), $"compare の標準出力に設定不一致の判定が含まれません: {cmpResult.StdOut}");
+
+                // 判定値だけでなく、実際にエントリの突き合わせが行われていないことまで確認する
+                // （tasks.md Implementation Notes: タスク2.2のレビュー教訓「短絡することが仕様の検証では
+                // Entries が空であることまで照合する必要がある」を、CLI 層の出力でも同じ観点で確認する）。
+                SelfAssert.That(!cmpResult.StdOut.Contains("判定: 差分あり"), $"設定不一致にもかかわらず差分ありの判定が出力されています: {cmpResult.StdOut}");
+                SelfAssert.That(!cmpResult.StdOut.Contains("SizeMismatch"), $"設定不一致にもかかわらずサイズ不一致の個別差分が出力されています: {cmpResult.StdOut}");
+                SelfAssert.That(!cmpResult.StdOut.Contains("Missing"), $"設定不一致にもかかわらず欠落の個別差分が出力されています: {cmpResult.StdOut}");
+                SelfAssert.That(!cmpResult.StdOut.Contains("Unexpected"), $"設定不一致にもかかわらず新規の個別差分が出力されています: {cmpResult.StdOut}");
+                SelfAssert.That(!cmpResult.StdOut.Contains("KindMismatch"), $"設定不一致にもかかわらず種別不一致の個別差分が出力されています: {cmpResult.StdOut}");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                ForceCleanupFixtureResidue(genRoot);
+                ForceCleanupFixtureResidue(cmpRoot);
+            }
+        });
+
+        runner.Add("update が設定不一致のとき終了コード2を返し、期待値ファイルへ書き込まない（要件5.3, 5.4, 6.2, 6.3）", () =>
+        {
+            string genRoot = CreateTempFixtureRoot();
+            string updRoot = CreateTempFixtureRoot();
+            string goldenPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                // --physical-size を付けずに生成する（UsePhysicalSize=false の期待値）。
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", genRoot);
+                SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
+
+                // 書き込み前の期待値ファイルのバイト列を保持しておき、update 実行後と比較する。
+                byte[] before = File.ReadAllBytes(goldenPath);
+
+                // --physical-size を付けて更新する（UsePhysicalSize=true）ことで、走査条件を意図的に食い違わせる。
+                var updResult = RunGoldenBaselineProcess("update", "--golden", goldenPath, "--root", updRoot, "--physical-size");
+
+                SelfAssert.That(updResult.ExitCode == 2, $"update（設定不一致想定）の終了コードが2ではありません（実際: {updResult.ExitCode}）。標準出力: {updResult.StdOut} 標準エラー: {updResult.StdErr}");
+                SelfAssert.That(updResult.StdOut.Contains("更新しませんでした"), $"update の標準出力に更新を見送った旨の文言が含まれません: {updResult.StdOut}");
+
+                // 終了コードや文言だけでなく、実際に期待値ファイルが書き換わっていないことまで
+                // バイト列の完全一致で確認する（design.md が名指しで警告する退行経路そのものの回帰保護）。
+                byte[] after = File.ReadAllBytes(goldenPath);
+                SelfAssert.That(before.SequenceEqual(after), "設定不一致にもかかわらず update の実行後に期待値ファイルの内容が変化しています。");
+
+                SelfAssert.That(
+                    !Directory.Exists(updRoot) && !Directory.Exists(LongPath.Extend(updRoot)),
+                    $"update（設定不一致）の実行後にフィクスチャが残留しています: {updRoot}");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                ForceCleanupFixtureResidue(genRoot);
+                ForceCleanupFixtureResidue(updRoot);
+            }
+        });
+
+        runner.Add("update が更新前の差分を提示したうえで期待値ファイルを更新し、後始末が行われる（要件5.3, 5.4）", () =>
+        {
+            string genRoot = CreateTempFixtureRoot();
+            string updRoot = CreateTempFixtureRoot();
+            string goldenPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", genRoot);
+                SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
+
+                byte[] before = File.ReadAllBytes(goldenPath);
+
+                var updResult = RunGoldenBaselineProcess("update", "--golden", goldenPath, "--root", updRoot);
+
+                SelfAssert.That(updResult.ExitCode == 0, $"update（一致想定）の終了コードが0ではありません（実際: {updResult.ExitCode}）。標準出力: {updResult.StdOut} 標準エラー: {updResult.StdErr}");
+                SelfAssert.That(updResult.StdOut.Contains("更新前の差分"), $"update の標準出力に更新前の差分の見出しが含まれません: {updResult.StdOut}");
+                SelfAssert.That(updResult.StdOut.Contains("判定: 一致"), $"update の標準出力に一致の判定が含まれません: {updResult.StdOut}");
+                SelfAssert.That(updResult.StdOut.Contains("更新しました"), $"update の標準出力に更新完了の報告が含まれません: {updResult.StdOut}");
+
+                byte[] after = File.ReadAllBytes(goldenPath);
+                SelfAssert.That(!before.SequenceEqual(after), "update を実行しても期待値ファイルの内容（GeneratedAt を含む）が変化していません。");
+
+                SelfAssert.That(
+                    !Directory.Exists(updRoot) && !Directory.Exists(LongPath.Extend(updRoot)),
+                    $"update の実行後にフィクスチャが残留しています: {updRoot}");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                ForceCleanupFixtureResidue(genRoot);
+                ForceCleanupFixtureResidue(updRoot);
+            }
+        });
+
+        runner.Add("不正な入力（存在しない期待値ファイル）で compare が終了コード2を返す（Error Handling: 入力の誤り）", () =>
+        {
+            string cmpRoot = CreateTempFixtureRoot();
+            string missingGoldenPath = Path.Combine(Path.GetTempPath(), "gb_cli_" + Guid.NewGuid().ToString("N") + "_missing.golden.txt");
+
+            try
+            {
+                var result = RunGoldenBaselineProcess("compare", "--golden", missingGoldenPath, "--root", cmpRoot);
+
+                SelfAssert.That(result.ExitCode == 2, $"存在しない期待値ファイルを指定しても終了コードが2になりません（実際: {result.ExitCode}）。標準出力: {result.StdOut} 標準エラー: {result.StdErr}");
+                SelfAssert.That(result.StdErr.Contains("エラー"), $"標準エラーにエラー内容が出力されていません: {result.StdErr}");
+
+                // 期待値ファイルの読み込みはフィクスチャの組み立てより前に行うため、
+                // このシナリオではフィクスチャが一切作られていないはずである。
+                SelfAssert.That(!Directory.Exists(cmpRoot), $"存在しない期待値ファイルの指定にもかかわらずフィクスチャが作られています: {cmpRoot}");
+            }
+            finally
+            {
+                ForceCleanupFixtureResidue(cmpRoot);
+            }
+        });
+
+        runner.Add("不正な入力（必須オプションの未指定）で generate / compare / update が終了コード2を返し、原因が必須オプション不足であると分かるメッセージを示す（Error Handling: 入力の誤り）", () =>
+        {
+            // 終了コードだけでなく、エラーメッセージが「オプション未指定」であることを明示しているかまで確認する。
+            // ここを終了コードだけで確認すると、必須オプションの検証（RequireOption）自体を外しても、
+            // 空文字のパスが別の層（出力先ディレクトリの検証やファイル読み込み）でたまたま拒否されて
+            // 終了コード2になってしまい、検証が意味をなさなくなる（実際に変異テストで確認した：
+            // RequireOption の検証を外すと、終了コードは2のままだが、メッセージが「パスの形式が
+            // 無効です」のような無関係な内容に変わる）。
+
+            var generateResult = RunGoldenBaselineProcess("generate");
+            SelfAssert.That(generateResult.ExitCode == 2, $"--out を指定しない generate の終了コードが2になりません（実際: {generateResult.ExitCode}）。");
+            SelfAssert.That(
+                generateResult.StdErr.Contains("オプション '--out' の指定が必要です"),
+                $"--out を指定しない generate のエラーメッセージが、必須オプション不足を明示していません: {generateResult.StdErr}");
+
+            var compareResult = RunGoldenBaselineProcess("compare");
+            SelfAssert.That(compareResult.ExitCode == 2, $"--golden を指定しない compare の終了コードが2になりません（実際: {compareResult.ExitCode}）。");
+            SelfAssert.That(
+                compareResult.StdErr.Contains("オプション '--golden' の指定が必要です"),
+                $"--golden を指定しない compare のエラーメッセージが、必須オプション不足を明示していません: {compareResult.StdErr}");
+
+            var updateResult = RunGoldenBaselineProcess("update");
+            SelfAssert.That(updateResult.ExitCode == 2, $"--golden を指定しない update の終了コードが2になりません（実際: {updateResult.ExitCode}）。");
+            SelfAssert.That(
+                updateResult.StdErr.Contains("オプション '--golden' の指定が必要です"),
+                $"--golden を指定しない update のエラーメッセージが、必須オプション不足を明示していません: {updateResult.StdErr}");
+        });
+
+        runner.Add("不正な基準パス（既存のファイルと衝突する）を指定すると generate が終了コード2を返し、期待値ファイルを書き出さない", () =>
+        {
+            string conflictingRoot = Path.Combine(Path.GetTempPath(), "gb_fix_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            string outPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                // 基準フォルダが存在するべき場所に、あらかじめファイルを置いて衝突させる。
+                File.WriteAllText(conflictingRoot, "this is a file, not a directory");
+
+                var result = RunGoldenBaselineProcess("generate", "--out", outPath, "--root", conflictingRoot);
+
+                SelfAssert.That(result.ExitCode == 2, $"基準パスがファイルと衝突しているのに generate の終了コードが2になりません（実際: {result.ExitCode}）。標準出力: {result.StdOut} 標準エラー: {result.StdErr}");
+                SelfAssert.That(!File.Exists(outPath), $"基準パスの衝突で失敗したにもかかわらず期待値ファイルが書き出されています: {outPath}");
+                SelfAssert.That(
+                    result.StdOut.Contains("未生成の項目"),
+                    $"基準フォルダの生成に失敗した際の未生成項目の報告（要件3.6）が標準出力に含まれません: {result.StdOut}");
+            }
+            finally
+            {
+                DeleteIfExists(conflictingRoot);
+                DeleteIfExists(outPath);
+            }
+        });
+    }
+
+    /// <summary>
+    /// ビルド済みの GoldenBaseline.exe を子プロセスとして起動し、終了コードと標準出力・標準エラーを取得する。
+    /// 現在実行中のプロセス自身の実行ファイルパスを再利用するため、ビルド構成（Debug/Release）や
+    /// 起動方法（直接実行 / dotnet run 経由）によらず、常に実際に動いている実行ファイルを起動できる。
+    /// </summary>
+    private static (int ExitCode, string StdOut, string StdErr) RunGoldenBaselineProcess(params string[] arguments)
+    {
+        string? exePath = Process.GetCurrentProcess().MainModule?.FileName;
+        SelfAssert.That(!string.IsNullOrWhiteSpace(exePath), "現在実行中の実行ファイルのパスを取得できませんでした。");
+
+        var psi = new ProcessStartInfo(exePath!)
+        {
+            // net48 には ProcessStartInfo.ArgumentList が存在しないため、Arguments に
+            // 引数ごとに二重引用符で囲んだ文字列を組み立てて渡す（引数はパスのみで
+            // 二重引用符自体を含まないため、単純な囲み方で安全に扱える）。
+            Arguments = string.Join(" ", arguments.Select(a => "\"" + a + "\"")),
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            // 子プロセス（Program.Main）は標準出力をUTF-8（BOMなし）に固定している。
+            // 読み取り側のエンコーディングをそれに合わせないと、既定のコードページ解決に
+            // 依存して文字化けする（実測で確認済み）。
+            StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            StandardErrorEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+        };
+
+        using (var process = Process.Start(psi))
+        {
+            SelfAssert.That(process != null, "GoldenBaseline のサブプロセスを起動できませんでした。");
+
+            string stdOut = process!.StandardOutput.ReadToEnd();
+            string stdErr = process.StandardError.ReadToEnd();
+            bool exited = process.WaitForExit(60000);
+
+            SelfAssert.That(exited, "GoldenBaseline のサブプロセスが60秒以内に終了しませんでした。");
+
+            return (process.ExitCode, stdOut, stdErr);
+        }
+    }
+
+    /// <summary>
+    /// CLI 検証用の一時的な期待値ファイルパスを組み立てる。ファイル自体はまだ作成しない。
+    /// </summary>
+    private static string CreateTempCliGoldenFilePath()
+    {
+        return Path.Combine(Path.GetTempPath(), "gb_cli_" + Guid.NewGuid().ToString("N") + ".golden.txt");
+    }
+
+    /// <summary>
+    /// 出現回数を数える単純なヘルパー（正規表現を使わず、既存の依存方針を保つ）。
+    /// </summary>
+    private static int CountOccurrences(string text, string token)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = text.IndexOf(token, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += token.Length;
+        }
+
+        return count;
     }
 }
