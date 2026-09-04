@@ -37,6 +37,7 @@ internal static class SelfChecks
         RegisterFixtureBuilderChecks(runner);
         RegisterScanRunnerChecks(runner);
         RegisterGoldenProjectorChecks(runner);
+        RegisterKnownIssueAnalyzerChecks(runner);
     }
 
     /// <summary>
@@ -2107,6 +2108,223 @@ internal static class SelfChecks
             SelfAssert.That(
                 memberNames.OrderBy(n => n, StringComparer.Ordinal).SequenceEqual(expected.OrderBy(n => n, StringComparer.Ordinal)),
                 $"GoldenEntry の公開メンバーが想定（{string.Join(", ", expected)}）と一致しません（実際: {string.Join(", ", memberNames)}）。");
+        });
+    }
+
+    /// <summary>
+    /// KnownIssueAnalyzer（タスク4.3）の検証項目を登録する。
+    /// FixtureSpec が持つ真値と観測結果（GoldenDocument）の差から、既知の不具合に由来する欠落を
+    /// 手作業の注釈なしに識別できることを確認する（要件5.2）。
+    /// </summary>
+    private static void RegisterKnownIssueAnalyzerChecks(SelfCheckRunner runner)
+    {
+        runner.Add("KnownIssueAnalyzer が実フィクスチャの走査結果に対し、長いパスの項目を境界条件を理由とした既知の欠落として列挙する（要件5.2）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(
+                    buildResult.IsComplete,
+                    $"前提となるフィクスチャ生成が完了しませんでした。未生成: {string.Join(", ", buildResult.Omissions.Select(o => o.RelativePath))}");
+
+                var scanRunner = new ScanRunner();
+                var outcome = scanRunner.Run(root, usePhysicalSize: false);
+
+                var projector = new GoldenProjector();
+                var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+                var document = projector.Project(outcome, header);
+
+                var observedPaths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
+
+                // 走査で実際に観測されなかった項目を、FixtureSpec の定義から機械的に抽出する（手作業の列挙はしない）。
+                var actuallyMissingItems = FixtureSpec.Standard.Items
+                    .Where(i => !observedPaths.Contains(i.RelativePath))
+                    .ToList();
+
+                SelfAssert.That(actuallyMissingItems.Count > 0, "検証対象となる欠落項目が見つかりません（走査環境が想定と異なる可能性があります）。");
+
+                // 欠落項目のうち LongPath トレイトを持つものが実在すること（248/260文字境界超過の実測、タスク3.1の教訓に合わせトレイトのラベルだけでなく実体も確認する）。
+                var missingLongPathItems = actuallyMissingItems.Where(i => i.Traits.Contains(FixtureTrait.LongPath)).ToList();
+                SelfAssert.That(missingLongPathItems.Count > 0, "欠落項目の中に LongPath トレイトを持つものが見つかりません。");
+                SelfAssert.That(
+                    missingLongPathItems.Any(i => i.Kind == GoldenEntryKind.Folder && i.RelativePath.Length > 248),
+                    "248文字境界を超えるフォルダの欠落が見つかりません。");
+                SelfAssert.That(
+                    missingLongPathItems.Any(i => i.Kind == GoldenEntryKind.File && i.RelativePath.Length > 260),
+                    "260文字境界を超えるファイルの欠落が見つかりません。");
+
+                var analyzer = new KnownIssueAnalyzer();
+                var findings = analyzer.Analyze(FixtureSpec.Standard, document);
+                var findingsByPath = findings.ToDictionary(f => f.RelativePath, f => f.Trait, StringComparer.Ordinal);
+
+                // 完了状態: 長いパスの項目が観測されなかった場合に、その境界条件（LongPath）を理由として既知の欠落として列挙される。
+                foreach (var item in missingLongPathItems)
+                {
+                    SelfAssert.That(
+                        findingsByPath.TryGetValue(item.RelativePath, out var trait),
+                        $"長いパスの欠落項目 '{item.RelativePath}' が既知の欠落として列挙されていません。");
+                    SelfAssert.That(
+                        trait == FixtureTrait.LongPath,
+                        $"'{item.RelativePath}' の既知の欠落の根拠が LongPath ではありません（実際: {trait}）。");
+                }
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("KnownIssueAnalyzer が観測されている項目を既知の欠落に含めない（誤検出なし）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(buildResult.IsComplete, "前提となるフィクスチャ生成が完了しませんでした。");
+
+                var scanRunner = new ScanRunner();
+                var outcome = scanRunner.Run(root, usePhysicalSize: false);
+
+                var projector = new GoldenProjector();
+                var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+                var document = projector.Project(outcome, header);
+
+                var analyzer = new KnownIssueAnalyzer();
+                var findings = analyzer.Analyze(FixtureSpec.Standard, document);
+                var findingPaths = new HashSet<string>(findings.Select(f => f.RelativePath), StringComparer.Ordinal);
+
+                foreach (var observedEntry in document.Entries)
+                {
+                    SelfAssert.That(
+                        !findingPaths.Contains(observedEntry.RelativePath),
+                        $"観測されている項目 '{observedEntry.RelativePath}' が既知の欠落として誤って列挙されました。");
+                }
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("KnownIssueAnalyzer が手作業の注釈に頼らず、人工的な FixtureSpec の定義変更に自動的に追随する", () =>
+        {
+            // FixtureSpec.Standard に依存しない、この検証項目専用の人工的な定義を組み立てる。
+            // 各項目は境界条件（Trait）の組み合わせだけが異なり、KnownIssueAnalyzer 側には
+            // これらの相対パスを個別に知る手段（ハードコードされた注釈）が一切存在しないことを示す。
+            var syntheticItems = new List<FixtureItem>
+            {
+                new FixtureItem("longpath_only", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.LongPath }),
+                new FixtureItem("ordinary_only", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary }),
+                new FixtureItem("access_denied_only", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.AccessDenied }),
+                new FixtureItem("japanese_only", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Japanese }),
+                new FixtureItem("longpath_and_japanese", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.LongPath, FixtureTrait.Japanese }),
+                new FixtureItem("present_ordinary", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary }),
+            };
+            var syntheticSpec = new FixtureSpec("synthetic-known-issue-test", syntheticItems);
+
+            // 観測結果には "present_ordinary" のみを含める。他の5項目はすべて「欠落」として扱われる。
+            var header = new GoldenHeader(1, "synthetic-known-issue-test", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            var observedEntries = new List<GoldenEntry>
+            {
+                new GoldenEntry("present_ordinary", GoldenEntryKind.Folder, 0L),
+            };
+            var syntheticObserved = new GoldenDocument(header, observedEntries);
+
+            var analyzer = new KnownIssueAnalyzer();
+            var findings = analyzer.Analyze(syntheticSpec, syntheticObserved);
+            var findingsByPath = findings.ToDictionary(f => f.RelativePath, f => f.Trait, StringComparer.Ordinal);
+
+            // LongPath トレイトを持つ欠落項目（単独・複合トレイトの両方）は既知の欠落として列挙される。
+            SelfAssert.That(findingsByPath.TryGetValue("longpath_only", out var t1), "'longpath_only' が既知の欠落として列挙されていません。");
+            SelfAssert.That(t1 == FixtureTrait.LongPath, $"'longpath_only' の根拠が LongPath ではありません（実際: {t1}）。");
+
+            SelfAssert.That(findingsByPath.TryGetValue("longpath_and_japanese", out var t2), "'longpath_and_japanese' が既知の欠落として列挙されていません。");
+            SelfAssert.That(t2 == FixtureTrait.LongPath, $"'longpath_and_japanese' の根拠が LongPath ではありません（実際: {t2}）。");
+
+            // Ordinary のみ・AccessDenied のみ・Japanese のみの欠落は、既知の不具合として説明できないため列挙されない
+            // （tasks.md: 既知の不具合では説明できない欠落はむしろ重要な発見であり、この部品の責務外）。
+            SelfAssert.That(!findingsByPath.ContainsKey("ordinary_only"), "'ordinary_only'（既知の不具合で説明できない欠落）が誤って既知の欠落として列挙されました。");
+            SelfAssert.That(!findingsByPath.ContainsKey("access_denied_only"), "'access_denied_only' が誤って既知の欠落として列挙されました（アクセス拒否は既知の不具合ではなく意図されたスキップ挙動である）。");
+            SelfAssert.That(!findingsByPath.ContainsKey("japanese_only"), "'japanese_only'（日本語であることのみを理由とする欠落）が誤って既知の欠落として列挙されました。");
+
+            // 観測済みの項目は列挙されない。
+            SelfAssert.That(!findingsByPath.ContainsKey("present_ordinary"), "観測されている 'present_ordinary' が既知の欠落として列挙されました。");
+
+            // 列挙された既知の欠落は longpath_only と longpath_and_japanese の2件のみ。
+            SelfAssert.That(findings.Count == 2, $"既知の欠落として列挙された件数が想定（2件）と一致しません（実際: {findings.Count}件）。");
+
+            // --- フィクスチャ定義の変更への追随を確認する ---
+            // 上と同じ観測結果に対し、"ordinary_only" に LongPath トレイトを追加しただけの定義を新たに組み立てる。
+            // KnownIssueAnalyzer のコード自体は一切変更していないのに、定義の変更だけで結果が追随することを示す。
+            var mutatedItems = new List<FixtureItem>
+            {
+                new FixtureItem("longpath_only", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.LongPath }),
+                new FixtureItem("ordinary_only", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary, FixtureTrait.LongPath }),
+                new FixtureItem("present_ordinary", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary }),
+            };
+            var mutatedSpec = new FixtureSpec("synthetic-known-issue-test-mutated", mutatedItems);
+            var mutatedFindings = analyzer.Analyze(mutatedSpec, syntheticObserved);
+            var mutatedFindingsByPath = mutatedFindings.ToDictionary(f => f.RelativePath, f => f.Trait, StringComparer.Ordinal);
+
+            SelfAssert.That(
+                mutatedFindingsByPath.ContainsKey("ordinary_only") && mutatedFindingsByPath["ordinary_only"] == FixtureTrait.LongPath,
+                "フィクスチャ定義に LongPath トレイトを追加したにもかかわらず、'ordinary_only' が既知の欠落として追随して列挙されませんでした。");
+        });
+
+        runner.Add("KnownIssueAnalyzer は走査結果の正しさを判定しない。全項目が観測されていれば識別結果は空になる（要件5.5）", () =>
+        {
+            var items = new List<FixtureItem>
+            {
+                new FixtureItem("all_present", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.LongPath }),
+            };
+            var spec = new FixtureSpec("synthetic-all-present", items);
+
+            var header = new GoldenHeader(1, "synthetic-all-present", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            var entries = new List<GoldenEntry>
+            {
+                // LongPath トレイトを持つ項目であっても、実際に観測されていれば「不具合の判定」ではなく
+                // 単なる「欠落の説明」に徹する本部品は、何の主張も行わない（=空の結果）。
+                new GoldenEntry("all_present", GoldenEntryKind.Folder, 0L),
+            };
+            var observed = new GoldenDocument(header, entries);
+
+            var analyzer = new KnownIssueAnalyzer();
+            var findings = analyzer.Analyze(spec, observed);
+
+            SelfAssert.That(findings.Count == 0, $"すべての項目が観測されているにもかかわらず既知の欠落が列挙されました（{findings.Count}件）。KnownIssueAnalyzer が欠落の説明を超えて正しさの判定を行っている可能性があります。");
         });
     }
 
