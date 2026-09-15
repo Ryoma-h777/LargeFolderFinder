@@ -2659,6 +2659,102 @@ internal static class SelfChecks
             }
         });
 
+        runner.Add("update が差分ありのとき、更新前に改ざんした内容の差分明細を提示したうえで期待値ファイルを書き換え、書き換え後は compare で一致する（要件5.3, 5.4）", () =>
+        {
+            // タスク5.2で未検証だった3点（明細・順序・再比較）を、このタスクで埋める（既存項目は「一致」経路のみを通り、
+            // 差分ありの経路で PrintDiffReport の Different 分岐を一度も通っていなかった）。
+            string genRoot = CreateTempFixtureRoot();
+            string updRoot = CreateTempFixtureRoot();
+            string cmpRoot = CreateTempFixtureRoot();
+            string goldenPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", genRoot);
+                SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
+
+                // 生成された期待値データの1件（ファイル）を意図的に改ざんし、update が差分ありの経路を通るようにする。
+                // 改ざんした相対パスと値は変数に保持し、以降の照合はすべてこの変数を用いて行う
+                // （tasks.md Implementation Notes: タスク2.1のレビュー教訓「検証データが偶然に依存して形骸化」を踏まえ、
+                // ハードコードした文字列リテラルでは照合しない）。
+                var serializer = new GoldenSerializer();
+                var generated = serializer.Read(goldenPath);
+                var targetEntry = generated.Entries.First(e => e.Kind == GoldenEntryKind.File);
+                long tamperedSize = targetEntry.SizeInBytes + 12345L;
+                long realSize = targetEntry.SizeInBytes;
+                string relativePath = targetEntry.RelativePath;
+
+                var tamperedEntries = generated.Entries
+                    .Select(e => ReferenceEquals(e, targetEntry)
+                        ? new GoldenEntry(e.RelativePath, e.Kind, tamperedSize)
+                        : e)
+                    .ToList();
+                var tamperedDocument = new GoldenDocument(generated.Header, tamperedEntries);
+
+                // update は --golden で指定したファイル「そのもの」を読み込んで更新するため、
+                // 改ざんは別ファイルではなく goldenPath 自体へ上書きする。
+                serializer.Write(tamperedDocument, goldenPath);
+
+                var updResult = RunGoldenBaselineProcess("update", "--golden", goldenPath, "--root", updRoot);
+
+                // 穴1（順序の前提となる終了コードと判定文言）: 差分ありの update は終了コード1を返す
+                // （design.md Program「一致は0、差分ありは1」。タスク5.1のレビューで承認済みの挙動として、
+                // update は書き換えに成功しても更新前の判定結果を終了コードで示す。この挙動は修正の対象ではない）。
+                SelfAssert.That(updResult.ExitCode == 1, $"update（差分あり想定）の終了コードが1ではありません（実際: {updResult.ExitCode}）。標準出力: {updResult.StdOut} 標準エラー: {updResult.StdErr}");
+                SelfAssert.That(updResult.StdOut.Contains("判定: 差分あり"), $"update の標準出力に差分ありの判定が含まれません: {updResult.StdOut}");
+
+                // 穴1（明細）: 改ざんした相対パスを含む [SizeMismatch] の明細行が、
+                // 改ざん後の値（期待値）と本来の値（実際）の双方とともに出力される。
+                string expectedValueToken = "期待値=" + tamperedSize.ToString(CultureInfo.InvariantCulture);
+                string actualValueToken = "実際=" + realSize.ToString(CultureInfo.InvariantCulture);
+
+                // トークンが別々の場所に偶然現れて通過する形骸化を防ぐため、
+                // 種別・相対パス・両方の値がすべて同一行に現れることを行単位で照合する。
+                string[] stdOutLines = updResult.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                int diffDetailLineIndex = Array.FindIndex(stdOutLines, line =>
+                    line.Contains("[SizeMismatch]") &&
+                    line.Contains(relativePath) &&
+                    line.Contains(expectedValueToken) &&
+                    line.Contains(actualValueToken));
+                SelfAssert.That(
+                    diffDetailLineIndex >= 0,
+                    $"改ざんした相対パス（{relativePath}）・改ざん後の期待値（{expectedValueToken}）・本来の実際値（{actualValueToken}）を" +
+                    $"すべて含む [SizeMismatch] の明細行が見つかりません: {updResult.StdOut}");
+
+                // 穴2（順序）: 差分明細の行が「更新しました」の行より前に現れる
+                // （design.md Program「update は期待値を再生成する前に、現行の期待値との差分を提示する」）。
+                // Contains だけの照合では、差分表示を書き込みの後ろへ移しても通過してしまうため、
+                // 標準出力内の出現位置（行番号）そのものを比較する。
+                int updatedLineIndex = Array.FindIndex(stdOutLines, line => line.Contains("更新しました"));
+                SelfAssert.That(updatedLineIndex >= 0, $"update の標準出力に更新完了の報告が含まれません: {updResult.StdOut}");
+                SelfAssert.That(
+                    diffDetailLineIndex < updatedLineIndex,
+                    $"差分明細の行（{diffDetailLineIndex}行目）が更新完了の報告（{updatedLineIndex}行目）より後に現れています。" +
+                    $"更新前に差分を提示するという design.md の責務に反します: {updResult.StdOut}");
+
+                // 穴3（再比較による書き換え内容の証明）: 「バイト列が変化した」だけでは GeneratedAt の変化のみでも
+                // 成立してしまう弱い照合になるため、書き換え後の期待値ファイルに対して compare を実行し、
+                // 新しい走査結果が正しく書き込まれたことを終了コード0（一致）で証明する。
+                var cmpResult = RunGoldenBaselineProcess("compare", "--golden", goldenPath, "--root", cmpRoot);
+                SelfAssert.That(cmpResult.ExitCode == 0, $"update 後の期待値ファイルに対する compare の終了コードが0ではありません（実際: {cmpResult.ExitCode}）。標準出力: {cmpResult.StdOut} 標準エラー: {cmpResult.StdErr}");
+                SelfAssert.That(cmpResult.StdOut.Contains("判定: 一致"), $"update 後の期待値ファイルに対する compare の標準出力に一致の判定が含まれません: {cmpResult.StdOut}");
+
+                SelfAssert.That(
+                    !Directory.Exists(updRoot) && !Directory.Exists(LongPath.Extend(updRoot)),
+                    $"update（差分あり）の実行後にフィクスチャが残留しています: {updRoot}");
+                SelfAssert.That(
+                    !Directory.Exists(cmpRoot) && !Directory.Exists(LongPath.Extend(cmpRoot)),
+                    $"update 後の再比較（compare）の実行後にフィクスチャが残留しています: {cmpRoot}");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                ForceCleanupFixtureResidue(genRoot);
+                ForceCleanupFixtureResidue(updRoot);
+                ForceCleanupFixtureResidue(cmpRoot);
+            }
+        });
+
         runner.Add("不正な入力（存在しない期待値ファイル）で compare が終了コード2を返す（Error Handling: 入力の誤り）", () =>
         {
             string cmpRoot = CreateTempFixtureRoot();
