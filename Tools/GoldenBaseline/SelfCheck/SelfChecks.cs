@@ -2829,6 +2829,115 @@ internal static class SelfChecks
                 DeleteIfExists(outPath);
             }
         });
+
+        runner.Add("generate を2回実行すると、'# GeneratedAt:' の行を除いて出力がバイト単位で完全に一致する（要件2.3、2026-09-15決定: 反復生成の同一性から生成日時を除く）", () =>
+        {
+            string root1 = CreateTempFixtureRoot();
+            string root2 = CreateTempFixtureRoot();
+            string outPath1 = CreateTempCliGoldenFilePath();
+            string outPath2 = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                var result1 = RunGoldenBaselineProcess("generate", "--out", outPath1, "--root", root1);
+                SelfAssert.That(result1.ExitCode == 0, $"1回目の generate が失敗しました（終了コード: {result1.ExitCode}）。標準エラー: {result1.StdErr}");
+
+                var result2 = RunGoldenBaselineProcess("generate", "--out", outPath2, "--root", root2);
+                SelfAssert.That(result2.ExitCode == 0, $"2回目の generate が失敗しました（終了コード: {result2.ExitCode}）。標準エラー: {result2.StdErr}");
+
+                byte[] bytes1 = File.ReadAllBytes(outPath1);
+                byte[] bytes2 = File.ReadAllBytes(outPath2);
+
+                var excluded1 = ExcludeGeneratedAtLine(bytes1);
+                var excluded2 = ExcludeGeneratedAtLine(bytes2);
+
+                // 形骸化を防ぐ照合その1: 除外対象の行が各ファイルにちょうど1行だけ存在すること。
+                // 0行なら生成日時の記録自体が失われている可能性があり、2行以上ならヘッダ形式が壊れている。
+                SelfAssert.That(
+                    excluded1.GeneratedAtLineCount == 1,
+                    $"1回目の出力に '# GeneratedAt:' で始まる行がちょうど1行ではありません（実際: {excluded1.GeneratedAtLineCount}行）。");
+                SelfAssert.That(
+                    excluded2.GeneratedAtLineCount == 1,
+                    $"2回目の出力に '# GeneratedAt:' で始まる行がちょうど1行ではありません（実際: {excluded2.GeneratedAtLineCount}行）。");
+
+                // 形骸化を防ぐ照合その2: GeneratedAt以外のヘッダ5行（FormatVersion/BaseFolderLabel/
+                // UsePhysicalSize/ClusterSizeInBytes/FixtureComplete）が除外後も残っていること。
+                // 除外対象を「行頭が # の行すべて」へ広げる変異では、この件数が0になり検出できる。
+                SelfAssert.That(
+                    excluded1.OtherHeaderLineCount == 5,
+                    $"1回目の出力の除外後ヘッダ行数が想定（5行）と異なります（実際: {excluded1.OtherHeaderLineCount}行）。除外範囲が広すぎる可能性があります。");
+                SelfAssert.That(
+                    excluded2.OtherHeaderLineCount == 5,
+                    $"2回目の出力の除外後ヘッダ行数が想定（5行）と異なります（実際: {excluded2.OtherHeaderLineCount}行）。除外範囲が広すぎる可能性があります。");
+
+                // 形骸化を防ぐ照合その3: 除外後にエントリ行が1行以上残っていること。
+                SelfAssert.That(excluded1.EntryLineCount >= 1, "1回目の出力の除外後にエントリ行が1件も残っていません。");
+                SelfAssert.That(excluded2.EntryLineCount >= 1, "2回目の出力の除外後にエントリ行が1件も残っていません。");
+
+                // 本題: 除外後の内容がバイト単位で完全に一致すること。
+                SelfAssert.That(
+                    excluded1.FilteredBytes.SequenceEqual(excluded2.FilteredBytes),
+                    "generate を2回実行した際、'# GeneratedAt:' 行を除いた内容がバイト単位で一致しません。");
+
+                // 対比: 除外前の生バイト列は生成日時が異なるため一致しないはず。この検証自体が意味を持つこと
+                // （GeneratedAt が実際に記録され続けており、固定値に潰れていないこと）を確認する。
+                SelfAssert.That(
+                    !bytes1.SequenceEqual(bytes2),
+                    "生成日時を除外する前のバイト列が2回の生成で一致しました（GeneratedAt が記録されていないか、常に固定値になっている可能性があります）。");
+            }
+            finally
+            {
+                DeleteIfExists(outPath1);
+                DeleteIfExists(outPath2);
+                ForceCleanupFixtureResidue(root1);
+                ForceCleanupFixtureResidue(root2);
+            }
+        });
+
+        runner.Add("generate の標準出力に、FixtureSpec.Standard の LongPath トレイトを持つ項目が過不足なく「相対パス（原因: LongPath）」の形で列挙される（要件5.2、3.7）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            string outPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                var result = RunGoldenBaselineProcess("generate", "--out", outPath, "--root", root);
+                SelfAssert.That(result.ExitCode == 0, $"generate が失敗しました（終了コード: {result.ExitCode}）。標準エラー: {result.StdErr}");
+
+                // ハードコードせず、FixtureSpec.Standard から LongPath トレイトを持つ項目の相対パスを導出する
+                // （tasks.md Implementation Notes: タスク2.1・4.3の教訓「検証データが偶然に依存して形骸化」）。
+                var expectedRelativePaths = FixtureSpec.Standard.Items
+                    .Where(item => item.Traits.Contains(FixtureTrait.LongPath))
+                    .Select(item => item.RelativePath)
+                    .ToList();
+
+                SelfAssert.That(expectedRelativePaths.Count > 0, "検証対象となる LongPath トレイトの項目が FixtureSpec.Standard に見つかりません。");
+
+                foreach (var relativePath in expectedRelativePaths)
+                {
+                    string expectedLine = $"  - {relativePath}（原因: LongPath）";
+                    SelfAssert.That(
+                        result.StdOut.Contains(expectedLine),
+                        $"generate の標準出力に既知の欠落の明細行が見つかりません: '{expectedLine}'");
+                }
+
+                string expectedCountLine = $"既知の欠落（境界条件に由来）: {expectedRelativePaths.Count} 件";
+                SelfAssert.That(
+                    result.StdOut.Contains(expectedCountLine),
+                    $"generate の標準出力の件数行が想定と異なります（想定: '{expectedCountLine}'）。標準出力: {result.StdOut}");
+
+                // 過不足がないことも確認する。「（原因: LongPath）」の出現回数が、導出した件数と一致すること。
+                int actualLongPathMentionCount = CountOccurrences(result.StdOut, "（原因: LongPath）");
+                SelfAssert.That(
+                    actualLongPathMentionCount == expectedRelativePaths.Count,
+                    $"「（原因: LongPath）」の出現回数（{actualLongPathMentionCount}）が、FixtureSpec.Standard から導出した件数（{expectedRelativePaths.Count}）と一致しません。");
+            }
+            finally
+            {
+                DeleteIfExists(outPath);
+                ForceCleanupFixtureResidue(root);
+            }
+        });
     }
 
     /// <summary>
@@ -2894,5 +3003,80 @@ internal static class SelfChecks
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// 反復生成の同一性（要件2.3、2026-09-15決定）を検証するための除外結果。
+    /// </summary>
+    private readonly struct GeneratedAtExclusionResult
+    {
+        /// <summary>'# GeneratedAt:' の行を除いた残りの内容（UTF-8・BOMなし）。</summary>
+        public byte[] FilteredBytes { get; }
+
+        /// <summary>除外した '# GeneratedAt:' で始まる行の件数。</summary>
+        public int GeneratedAtLineCount { get; }
+
+        /// <summary>除外後に残った、GeneratedAt以外のヘッダ行（'# ' で始まる行）の件数。</summary>
+        public int OtherHeaderLineCount { get; }
+
+        /// <summary>除外後に残った、ヘッダでも空行でもないエントリ行の件数。</summary>
+        public int EntryLineCount { get; }
+
+        public GeneratedAtExclusionResult(byte[] filteredBytes, int generatedAtLineCount, int otherHeaderLineCount, int entryLineCount)
+        {
+            FilteredBytes = filteredBytes;
+            GeneratedAtLineCount = generatedAtLineCount;
+            OtherHeaderLineCount = otherHeaderLineCount;
+            EntryLineCount = entryLineCount;
+        }
+    }
+
+    /// <summary>
+    /// 期待値ファイルのバイト列から、行頭が '# GeneratedAt:' である行だけを取り除く
+    /// （design.md Data Models「Consistency &amp; Integrity」: 生成日時の行を除いて反復生成の同一性を判定する）。
+    /// 本体（GoldenSerializer / Program）の実装には一切依存せず、この検証コード自身が独立に除外処理を行う。
+    /// 除外の範囲が広すぎないことを呼び出し側で照合できるよう、除外行数・残存ヘッダ行数・残存エントリ行数も返す。
+    /// </summary>
+    private static GeneratedAtExclusionResult ExcludeGeneratedAtLine(byte[] originalBytes)
+    {
+        const string GeneratedAtLinePrefix = "# GeneratedAt:";
+        const string HeaderLinePrefix = "# ";
+
+        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        string content = utf8.GetString(originalBytes);
+
+        // 書き出しはLF固定（要件1.4・design.md Technology Stack）だが、比較対象の内部処理としては
+        // 保守的に扱い、行末の断片化のみで判定が揺れないよう単純に '\n' で分割する。
+        string[] lines = content.Split('\n');
+
+        var keptLines = new List<string>();
+        int generatedAtLineCount = 0;
+        int otherHeaderLineCount = 0;
+        int entryLineCount = 0;
+
+        foreach (var line in lines)
+        {
+            // 行の除外は、行頭が '# GeneratedAt:' の行だけを対象にする（他のヘッダ行やエントリ行を
+            // 巻き込まないようにするための唯一の判定条件）。
+            if (line.StartsWith(GeneratedAtLinePrefix, StringComparison.Ordinal))
+            {
+                generatedAtLineCount++;
+                continue;
+            }
+
+            keptLines.Add(line);
+
+            if (line.StartsWith(HeaderLinePrefix, StringComparison.Ordinal))
+            {
+                otherHeaderLineCount++;
+            }
+            else if (line.Length > 0)
+            {
+                entryLineCount++;
+            }
+        }
+
+        byte[] filteredBytes = utf8.GetBytes(string.Join("\n", keptLines));
+        return new GeneratedAtExclusionResult(filteredBytes, generatedAtLineCount, otherHeaderLineCount, entryLineCount);
     }
 }

@@ -1,0 +1,2 @@
+# ゴールデンベースラインの期待値データは改行をLFに固定する（design.md Technology Stack: UTF-8・BOMなし・LF）。
+baselines/*.golden.txt text eol=lf
