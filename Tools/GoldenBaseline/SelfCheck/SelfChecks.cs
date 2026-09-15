@@ -42,6 +42,7 @@ internal static class SelfChecks
         RegisterScanRunnerChecks(runner);
         RegisterGoldenProjectorChecks(runner);
         RegisterKnownIssueAnalyzerChecks(runner);
+        RegisterKnownIssueBoundaryChecks(runner);
         RegisterProgramChecks(runner);
     }
 
@@ -3030,6 +3031,231 @@ internal static class SelfChecks
 
             SelfAssert.That(findings.Count == 0, $"すべての項目が観測されているにもかかわらず既知の欠落が列挙されました（{findings.Count}件）。KnownIssueAnalyzer が欠落の説明を超えて正しさの判定を行っている可能性があります。");
         });
+    }
+
+    /// <summary>ディレクトリの文字数境界（tasks.md Implementation Notes: 文字数で数える）。</summary>
+    private const int DirectoryCharacterBoundary = 248;
+
+    /// <summary>ファイルパスの文字数境界（tasks.md Implementation Notes: 文字数で数える）。</summary>
+    private const int FilePathCharacterBoundary = 260;
+
+    /// <summary>
+    /// 項目の相対パスが、種別に応じた文字数境界（フォルダ248文字・ファイル260文字）を実際に超えているかを返す。
+    /// トレイトのラベルではなく実体（文字数）で判定する（タスク3.1の教訓）。
+    /// </summary>
+    private static bool IsOverCharacterBoundary(FixtureItem item)
+    {
+        return (item.Kind == GoldenEntryKind.Folder && item.RelativePath.Length > DirectoryCharacterBoundary)
+            || (item.Kind == GoldenEntryKind.File && item.RelativePath.Length > FilePathCharacterBoundary);
+    }
+
+    /// <summary>文字列が非ASCII文字（コードポイント127超）を実際に含むかを返す。</summary>
+    private static bool ContainsNonAscii(string text)
+    {
+        return text.Any(c => c > 127);
+    }
+
+    /// <summary>
+    /// 境界条件の欠落が既知の不具合として識別されることの検証項目を登録する（タスク6.3）。
+    /// 既存の KnownIssueAnalyzer の検証は「LongPath の項目全体」を対象にしており、日本語を含む長いパスが
+    /// 定義から消えても（例: 日本語の長い連鎖を ASCII に置き換えても）通過してしまうことを変異テストで確認したため、
+    /// 日本語を含む長いパスを明示的に対象とする。あわせて、コミット済みの期待値に現行版の挙動として
+    /// 記録されていることを確認する（完了状態「現行版の挙動として記録されている」）。
+    /// </summary>
+    private static void RegisterKnownIssueBoundaryChecks(SelfCheckRunner runner)
+    {
+        runner.Add("日本語を含む長いパス（フォルダは248文字超・ファイルは260文字超）の項目が、生成されているのに現行版の走査で観測されず、KnownIssueAnalyzer が根拠 LongPath とともに既知の欠落として列挙する（要件3.1, 3.2, 5.1, 5.2、タスク6.3）", () =>
+        {
+            var spec = FixtureSpec.Standard;
+
+            // 定義から導出する（相対パスをハードコードしない）。ラベル（Japanese と LongPath の両トレイト）だけでなく、
+            // 実体（非ASCII文字を含むこと・種別ごとの文字数境界を超えること）も満たす項目だけを対象にする。
+            var japaneseLongLabeled = spec.Items
+                .Where(i => i.Traits.Contains(FixtureTrait.Japanese) && i.Traits.Contains(FixtureTrait.LongPath))
+                .ToList();
+            foreach (var item in japaneseLongLabeled)
+            {
+                SelfAssert.That(ContainsNonAscii(item.RelativePath), $"Japanese と LongPath を持つ項目 '{item.RelativePath}' に非ASCII文字が含まれていません。");
+                SelfAssert.That(
+                    IsOverCharacterBoundary(item),
+                    $"Japanese と LongPath を持つ項目 '{item.RelativePath}'（{item.Kind}、{item.RelativePath.Length}文字）が種別ごとの文字数境界を超えていません。");
+            }
+
+            var japaneseLongFolders = japaneseLongLabeled.Where(i => i.Kind == GoldenEntryKind.Folder).ToList();
+            var japaneseLongFiles = japaneseLongLabeled.Where(i => i.Kind == GoldenEntryKind.File).ToList();
+            SelfAssert.That(japaneseLongFolders.Count >= 1, "日本語を含み248文字を超えるフォルダ（Japanese と LongPath を持つ）が定義に1件もありません。");
+            SelfAssert.That(japaneseLongFiles.Count >= 1, "日本語を含み260文字を超えるファイル（Japanese と LongPath を持つ）が定義に1件もありません。");
+
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(spec, root);
+                SelfAssert.That(
+                    buildResult.IsComplete,
+                    $"前提となるフィクスチャ生成が完了しませんでした。未生成: {string.Join(", ", buildResult.Omissions.Select(o => o.RelativePath))}");
+
+                // 欠落が「生成されていない」ためではなく「走査で観測されない」ためであることを示すため、実在を先に確認する。
+                foreach (var item in japaneseLongLabeled)
+                {
+                    string extendedPath = LongPath.Extend(Path.Combine(root, item.RelativePath));
+                    bool exists = item.Kind == GoldenEntryKind.Folder ? Directory.Exists(extendedPath) : File.Exists(extendedPath);
+                    SelfAssert.That(exists, $"日本語を含む長いパスの項目 '{item.RelativePath}' がディスク上に生成されていません。");
+                }
+
+                var outcome = new ScanRunner().Run(root, usePhysicalSize: false);
+                var scanMap = FlattenScanTree(outcome.Root);
+
+                var header = new GoldenHeader(1, spec.Name, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+                var document = new GoldenProjector().Project(outcome, header);
+                var observedPaths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
+
+                foreach (var item in japaneseLongLabeled)
+                {
+                    SelfAssert.That(
+                        !scanMap.ContainsKey(item.RelativePath),
+                        $"現行版では観測されないはずの日本語を含む長いパス '{item.RelativePath}'（{item.RelativePath.Length}文字）が走査結果に現れました。");
+                    SelfAssert.That(
+                        !observedPaths.Contains(item.RelativePath),
+                        $"現行版では観測されないはずの日本語を含む長いパス '{item.RelativePath}'（{item.RelativePath.Length}文字）が射影結果に現れました。");
+
+                    // 対比: 同じ連鎖の最上位の日本語フォルダ（境界内）は観測される。
+                    // 欠落の原因が「日本語であること」ではなく「長さ」であることをこれで切り分ける。
+                    string topSegment = item.RelativePath.Split('\\')[0];
+                    SelfAssert.That(ContainsNonAscii(topSegment), $"'{item.RelativePath}' の最上位フォルダ '{topSegment}' が日本語を含んでいません。");
+                    SelfAssert.That(
+                        scanMap.ContainsKey(topSegment) && observedPaths.Contains(topSegment),
+                        $"境界内の日本語フォルダ '{topSegment}' が走査結果または射影結果に現れていません（欠落の原因を長さに切り分けられません）。");
+                }
+
+                var findings = new KnownIssueAnalyzer().Analyze(spec, document);
+                var findingsByPath = findings.ToDictionary(f => f.RelativePath, f => f.Trait, StringComparer.Ordinal);
+
+                foreach (var item in japaneseLongLabeled)
+                {
+                    SelfAssert.That(
+                        findingsByPath.TryGetValue(item.RelativePath, out var trait),
+                        $"日本語を含む長いパス '{item.RelativePath}' が既知の欠落として列挙されていません。");
+                    SelfAssert.That(
+                        trait == FixtureTrait.LongPath,
+                        $"日本語を含む長いパス '{item.RelativePath}' の既知の欠落の根拠が LongPath ではありません（実際: {trait}）。");
+                }
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(spec, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("コミット済みの期待値 baselines/fixture-v1.golden.txt に、文字数境界を超える項目（日本語を含む長いパスのフォルダ・ファイルを含む）が現行版の挙動どおり記録されておらず、その記録から KnownIssueAnalyzer が根拠 LongPath とともに列挙する（要件5.1, 5.2、タスク6.3）", () =>
+        {
+            var spec = FixtureSpec.Standard;
+
+            string? goldenPath = FindCommittedGoldenFile(spec.Name);
+            SelfAssert.That(
+                goldenPath != null,
+                $"コミット済みの期待値 'baselines\\{spec.Name}.golden.txt' を、実行ファイルの位置（{AppDomain.CurrentDomain.BaseDirectory}）から親方向に辿って見つけられませんでした。");
+
+            // 読み取りのみ。書き換えは行わない。
+            var document = new GoldenSerializer().Read(goldenPath!);
+            SelfAssert.That(
+                document.Header.BaseFolderLabel == spec.Name,
+                $"期待値の基準の論理名が定義と一致しません（期待値: {document.Header.BaseFolderLabel}、定義: {spec.Name}）。");
+            // 欠落が「フィクスチャを生成できなかった」ためではないことを保証する。
+            SelfAssert.That(document.Header.FixtureComplete, "コミット済みの期待値が不完全なフィクスチャから生成されています（欠落の原因を境界条件に切り分けられません）。");
+
+            var itemsByPath = spec.Items.ToDictionary(i => i.RelativePath, StringComparer.Ordinal);
+            var recordedPaths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
+
+            var overBoundaryItems = spec.Items
+                .Where(i => i.Traits.Contains(FixtureTrait.LongPath) && IsOverCharacterBoundary(i))
+                .ToList();
+            var japaneseOverBoundaryItems = overBoundaryItems
+                .Where(i => i.Traits.Contains(FixtureTrait.Japanese) && ContainsNonAscii(i.RelativePath))
+                .ToList();
+
+            SelfAssert.That(overBoundaryItems.Any(i => i.Kind == GoldenEntryKind.Folder), "248文字を超えるフォルダ（LongPath）が定義に1件もありません。");
+            SelfAssert.That(overBoundaryItems.Any(i => i.Kind == GoldenEntryKind.File), "260文字を超えるファイル（LongPath）が定義に1件もありません。");
+            SelfAssert.That(japaneseOverBoundaryItems.Any(i => i.Kind == GoldenEntryKind.Folder), "日本語を含み248文字を超えるフォルダ（Japanese と LongPath）が定義に1件もありません。");
+            SelfAssert.That(japaneseOverBoundaryItems.Any(i => i.Kind == GoldenEntryKind.File), "日本語を含み260文字を超えるファイル（Japanese と LongPath）が定義に1件もありません。");
+
+            foreach (var item in overBoundaryItems)
+            {
+                SelfAssert.That(
+                    !recordedPaths.Contains(item.RelativePath),
+                    $"文字数境界を超える項目 '{item.RelativePath}'（{item.RelativePath.Length}文字）がコミット済みの期待値に記録されています（現行版の挙動と異なります）。");
+
+                // 対比: 境界を超えない最も近い祖先フォルダは記録されている。連鎖そのものが記録から抜けているのではなく、
+                // 境界の位置で欠落していることを示す。
+                string? nearestWithinBoundary = null;
+                string[] segments = item.RelativePath.Split('\\');
+                for (int depth = segments.Length - 1; depth >= 1; depth--)
+                {
+                    string ancestor = string.Join("\\", segments, 0, depth);
+                    if (itemsByPath.TryGetValue(ancestor, out var ancestorItem) && !IsOverCharacterBoundary(ancestorItem))
+                    {
+                        nearestWithinBoundary = ancestor;
+                        break;
+                    }
+                }
+
+                SelfAssert.That(nearestWithinBoundary != null, $"'{item.RelativePath}' に境界を超えない祖先フォルダが定義されていません。");
+                SelfAssert.That(
+                    recordedPaths.Contains(nearestWithinBoundary!),
+                    $"'{item.RelativePath}' の境界内の祖先フォルダ '{nearestWithinBoundary}' がコミット済みの期待値に記録されていません。");
+            }
+
+            var findingsByPath = new KnownIssueAnalyzer().Analyze(spec, document)
+                .ToDictionary(f => f.RelativePath, f => f.Trait, StringComparer.Ordinal);
+
+            foreach (var item in overBoundaryItems)
+            {
+                string kindLabel = japaneseOverBoundaryItems.Contains(item) ? "日本語を含む長いパス" : "長いパス";
+                SelfAssert.That(
+                    findingsByPath.TryGetValue(item.RelativePath, out var trait),
+                    $"{kindLabel} '{item.RelativePath}' が、コミット済みの期待値に対する既知の欠落として列挙されていません。");
+                SelfAssert.That(
+                    trait == FixtureTrait.LongPath,
+                    $"{kindLabel} '{item.RelativePath}' の既知の欠落の根拠が LongPath ではありません（実際: {trait}）。");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 実行ファイルの位置から親方向へ辿り、コミット済みの期待値 <c>baselines\&lt;論理名&gt;.golden.txt</c> を探す。
+    /// ツールはリポジトリ内の <c>Tools\GoldenBaseline\bin\...</c> から実行されるため、祖先のいずれかがリポジトリの
+    /// ルートになる。見つからなければ null を返す（呼び出し側で失敗として扱い、黙って通過させない）。
+    /// </summary>
+    private static string? FindCommittedGoldenFile(string baseFolderLabel)
+    {
+        var directory = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+        while (directory != null)
+        {
+            string candidate = Path.Combine(directory.FullName, "baselines", baseFolderLabel + ".golden.txt");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
     }
 
     /// <summary>
