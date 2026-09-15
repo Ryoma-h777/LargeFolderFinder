@@ -196,7 +196,7 @@ graph TB
 | 1.1, 1.2, 1.5 | エントリは相対パス・種別・バイトサイズのみ。日時と所有者を持たない | GoldenEntry | `GoldenEntry` | — |
 | 1.3, 1.4, 1.6 | 並び順の固定、ロケール非依存、内部構造非依存の形式 | GoldenSerializer | `IGoldenSerializer` | 期待値の生成 |
 | 2.1, 2.2 | 指示に応じた走査。表示条件を反映しない | Program, ScanRunner | `IScanRunner` | 期待値の生成 |
-| 2.3 | 反復実行で同一の出力 | ScanRunner, GoldenSerializer | `IScanRunner` | 期待値の生成 |
+| 2.3 | 反復実行で生成日時を除き同一の出力 | ScanRunner, GoldenSerializer | `IScanRunner` | 期待値の生成 |
 | 2.4 | アクセス不能項目のスキップ記録と継続 | ScanRunner | `ScanOutcome` | 期待値の生成 |
 | 2.5 | 基準フォルダと生成日時の記録 | GoldenHeader | `GoldenHeader` | 期待値の生成 |
 | 3.1, 3.2, 3.3, 3.4 | 長いパス・日本語・空・権限なしの生成 | FixtureBuilder, AccessControlGate, LongPath | `IFixtureBuilder` | 期待値の生成 |
@@ -633,6 +633,7 @@ public sealed class KnownIssueFinding
 - エントリは `RelativePath` の序数昇順で一意に並ぶ。この規則が要件 1.3 の実体である
 - 相対パスに拡張長プレフィクスは現れない。`LongPath` の作用は生成・削除時に限定される
 - 形式バージョンが変わった期待値ファイルは読み取りを拒否する。黙って解釈すると誤った一致判定を生むため
+- 生成日時（`GeneratedAt`）は実行ごとに変わる。反復生成の同一性（要件 2.3）は生成日時の行を除いて判定する。`BaselineComparer` は生成日時を参照しないため、比較の判定には影響しない
 
 ## Error Handling
 
