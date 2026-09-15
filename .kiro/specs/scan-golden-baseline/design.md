@@ -202,7 +202,7 @@ graph TB
 | 3.1, 3.2, 3.3, 3.4 | 長いパス・日本語・空・権限なしの生成 | FixtureBuilder, AccessControlGate, LongPath | `IFixtureBuilder` | 期待値の生成 |
 | 3.5 | 反復実行で同一構造 | FixtureSpec, FixtureBuilder | `FixtureSpec` | 期待値の生成 |
 | 3.6 | 未生成項目の報告と継続 | FixtureBuilder | `FixtureBuildResult` | 期待値の生成 |
-| 3.7 | 不完全なフィクスチャである旨の記録 | GoldenHeader, Program | `GoldenHeader` | 期待値の生成 |
+| 3.7 | 不完全なフィクスチャである旨の記録（環境に依存しない形） | GoldenHeader, Program, FixtureBuilder | `GoldenHeader`, `FixtureOmission` | 期待値の生成 |
 | 4.1, 4.6 | 比較の実行と一致の報告 | BaselineComparer | `IBaselineComparer` | 比較の判定 |
 | 4.2, 4.3, 4.4, 4.5 | サイズ・欠落・新規・種別の分類報告 | BaselineComparer, DiffReport | `DiffEntry` | 比較の判定 |
 | 4.7 | 差分有無の機械的判定 | Program, DiffReport | `ExitCode` | 比較の判定 |
@@ -266,7 +266,7 @@ public sealed class GoldenHeader
     public bool UsePhysicalSize { get; }
     public long ClusterSizeInBytes { get; }     // UsePhysicalSize が false のときは 0
     public bool FixtureComplete { get; }
-    public IReadOnlyList<string> FixtureOmissions { get; }
+    public IReadOnlyList<string> FixtureOmissions { get; }  // 「相対パス: 例外の型名」の形。絶対パスや例外メッセージを含めない
 }
 
 public sealed class GoldenDocument
@@ -340,7 +340,7 @@ public interface IGoldenSerializer
 
 - Integration: ヘッダ行は `#` 始まりの `キー: 値` 形式とし、エントリ行はタブ区切りとする。人間が差分ツールで読める形式であることが要件 7.4 の要請である
 - Validation: 未知の形式バージョンを読んだ場合は失敗として扱い、黙って解釈しない
-- Risks: パスにタブ文字が含まれると区切りが壊れる。読み書き時に検出して失敗させる
+- Risks: パスにタブ文字が含まれると区切りが壊れる。読み書き時に検出して失敗させる。ヘッダの値に改行が含まれると行指向の形式が壊れ、書き出しは成功しても読み戻せなくなる。書き出し時に検出して失敗させる
 
 ### Fixture
 
@@ -392,6 +392,7 @@ public sealed class FixtureSpec
 - ディレクトリは 248 文字、ファイルは 260 文字と境界が異なる。**両方の境界をまたぐ構造を含める**
 - 日本語を含むパスの長さは文字数で数える。バイト数ではない
 - 生成できなかった項目があっても中断せず、項目と理由を結果に含めて継続する（要件 3.6）
+- 未生成の項目には、標準出力への報告に用いる詳細な理由（例外メッセージを含む）と、期待値への記録に用いる例外の型名の双方を持たせる。例外メッセージには基準フォルダの絶対パス、ローカルのユーザー名、OS の表示言語による文言が含まれ、実行ごと・マシンごとに変わるため（要件 2.3、3.7）
 - 後始末は「Deny ACE の除去 → 削除」の2段階で行う。1段階では削除が失敗する
 
 ##### Service Interface
@@ -412,7 +413,8 @@ public sealed class FixtureBuildResult
 public sealed class FixtureOmission
 {
     public string RelativePath { get; }
-    public string Reason { get; }
+    public string Reason { get; }             // 標準出力への報告用。例外メッセージを含み環境に依存する
+    public string ExceptionTypeName { get; }  // 期待値への記録用。環境に依存しない例外の型名
 }
 ```
 
@@ -608,6 +610,7 @@ public sealed class KnownIssueFinding
 
 - `build-fixture` / `generate` / `compare` / `update` の4つを提供する
 - `update` は期待値を再生成する前に、現行の期待値との差分を提示する（要件 5.3、5.4）
+- 未生成項目は、標準出力には詳細な理由を、期待値には `相対パス: 例外の型名` だけを出す（要件 2.3、3.6、3.7）
 - 判定結果を終了コードで示す（要件 4.7）。一致は 0、差分ありは 1、設定不一致および実行時エラーは 2 とする
 
 ##### Batch / Job Contract
@@ -634,6 +637,7 @@ public sealed class KnownIssueFinding
 - 相対パスに拡張長プレフィクスは現れない。`LongPath` の作用は生成・削除時に限定される
 - 形式バージョンが変わった期待値ファイルは読み取りを拒否する。黙って解釈すると誤った一致判定を生むため
 - 生成日時（`GeneratedAt`）は実行ごとに変わる。反復生成の同一性（要件 2.3）は生成日時の行を除いて判定する。`BaselineComparer` は生成日時を参照しないため、比較の判定には影響しない
+- 未生成項目（`FixtureOmission`）は `相対パス: 例外の型名` の形で記録する（例: `normal: IOException`）。例外メッセージは基準フォルダの絶対パス・ローカルのユーザー名・OS の表示言語による文言を含み、実行ごと・マシンごとに変わるため期待値には含めず、標準出力への報告にのみ用いる（要件 2.3、2026-09-15 ユーザー決定）
 
 ## Error Handling
 
