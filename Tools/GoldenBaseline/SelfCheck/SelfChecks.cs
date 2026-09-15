@@ -1455,6 +1455,96 @@ internal static class SelfChecks
             SelfAssert.That(report.Entries.Count == 0, $"設定不一致のとき、エントリの突き合わせが行われず Entries は空であるべきですが {report.Entries.Count}件の差分が報告されました。");
         });
 
+        runner.Add("BaselineComparer が期待値=換算なし・実測=換算ありの逆向きの設定差も、突き合わせより先に設定不一致として報告する（要件6.2, 6.3）", () =>
+        {
+            // 設定不一致の検出が「期待値=換算あり・実測=換算なし」の一方向だけに偏っていないことを確認する。
+            // 上の検証と同様に、エントリ内容も食い違わせて Entries が空であることまで確認する。
+            var expected = BuildComparerDocument(usePhysicalSize: false, entries: new[]
+            {
+                new GoldenEntry(@"a\file.bin", GoldenEntryKind.File, 100L),
+                new GoldenEntry(@"only-in-expected", GoldenEntryKind.Folder, 0L),
+            });
+            var actual = BuildComparerDocument(usePhysicalSize: true, entries: new[]
+            {
+                new GoldenEntry(@"a\file.bin", GoldenEntryKind.File, 4096L),
+                new GoldenEntry(@"only-in-actual", GoldenEntryKind.Folder, 0L),
+            });
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.SettingsMismatch, $"期待値=換算なし・実測=換算ありなのに Verdict が SettingsMismatch ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 0, $"設定不一致のとき、エントリの突き合わせが行われず Entries は空であるべきですが {report.Entries.Count}件の差分が報告されました。");
+        });
+
+        runner.Add("BaselineComparer が双方とも物理サイズ換算ありで差分のない入力を一致(Match)と判定する（要件6.3, 4.6）", () =>
+        {
+            // 設定が一致している間は判定を行う（要件6.3）。換算なし同士だけでなく、
+            // 換算あり同士でも設定不一致として打ち切られないことを確認する。
+            var expected = BuildComparerDocument(usePhysicalSize: true, entries: new[]
+            {
+                new GoldenEntry(@"same", GoldenEntryKind.Folder, 0L),
+                new GoldenEntry(@"same\file.txt", GoldenEntryKind.File, 4096L),
+            });
+            var actual = BuildComparerDocument(usePhysicalSize: true, entries: new[]
+            {
+                new GoldenEntry(@"same", GoldenEntryKind.Folder, 0L),
+                new GoldenEntry(@"same\file.txt", GoldenEntryKind.File, 4096L),
+            });
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.Match, $"双方とも換算ありで差分がないのに Verdict が Match ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 0, $"双方とも換算ありで差分がないのに Entries が空ではありません（実際: {report.Entries.Count}件）。");
+        });
+
+        runner.Add("BaselineComparer が双方とも物理サイズ換算ありのとき突き合わせを行い、サイズ不一致を期待値と実測値の向きどおりに報告する（要件6.3, 4.2）", () =>
+        {
+            var expected = BuildComparerDocument(usePhysicalSize: true, entries: new[]
+            {
+                new GoldenEntry(@"a\file.bin", GoldenEntryKind.File, 4096L),
+            });
+            var actual = BuildComparerDocument(usePhysicalSize: true, entries: new[]
+            {
+                new GoldenEntry(@"a\file.bin", GoldenEntryKind.File, 8192L),
+            });
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict == BaselineVerdict.Different, $"双方とも換算ありでサイズ不一致があるのに Verdict が Different ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 1, $"差分の件数が想定（1件）と異なります（実際: {report.Entries.Count}件）。");
+            AssertContainsDiff(report, DiffKind.SizeMismatch, @"a\file.bin", "4096", "8192");
+        });
+
+        runner.Add("BaselineComparer の設定照合が物理サイズ換算の「有無」を見ており、クラスタサイズの違いだけでは設定不一致にしない（要件6.2, 6.3, 6.4）", () =>
+        {
+            // design.md は「物理サイズ換算の有無が異なる場合は突き合わせを行わず」と有無を明記し、
+            // 要件6.1（有無の記録）と要件6.4（クラスタサイズの記録）は別の記録として定義されている。
+            // 照合がクラスタサイズの比較に置き換わっていないことを、有無は同じでクラスタサイズだけが異なる入力で確認する。
+            var sharedEntries = new[]
+            {
+                new GoldenEntry(@"same", GoldenEntryKind.Folder, 0L),
+                new GoldenEntry(@"same\file.txt", GoldenEntryKind.File, 8192L),
+            };
+            var expected = BuildComparerDocument(usePhysicalSize: true, entries: sharedEntries, clusterSizeInBytes: 4096L);
+            var actual = BuildComparerDocument(usePhysicalSize: true, entries: new[]
+            {
+                new GoldenEntry(@"same", GoldenEntryKind.Folder, 0L),
+                new GoldenEntry(@"same\file.txt", GoldenEntryKind.File, 8192L),
+            }, clusterSizeInBytes: 8192L);
+
+            // 入力の組み立てが意図どおり「有無は同じ・クラスタサイズだけが異なる」ことを先に確かめる。
+            SelfAssert.That(
+                expected.Header.UsePhysicalSize == actual.Header.UsePhysicalSize
+                    && expected.Header.ClusterSizeInBytes != actual.Header.ClusterSizeInBytes,
+                "検証の前提（換算の有無は同じでクラスタサイズだけが異なる）が成り立っていません。");
+
+            var report = new BaselineComparer().Compare(expected, actual);
+
+            SelfAssert.That(report.Verdict != BaselineVerdict.SettingsMismatch, "換算の有無が同じでクラスタサイズだけが異なる入力が SettingsMismatch と判定されました。設定の照合が換算の有無ではなくクラスタサイズを見ている可能性があります。");
+            SelfAssert.That(report.Verdict == BaselineVerdict.Match, $"換算の有無が同じで差分がないのに Verdict が Match ではありません（実際: {report.Verdict}）。");
+            SelfAssert.That(report.Entries.Count == 0, $"換算の有無が同じで差分がないのに Entries が空ではありません（実際: {report.Entries.Count}件）。");
+        });
+
         runner.Add("BaselineComparer の比較が対称であり、入力の順序に依存しない（Invariants）", () =>
         {
             var expected = BuildComparerDocument(usePhysicalSize: false, entries: new[]
@@ -1490,14 +1580,20 @@ internal static class SelfChecks
     /// <summary>
     /// BaselineComparer の検証で使う、代表的な GoldenHeader を持つ GoldenDocument を組み立てる。
     /// </summary>
-    private static GoldenDocument BuildComparerDocument(bool usePhysicalSize, IReadOnlyList<GoldenEntry> entries)
+    /// <param name="usePhysicalSize">物理サイズ換算の有無。</param>
+    /// <param name="entries">エントリの一覧。</param>
+    /// <param name="clusterSizeInBytes">
+    /// クラスタサイズを明示する場合に指定する。省略時は換算の有無に連動させる（換算あり: 4096、換算なし: 0）。
+    /// 換算の有無とクラスタサイズを独立に変えた入力を作るために使う。
+    /// </param>
+    private static GoldenDocument BuildComparerDocument(bool usePhysicalSize, IReadOnlyList<GoldenEntry> entries, long? clusterSizeInBytes = null)
     {
         var header = new GoldenHeader(
             formatVersion: 1,
             baseFolderLabel: "fixture-v1",
             generatedAt: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
             usePhysicalSize: usePhysicalSize,
-            clusterSizeInBytes: usePhysicalSize ? 4096L : 0L,
+            clusterSizeInBytes: clusterSizeInBytes ?? (usePhysicalSize ? 4096L : 0L),
             fixtureComplete: true,
             fixtureOmissions: Array.Empty<string>());
 
