@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Text;
 using System.Threading;
 using LargeFolderFinder.GoldenBaseline.Compare;
@@ -29,8 +30,11 @@ internal static class SelfChecks
         });
 
         RegisterModelChecks(runner);
+        RegisterModelInvariantEdgeCaseChecks(runner);
         RegisterLongPathChecks(runner);
         RegisterGoldenSerializerChecks(runner);
+        RegisterHandWrittenGoldenFileChecks(runner);
+        RegisterGoldenSerializerDependencyBoundaryChecks(runner);
         RegisterBaselineComparerChecks(runner);
         RegisterFixtureSpecChecks(runner);
         RegisterAccessControlGateChecks(runner);
@@ -156,6 +160,78 @@ internal static class SelfChecks
 
             SelfAssert.That(threw, "相対パスが重複するエントリを与えても例外が発生しませんでした。");
         });
+    }
+
+    /// <summary>
+    /// Model 層（GoldenEntry / GoldenHeader）の構築時不変条件について、異常系を証明する検証項目を登録する（タスク6.1・穴3）。
+    /// タスク1.2のレビュー指摘（tasks.md Implementation Notes）を受けて追加する。
+    /// 実装を読んで判明した不変条件（サイズが0以上、基準の論理名が空でない、クラスタサイズが0以上）を
+    /// それぞれ違反する値で構築し、例外の型まで照合する。空白のみの値の扱いは要件・設計に定めがないため、
+    /// 現状の挙動を固定する検証は置かない（タスク6.1のレビューで判断。tasks.md Implementation Notes に申し送り）。
+    /// </summary>
+    private static void RegisterModelInvariantEdgeCaseChecks(SelfCheckRunner runner)
+    {
+        runner.Add("GoldenEntry が負のサイズをArgumentOutOfRangeExceptionで拒否する（Invariant: SizeInBytesは0以上）", () =>
+        {
+            Exception? caught = CaptureConstructionException(() => { _ = new GoldenEntry(@"a\b.txt", GoldenEntryKind.File, -1L); });
+
+            SelfAssert.That(
+                caught is ArgumentOutOfRangeException,
+                $"負のサイズを与えても ArgumentOutOfRangeException が発生しませんでした（実際: {DescribeCaughtException(caught)}）。");
+        });
+
+        runner.Add("GoldenEntry が空の相対パスをArgumentExceptionで拒否する", () =>
+        {
+            Exception? caught = CaptureConstructionException(() => { _ = new GoldenEntry(string.Empty, GoldenEntryKind.File, 0L); });
+
+            SelfAssert.That(
+                caught is ArgumentException,
+                $"空の相対パスを与えても ArgumentException が発生しませんでした（実際: {DescribeCaughtException(caught)}）。");
+        });
+
+        runner.Add("GoldenHeader が空の基準論理名をArgumentExceptionで拒否する", () =>
+        {
+            Exception? caught = CaptureConstructionException(() =>
+            {
+                _ = new GoldenHeader(1, string.Empty, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            });
+
+            SelfAssert.That(
+                caught is ArgumentException,
+                $"空の基準論理名を与えても ArgumentException が発生しませんでした（実際: {DescribeCaughtException(caught)}）。");
+        });
+
+        runner.Add("GoldenHeader が負のクラスタサイズをArgumentOutOfRangeExceptionで拒否する", () =>
+        {
+            Exception? caught = CaptureConstructionException(() =>
+            {
+                _ = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, true, -1L, true, Array.Empty<string>());
+            });
+
+            SelfAssert.That(
+                caught is ArgumentOutOfRangeException,
+                $"負のクラスタサイズを与えても ArgumentOutOfRangeException が発生しませんでした（実際: {DescribeCaughtException(caught)}）。");
+        });
+    }
+
+    /// <summary>指定した構築処理を実行し、送出された例外を返す。例外が発生しなければ null を返す。</summary>
+    private static Exception? CaptureConstructionException(Action construct)
+    {
+        try
+        {
+            construct();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex;
+        }
+    }
+
+    /// <summary>捕捉した例外の型名を報告メッセージ用に整形する。例外がなければその旨を返す。</summary>
+    private static string DescribeCaughtException(Exception? exception)
+    {
+        return exception is null ? "例外なし" : (exception.GetType().FullName ?? exception.GetType().Name);
     }
 
     /// <summary>
@@ -686,6 +762,537 @@ internal static class SelfChecks
         if (File.Exists(path))
         {
             File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// Io 層（GoldenSerializer）のうち、手書きの期待値テキストが正しく読み込めることを検証する項目を登録する（タスク6.1・穴1）。
+    /// <see cref="GoldenSerializer.Write"/> を一切経由せず、文字列リテラルのみで組み立てたテキストを直接
+    /// ファイルへ書き、<see cref="GoldenSerializer.Read"/> の結果をリテラルの期待値と1フィールドずつ照合する。
+    /// CRLF 版も別途組み立て、Io/GoldenSerializer.cs の TrimTrailingCarriageReturn（159行付近）の経路を
+    /// 実際に通すことまで確認する。
+    /// </summary>
+    private static void RegisterHandWrittenGoldenFileChecks(SelfCheckRunner runner)
+    {
+        runner.Add("GoldenSerializer が手書きの期待値テキスト（LF）を全フィールド一致で読み込む", () =>
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                string content = BuildHandWrittenGoldenText("\n");
+                File.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(content));
+
+                var serializer = new GoldenSerializer();
+                var document = serializer.Read(path);
+
+                AssertMatchesHandWrittenExpectation(document, "LF版");
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+
+        runner.Add("GoldenSerializer が手書きの期待値テキスト（CRLF）を全フィールド一致で読み込む（CR除去の経路、要件7.4）", () =>
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                string content = BuildHandWrittenGoldenText("\r\n");
+
+                // 検証データ自体がCRLFを含むことを確認してから使う（形骸化防止）。
+                SelfAssert.That(content.Contains("\r\n"), "検証用テキストにCRLFが含まれていません。");
+
+                File.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(content));
+
+                var serializer = new GoldenSerializer();
+                var document = serializer.Read(path);
+
+                AssertMatchesHandWrittenExpectation(document, "CRLF版");
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+
+        runner.Add("GoldenSerializer が手書きテキストのLF版とCRLF版から完全に同一の内容を読み込む", () =>
+        {
+            string pathLf = CreateTempGoldenFilePath();
+            string pathCrLf = CreateTempGoldenFilePath();
+            try
+            {
+                File.WriteAllBytes(pathLf, new UTF8Encoding(false).GetBytes(BuildHandWrittenGoldenText("\n")));
+                File.WriteAllBytes(pathCrLf, new UTF8Encoding(false).GetBytes(BuildHandWrittenGoldenText("\r\n")));
+
+                var serializer = new GoldenSerializer();
+                var documentLf = serializer.Read(pathLf);
+                var documentCrLf = serializer.Read(pathCrLf);
+
+                SelfAssert.That(documentLf.Header.FormatVersion == documentCrLf.Header.FormatVersion, "LF版とCRLF版でFormatVersionが一致しません。");
+                SelfAssert.That(documentLf.Header.BaseFolderLabel == documentCrLf.Header.BaseFolderLabel, "LF版とCRLF版でBaseFolderLabelが一致しません。");
+                SelfAssert.That(documentLf.Header.GeneratedAt == documentCrLf.Header.GeneratedAt, "LF版とCRLF版でGeneratedAtが一致しません。");
+                SelfAssert.That(documentLf.Header.UsePhysicalSize == documentCrLf.Header.UsePhysicalSize, "LF版とCRLF版でUsePhysicalSizeが一致しません。");
+                SelfAssert.That(documentLf.Header.ClusterSizeInBytes == documentCrLf.Header.ClusterSizeInBytes, "LF版とCRLF版でClusterSizeInBytesが一致しません。");
+                SelfAssert.That(documentLf.Header.FixtureComplete == documentCrLf.Header.FixtureComplete, "LF版とCRLF版でFixtureCompleteが一致しません。");
+                SelfAssert.That(
+                    documentLf.Header.FixtureOmissions.SequenceEqual(documentCrLf.Header.FixtureOmissions, StringComparer.Ordinal),
+                    "LF版とCRLF版でFixtureOmissionsが一致しません。");
+
+                SelfAssert.That(documentLf.Entries.Count == documentCrLf.Entries.Count, "LF版とCRLF版でエントリ件数が一致しません。");
+                for (int i = 0; i < documentLf.Entries.Count; i++)
+                {
+                    SelfAssert.That(documentLf.Entries[i].RelativePath == documentCrLf.Entries[i].RelativePath, $"LF版とCRLF版でエントリ{i}のRelativePathが一致しません。");
+                    SelfAssert.That(documentLf.Entries[i].Kind == documentCrLf.Entries[i].Kind, $"LF版とCRLF版でエントリ{i}のKindが一致しません。");
+                    SelfAssert.That(documentLf.Entries[i].SizeInBytes == documentCrLf.Entries[i].SizeInBytes, $"LF版とCRLF版でエントリ{i}のSizeInBytesが一致しません。");
+                }
+            }
+            finally
+            {
+                DeleteIfExists(pathLf);
+                DeleteIfExists(pathCrLf);
+            }
+        });
+    }
+
+    private const string HandWrittenBaseFolderLabel = "手書き検証用基準";
+    private const string HandWrittenGeneratedAtText = "2026-03-14T09:26:53.0000000+09:00";
+    private static readonly DateTimeOffset HandWrittenGeneratedAtExpected = new DateTimeOffset(2026, 3, 14, 9, 26, 53, TimeSpan.FromHours(9));
+    private const string HandWrittenFixtureOmission1 = @"除外候補\深い\1つ目";
+    private const string HandWrittenFixtureOmission2 = @"除外候補\深い\2つ目";
+
+    /// <summary>
+    /// <see cref="GoldenSerializer.Write"/> を一切経由せず、文字列リテラルのみで手書きの期待値テキストを組み立てる。
+    /// ヘッダの全キー（FormatVersion/BaseFolderLabel/GeneratedAt/UsePhysicalSize/ClusterSizeInBytes/FixtureComplete）、
+    /// FixtureOmission の複数行、D と F のエントリ（日本語を含む相対パス）を持つ。
+    /// </summary>
+    private static string BuildHandWrittenGoldenText(string newline)
+    {
+        var builder = new StringBuilder();
+        void AppendLine(string line) => builder.Append(line).Append(newline);
+
+        AppendLine("# FormatVersion: 1");
+        AppendLine("# BaseFolderLabel: " + HandWrittenBaseFolderLabel);
+        AppendLine("# GeneratedAt: " + HandWrittenGeneratedAtText);
+        AppendLine("# UsePhysicalSize: true");
+        AppendLine("# ClusterSizeInBytes: 4096");
+        AppendLine("# FixtureComplete: false");
+        AppendLine("# FixtureOmission: " + HandWrittenFixtureOmission1);
+        AppendLine("# FixtureOmission: " + HandWrittenFixtureOmission2);
+        AppendLine("D\t資料\t0");
+        AppendLine("F\t資料\\日本語ファイル.txt\t12345");
+        AppendLine("F\t資料\\空ファイル.dat\t0");
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// <see cref="BuildHandWrittenGoldenText"/> で組み立てたテキストを読み込んだ結果を、
+    /// リテラルの期待値と1フィールドずつ照合する。
+    /// </summary>
+    private static void AssertMatchesHandWrittenExpectation(GoldenDocument document, string context)
+    {
+        SelfAssert.That(document.Header.FormatVersion == 1, $"{context}: FormatVersion が1と一致しません（実際: {document.Header.FormatVersion}）。");
+        SelfAssert.That(document.Header.BaseFolderLabel == HandWrittenBaseFolderLabel, $"{context}: BaseFolderLabel がリテラルと一致しません（実際: '{document.Header.BaseFolderLabel}'）。");
+        SelfAssert.That(document.Header.GeneratedAt == HandWrittenGeneratedAtExpected, $"{context}: GeneratedAt がリテラルと一致しません（実際: {document.Header.GeneratedAt:o}）。");
+        SelfAssert.That(document.Header.UsePhysicalSize, $"{context}: UsePhysicalSize が true と一致しません。");
+        SelfAssert.That(document.Header.ClusterSizeInBytes == 4096L, $"{context}: ClusterSizeInBytes が4096と一致しません（実際: {document.Header.ClusterSizeInBytes}）。");
+        SelfAssert.That(!document.Header.FixtureComplete, $"{context}: FixtureComplete が false と一致しません。");
+
+        SelfAssert.That(document.Header.FixtureOmissions.Count == 2, $"{context}: FixtureOmissions の件数が2と一致しません（実際: {document.Header.FixtureOmissions.Count}）。");
+        SelfAssert.That(document.Header.FixtureOmissions[0] == HandWrittenFixtureOmission1, $"{context}: FixtureOmissions[0] がリテラルと一致しません（実際: '{document.Header.FixtureOmissions[0]}'）。");
+        SelfAssert.That(document.Header.FixtureOmissions[1] == HandWrittenFixtureOmission2, $"{context}: FixtureOmissions[1] がリテラルと一致しません（実際: '{document.Header.FixtureOmissions[1]}'）。");
+
+        SelfAssert.That(document.Entries.Count == 3, $"{context}: エントリ件数が3と一致しません（実際: {document.Entries.Count}）。");
+
+        var entry0 = document.Entries[0];
+        SelfAssert.That(entry0.RelativePath == "資料", $"{context}: エントリ0のRelativePathが一致しません（実際: '{entry0.RelativePath}'）。");
+        SelfAssert.That(entry0.Kind == GoldenEntryKind.Folder, $"{context}: エントリ0のKindがFolderと一致しません（実際: {entry0.Kind}）。");
+        SelfAssert.That(entry0.SizeInBytes == 0L, $"{context}: エントリ0のSizeInBytesが0と一致しません（実際: {entry0.SizeInBytes}）。");
+
+        var entry1 = document.Entries[1];
+        SelfAssert.That(entry1.RelativePath == @"資料\日本語ファイル.txt", $"{context}: エントリ1のRelativePathが一致しません（実際: '{entry1.RelativePath}'）。");
+        SelfAssert.That(entry1.Kind == GoldenEntryKind.File, $"{context}: エントリ1のKindがFileと一致しません（実際: {entry1.Kind}）。");
+        SelfAssert.That(entry1.SizeInBytes == 12345L, $"{context}: エントリ1のSizeInBytesが12345と一致しません（実際: {entry1.SizeInBytes}）。");
+
+        var entry2 = document.Entries[2];
+        SelfAssert.That(entry2.RelativePath == @"資料\空ファイル.dat", $"{context}: エントリ2のRelativePathが一致しません（実際: '{entry2.RelativePath}'）。");
+        SelfAssert.That(entry2.Kind == GoldenEntryKind.File, $"{context}: エントリ2のKindがFileと一致しません（実際: {entry2.Kind}）。");
+        SelfAssert.That(entry2.SizeInBytes == 0L, $"{context}: エントリ2のSizeInBytesが0と一致しません（実際: {entry2.SizeInBytes}）。");
+    }
+
+    /// <summary>
+    /// Io 層（GoldenSerializer / LongPath / Model）の読み書き経路が、被テストアプリ（アセンブリ名
+    /// LargeFolderFinder）や MessagePack / YamlDotNet といった型に依存しないことを検証する項目を登録する
+    /// （タスク6.1・穴2、要件7.2・1.6）。
+    /// ツールは本体をプロジェクト参照しているため、アセンブリ単位の参照関係では判定できない
+    /// （ツールのアセンブリが本体を参照しているのは正常な状態）。そのため型・メソッド本体の単位で、
+    /// フィールド型・引数と戻り値の型・基底型とインターフェース・ローカル変数の型・IL が参照する
+    /// メンバーと型を機械的に走査する。コンパイラが生成する入れ子の型（ラムダやクロージャが変換される
+    /// &lt;&gt;c や &lt;&gt;c__DisplayClass 等）も対象に含める。標準ライブラリの型のみで実現し、
+    /// 検証コード自体が MessagePack 等へ新たなコンパイル時依存を持ち込まないようにする。
+    /// </summary>
+    private static void RegisterGoldenSerializerDependencyBoundaryChecks(SelfCheckRunner runner)
+    {
+        runner.Add("GoldenSerializerの読み書き経路（型・IL）が被テストアプリの型に依存しない（要件7.2, 1.6）", () =>
+        {
+            var rootTypes = new[]
+            {
+                typeof(GoldenSerializer),
+                typeof(IGoldenSerializer),
+                typeof(GoldenFormatException),
+                typeof(LongPath),
+                typeof(GoldenEntry),
+                typeof(GoldenEntryKind),
+                typeof(GoldenHeader),
+                typeof(GoldenDocument),
+            };
+
+            Assembly toolAssembly = typeof(GoldenSerializer).Assembly;
+            var visited = new HashSet<Type>();
+            var toProcess = new Stack<Type>();
+            var violations = new List<string>();
+
+            foreach (var rootType in rootTypes)
+            {
+                if (visited.Add(rootType))
+                {
+                    toProcess.Push(rootType);
+                }
+            }
+
+            while (toProcess.Count > 0)
+            {
+                Type current = toProcess.Pop();
+                WalkTypeForDependencyViolations(current, toolAssembly, visited, toProcess, violations);
+            }
+
+            SelfAssert.That(
+                violations.Count == 0,
+                $"読み書き経路に禁止された依存が見つかりました（{violations.Count}件）:\n" + string.Join("\n", violations));
+        });
+    }
+
+    /// <summary>読み書き経路の検証で、依存を許さないアセンブリの名前（アセンブリ名の文字列で判定する）。</summary>
+    private static readonly string[] ForbiddenDependencyAssemblyNames =
+    {
+        "LargeFolderFinder",
+        "MessagePack",
+        "MessagePack.Annotations",
+        "YamlDotNet",
+    };
+
+    private const BindingFlags DependencyMemberFlags =
+        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
+    private const BindingFlags DependencyNestedTypeFlags =
+        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
+
+    /// <summary>
+    /// 1バイト命令の表（<see cref="OpCodes"/> のフィールドから機械的に構築する）。
+    /// </summary>
+    private static readonly OpCode[] SingleByteOpCodes = BuildSingleByteOpCodeTable();
+
+    /// <summary>
+    /// 0xFE 接頭の2バイト命令の表（第2バイトで引く）。
+    /// </summary>
+    private static readonly OpCode[] MultiByteOpCodes = BuildMultiByteOpCodeTable();
+
+    private static OpCode[] BuildSingleByteOpCodeTable()
+    {
+        var table = new OpCode[256];
+        foreach (var opCode in EnumerateOpCodesFromReflection())
+        {
+            ushort value = unchecked((ushort)opCode.Value);
+            if (value < 0x100)
+            {
+                table[value] = opCode;
+            }
+        }
+
+        return table;
+    }
+
+    private static OpCode[] BuildMultiByteOpCodeTable()
+    {
+        var table = new OpCode[256];
+        foreach (var opCode in EnumerateOpCodesFromReflection())
+        {
+            ushort value = unchecked((ushort)opCode.Value);
+            if ((value & 0xFF00) == 0xFE00)
+            {
+                table[value & 0xFF] = opCode;
+            }
+        }
+
+        return table;
+    }
+
+    /// <summary>
+    /// <c>typeof(OpCodes).GetFields()</c> から、型が OpCode である公開静的フィールドの値を列挙する。
+    /// </summary>
+    private static IEnumerable<OpCode> EnumerateOpCodesFromReflection()
+    {
+        foreach (var field in typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static))
+        {
+            if (field.FieldType != typeof(OpCode))
+            {
+                continue;
+            }
+
+            object? value = field.GetValue(null);
+            if (value is OpCode opCode)
+            {
+                yield return opCode;
+            }
+        }
+    }
+
+    /// <summary>
+    /// メソッド本体のIL命令列を走査し、フィールド・メソッド・型への参照を持つ命令（InlineField /
+    /// InlineMethod / InlineType / InlineTok）のメタデータトークンを抽出する。
+    /// </summary>
+    private static List<int> ExtractResolvableMetadataTokens(byte[] il)
+    {
+        var tokens = new List<int>();
+        int position = 0;
+
+        while (position < il.Length)
+        {
+            byte codeByte = il[position];
+            OpCode opCode;
+
+            if (codeByte == 0xFE)
+            {
+                byte secondByte = il[position + 1];
+                opCode = MultiByteOpCodes[secondByte];
+                position += 2;
+            }
+            else
+            {
+                opCode = SingleByteOpCodes[codeByte];
+                position += 1;
+            }
+
+            switch (opCode.OperandType)
+            {
+                case OperandType.InlineNone:
+                    break;
+
+                case OperandType.ShortInlineBrTarget:
+                case OperandType.ShortInlineI:
+                case OperandType.ShortInlineVar:
+                    position += 1;
+                    break;
+
+                case OperandType.InlineVar:
+                    position += 2;
+                    break;
+
+                case OperandType.InlineBrTarget:
+                case OperandType.InlineI:
+                case OperandType.ShortInlineR:
+                case OperandType.InlineString:
+                case OperandType.InlineSig:
+                    position += 4;
+                    break;
+
+                case OperandType.InlineField:
+                case OperandType.InlineMethod:
+                case OperandType.InlineType:
+                case OperandType.InlineTok:
+                    tokens.Add(BitConverter.ToInt32(il, position));
+                    position += 4;
+                    break;
+
+                case OperandType.InlineI8:
+                case OperandType.InlineR:
+                    position += 8;
+                    break;
+
+                case OperandType.InlineSwitch:
+                    int count = BitConverter.ToInt32(il, position);
+                    position += 4 + (count * 4);
+                    break;
+
+                default:
+                    throw new NotSupportedException($"未対応のILオペランド種別です: {opCode.OperandType}（依存境界の検証を正しく行えません）。");
+            }
+        }
+
+        return tokens;
+    }
+
+    /// <summary>
+    /// 1つの型について、入れ子の型・基底型・インターフェース・フィールド・メソッド（引数/戻り値/
+    /// ローカル変数/IL参照）を走査し、禁止された依存先への参照を violations へ蓄積する。
+    /// ツール自身のアセンブリに属する型は再帰的に走査対象へ積み、それ以外（標準ライブラリや
+    /// 禁止対象を含む）はアセンブリ名の確認のみで走査を打ち切る。
+    /// </summary>
+    private static void WalkTypeForDependencyViolations(
+        Type type,
+        Assembly toolAssembly,
+        HashSet<Type> visited,
+        Stack<Type> toProcess,
+        List<string> violations)
+    {
+        foreach (var nested in type.GetNestedTypes(DependencyNestedTypeFlags))
+        {
+            if (visited.Add(nested))
+            {
+                toProcess.Push(nested);
+            }
+        }
+
+        CheckDependencyTypeReference(type.BaseType, toolAssembly, $"{type.FullName} の基底型", visited, toProcess, violations);
+        foreach (var iface in type.GetInterfaces())
+        {
+            CheckDependencyTypeReference(iface, toolAssembly, $"{type.FullName} が実装するインターフェース", visited, toProcess, violations);
+        }
+
+        foreach (var field in type.GetFields(DependencyMemberFlags))
+        {
+            CheckDependencyTypeReference(field.FieldType, toolAssembly, $"{type.FullName}.{field.Name} のフィールド型", visited, toProcess, violations);
+        }
+
+        var methodBases = new List<MethodBase>();
+        methodBases.AddRange(type.GetConstructors(DependencyMemberFlags));
+        methodBases.AddRange(type.GetMethods(DependencyMemberFlags));
+
+        foreach (var method in methodBases)
+        {
+            foreach (var parameter in method.GetParameters())
+            {
+                CheckDependencyTypeReference(parameter.ParameterType, toolAssembly, $"{type.FullName}.{method.Name} の引数 '{parameter.Name}'", visited, toProcess, violations);
+            }
+
+            if (method is MethodInfo methodInfo)
+            {
+                CheckDependencyTypeReference(methodInfo.ReturnType, toolAssembly, $"{type.FullName}.{method.Name} の戻り値", visited, toProcess, violations);
+            }
+
+            MethodBody? body;
+            try
+            {
+                body = method.GetMethodBody();
+            }
+            catch (Exception)
+            {
+                body = null;
+            }
+
+            if (body is null)
+            {
+                continue;
+            }
+
+            foreach (LocalVariableInfo local in body.LocalVariables)
+            {
+                CheckDependencyTypeReference(local.LocalType, toolAssembly, $"{type.FullName}.{method.Name} のローカル変数", visited, toProcess, violations);
+            }
+
+            byte[]? il;
+            try
+            {
+                il = body.GetILAsByteArray();
+            }
+            catch (Exception)
+            {
+                il = null;
+            }
+
+            if (il is null)
+            {
+                continue;
+            }
+
+            foreach (int token in ExtractResolvableMetadataTokens(il))
+            {
+                MemberInfo? resolved;
+                try
+                {
+                    resolved = method.Module.ResolveMember(token);
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+
+                string context = $"{type.FullName}.{method.Name} のIL参照";
+
+                switch (resolved)
+                {
+                    case Type resolvedType:
+                        CheckDependencyTypeReference(resolvedType, toolAssembly, context, visited, toProcess, violations);
+                        break;
+
+                    case FieldInfo resolvedField:
+                        CheckDependencyTypeReference(resolvedField.DeclaringType, toolAssembly, context + "（フィールドの宣言型）", visited, toProcess, violations);
+                        CheckDependencyTypeReference(resolvedField.FieldType, toolAssembly, context + "（フィールド型）", visited, toProcess, violations);
+                        break;
+
+                    case MethodBase resolvedMethod:
+                        CheckDependencyTypeReference(resolvedMethod.DeclaringType, toolAssembly, context + "（メソッドの宣言型）", visited, toProcess, violations);
+                        foreach (var parameter in resolvedMethod.GetParameters())
+                        {
+                            CheckDependencyTypeReference(parameter.ParameterType, toolAssembly, context + "（メソッド引数）", visited, toProcess, violations);
+                        }
+
+                        if (resolvedMethod is MethodInfo resolvedMethodInfo)
+                        {
+                            CheckDependencyTypeReference(resolvedMethodInfo.ReturnType, toolAssembly, context + "（メソッド戻り値）", visited, toProcess, violations);
+                        }
+
+                        break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 型への参照1件を検査する。配列・ジェネリックはそれぞれ要素型・型引数まで再帰的に確認する。
+    /// 禁止されたアセンブリに属していれば violations へ追加し、ツール自身のアセンブリに属する型は
+    /// 未訪問であれば走査対象へ積む。
+    /// </summary>
+    private static void CheckDependencyTypeReference(
+        Type? type,
+        Assembly toolAssembly,
+        string context,
+        HashSet<Type> visited,
+        Stack<Type> toProcess,
+        List<string> violations)
+    {
+        if (type is null || type.IsGenericParameter)
+        {
+            return;
+        }
+
+        if (type.HasElementType)
+        {
+            CheckDependencyTypeReference(type.GetElementType(), toolAssembly, context, visited, toProcess, violations);
+            return;
+        }
+
+        if (type.IsGenericType && !type.IsGenericTypeDefinition)
+        {
+            CheckDependencyTypeReference(type.GetGenericTypeDefinition(), toolAssembly, context, visited, toProcess, violations);
+            foreach (var argument in type.GetGenericArguments())
+            {
+                CheckDependencyTypeReference(argument, toolAssembly, context, visited, toProcess, violations);
+            }
+
+            return;
+        }
+
+        string? assemblyName = type.Assembly.GetName().Name;
+        if (assemblyName is not null && Array.IndexOf(ForbiddenDependencyAssemblyNames, assemblyName) >= 0)
+        {
+            violations.Add($"{context}: 型 '{type.FullName}'（アセンブリ '{assemblyName}'）への依存は禁止されています。");
+        }
+
+        if (ReferenceEquals(type.Assembly, toolAssembly) && visited.Add(type))
+        {
+            toProcess.Push(type);
         }
     }
 
