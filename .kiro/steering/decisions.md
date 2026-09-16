@@ -64,3 +64,119 @@
 - 求めないこと: 設定ファイルが消えたり壊れたりして、保存済みのセッションからタブを復元するとき、ウィンドウの位置・サイズや言語設定の復元までは求めない（初期値に戻ってよい、と記録は許容する）
 - 理由: 記録は「設定ファイルを削除したため」とする
 - 出典: `restore_sessions/implementation_plan.md`, `restore_sessions/walkthrough.md`
+
+## 決定とその理由
+
+### 上級者向けの設定は、起動したままでも書き換えを反映する
+- 決定: 設定ファイルを起動時に加えてスキャンの開始時にも読み直す。テキストエディタで開いたままでも読めるように読み込む
+- 理由: アプリを起動したまま設定を書き換えて試行錯誤できるようにするため。エディタで開いたままの読み込みは計画とタスク一覧に書かれ、実施記録にはない
+- 出典: `advanced_config_and_speed/implementation_plan.md`, `advanced_config_and_speed/task.md`, `advanced_config_and_speed/walkthrough.md`
+
+### 設定ファイルを開くボタンは目立たせない
+- 決定: 設定ファイルを既定のエディタで開くボタンを置き、ファイルがなければ既定値で作ってから開く。外観は小さく目立たないものにした
+- 理由: 設定ファイルを簡単に編集・確認できるようにするため。目立たない外観は、画面の邪魔にならないようにするため
+- 出典: `config_open_button/implementation_plan.md`, `config_open_button/walkthrough.md`
+
+### タブを閉じたら、そのタブの保存ファイルも消す
+- 決定と理由: ディスク使用量が増え続けるのを防ぐため、タブを閉じたときにそのタブの結果の保存ファイルを削除する
+- 出典: `Cache_Cleanup_20260123/implementation_plan.md`, `Cache_Cleanup_20260123/task.md`
+
+### ウィンドウの状態は、最小化のままでは復元しない
+- 決定: 終了時にウィンドウの位置・サイズ・状態を保存し、次回に復元する。最大化中に終えたときは元のサイズを保ったうえで最大化として記録する。最小化中に終えたときは元のサイズを保ち、次回は通常の状態で開く
+- 理由: 最小化のまま起動するのを防ぐため。最大化中に元のサイズを保つ理由は記録に書かれていない
+- 出典: `SavingWindowGeometry/implementation_plan.md`, `SavingWindowGeometry/walkthrough.md`
+
+### 起動時の例外は、内容を画面に出す
+- 決定: ウィンドウの初期化で例外が起きたら、内容をメッセージボックスで表示する。初期化の途中で発火したイベントは、コントロールが揃うまで処理を飛ばす
+- 理由: 原因不明のままアプリが消えないようにするため。イベントの処理を飛ばすのは、初期化中のイベントが未生成のコントロールに触れて起動しなくなった不具合への対策
+- 出典: `startup_fix_and_stability/implementation_plan.md`, `startup_fix_and_stability/walkthrough.md`
+
+### 管理者として開き直す
+- 決定: メニューから、UAC を経て管理者権限で開き直せるようにする。既に管理者として動いているときは項目を無効にする。UAC で拒否されたときは今のプロセスをそのまま続ける
+- 理由: ごみ箱や、システム権限が必要なフォルダをスキャンする際に便利なため。無効にすることと、拒否時に続けることの理由は記録に書かれていない
+- 補足: 管理者のときの扱いを、タスク一覧の UI の節は「無効化または非表示（オプション）」とし、同じタスク一覧のロジックの節と、計画・実施記録は無効化とする
+- 出典: `Admin_Restart/implementation_plan.md`, `Admin_Restart/task.md`, `Admin_Restart/walkthrough.md`
+
+### メニューバーを置く
+- 決定と理由: Windows アプリらしい標準的な操作性のため、ウィンドウ上部にメニューバーを置いた
+- 出典: `Add_Menu_Bar/implementation_plan.md`, `Add_Menu_Bar/walkthrough.md`
+
+### タブと共通操作の分担
+- 決定: パス入力とスキャンの操作はタブの外の上部に共通で置き、常にアクティブなタブに作用させる。スキャン条件（パスと閾値）・表示設定・結果はタブごとに持つ。縦横のレイアウトは全タブ共通とする
+- 理由: 「タブを切り替えると表示設定と結果が切り替わる」という要件から、スキャン条件もタブが持つのが正しいと計画が判断した。パス入力の位置は共通だが、値はタブに従う。レイアウトを全タブ共通にする理由は記録に書かれていない
+- 補足: スキャンを新規タブで実行する案との関係は「小さな選択」を参照。記録はアクティブなタブを更新する挙動を「今回は」基本とし、パスが変わっている場合の扱いを検討事項として残している
+- 出典: `TabbedInterface/implementation_plan.md`, `TabbedInterface/task.md`
+
+### 描画の取り消しを、タブ間で干渉させない
+- 決定と理由: 結果の描画の取り消しが全体で1つだとタブ間で干渉するため、取り消しをタブごとに持つ
+- 出典: `fix_rendering_and_status_behavior/implementation_plan.md`, `fix_rendering_and_status_behavior/walkthrough.md`
+
+### コピー完了の通知は、進捗の表示を消さない
+- 決定と理由: 左側の進捗や経過時間の表示を保ったまま知らせるため、通知は状態表示の欄の右側に設けた専用の領域に短い間だけ出す
+- 出典: `clipboard_copy_feature/implementation_plan.md`, `clipboard_copy_feature/walkthrough.md`
+
+### 進捗率は、事前カウントした範囲で数える
+- 決定: 事前カウントを一部の階層に限るのに合わせ、スキャン中の進捗もその範囲のフォルダだけを数える
+- 理由: 進捗率と事前カウントの数を整合させるため。100% に達した時点は「全体の構造の把握が終わり、詳細をスキャン中」という意味になる
+- 出典: `scan_optimization/implementation_plan.md`, `scan_optimization/walkthrough.md`
+
+### 事前カウントを省いたときは、残り時間を出さない
+- 決定と理由: 事前カウントを省くと総数が分からず残り時間を計算できないため、残り時間は出さず経過時間を出す
+- 出典: `skip_count_feature/implementation_plan.md`, `skip_count_feature/walkthrough.md`
+
+### 完了時の処理時間と、検索サイズの引き継ぎ
+- 決定: 完了時の処理時間は、経過時間の長さに応じて「時間・分・秒」「分・秒」「秒」「ミリ秒」の形を切り替えて表示する。検索サイズは次回の起動時に引き継ぐ
+- 理由: 利用者の利便性を上げるため
+- 出典: `settings_and_status/implementation_plan.md`, `settings_and_status/walkthrough.md`
+
+### 設定の YAML 化に付随して外れた JSON 依存（記録どうしが食い違う）
+- 性質: 決定ではない。記録にあるのは、YAML への移行と統一に付随して JSON への依存が外れたことだけで、評価して JSON を避けると決めた記録はない
+- 記録の内容: 設定ファイルを YAML に移した際、設定と保存データの部分で JSON への依存を排除したと記録する（`yaml_config_migration/walkthrough.md`）。実行基盤の移行のやり直しでは、設定・言語ファイルとも YAML に統一したのに伴い、JSON への依存も完全に排除したと記録する（`Runtime_Downgrade_v2/walkthrough.md`）
+- 食い違い: `Runtime_Downgrade_v2/walkthrough.md` は同じ文書の中で「System.Text.Json などの不足パッケージを追加」とも書く。1回目の移行も、JSON 処理を続けるためにこのパッケージを追加したと記録する（`Runtime_Downgrade/walkthrough.md`）。どれが最終の状態かは記録から判断できない
+
+## 要望に由来する仕様
+
+記録が利用者の要望・指示・レビューでの指摘と明示しているものだけを載せる。
+
+### 再起動後も、再スキャンせずに前回の検索結果を使う
+- 要望: 再スキャンせずに、再起動時に検索結果を使いたい。複数の検索セッション（将来のタブ機能）も支えたい
+- 導かれた仕様: 最後の設定だけでなく、検索セッションごとの条件と結果を保存する。記録上の保存の構造（1つのファイル内のセッションの一覧）は、後にタブごとのファイルへの分割に置き換わった（`Cache_Optimization/walkthrough.md`）
+- 出典: `Cache_Result_Persistence/implementation_plan.md`, `Cache_Result_Persistence/walkthrough.md`
+
+### タブバーは、パス選択とスキャンの行より下に置く
+- 要望: タブのボタンを、パス選択やスキャンの行より下に置く
+- 導かれた仕様: パス入力の位置は全タブ共通とし、値はタブに従わせた（上の「タブと共通操作の分担」）
+- 出典: `TabbedInterface/implementation_plan.md`
+
+### タブと結果一覧の見た目
+- 要望: タブの追加ボタンを最後のタブの直後に置く。タブが極端に縮まないよう最小幅を設ける。タブのツールチップを作成日時とパスにする。結果一覧のフォントサイズを画面で変えられ、次回も保つ。一覧の行を交互の背景色にし、行の高さを広げて見やすくする
+- 導かれた仕様: 追加ボタンを直後に置くため、タブを均等幅から左詰めに変えた（「一度試して捨てた案」の「タブを均等幅で並べる」）
+- 補足: 検証とウォークスルーは未完了のまま
+- 出典: `UI_Improvements_20260123/implementation_plan.md`, `UI_Improvements_20260123/task.md`
+
+### スキャンの行と表示設定の行を分ける
+- 要望: スキャンの実行に関する行と、表示内容の調整に関する行を分け、間に境界線を入れて種類の違いを明確にする。表示設定の行は通常より低く詰める
+- 補足: 後のタブ化で、パスとスキャンの操作はタブの外へ、検索サイズと単位はタブ内の表示設定へ移る計画になった（`TabbedInterface/implementation_plan.md`, `TabbedInterface/task.md`）。行の構成は現在と異なる可能性がある
+- 出典: `ui_layout_adjustment/implementation_plan.md`, `ui_layout_adjustment/walkthrough.md`
+
+### 単位を切り替えたら閾値を換算し、ラベルから単位を外す（レビューでの指摘）
+- 要望: 単位を切り替えたら、入力済みの閾値を新しい単位に自動で換算する。検索サイズのラベルから単位の表記を外す
+- 食い違い: `Unit_Localization` は、単位を切り替えてもラベル・ツールチップ・スキャン中のメッセージに「GB」が固定で残る問題を、言語ファイルに単位の差し込み位置を設けて直し、ラベルに選択中の単位を出す形にした。ラベルから単位を外す指摘と逆の扱いで、どちらが後かは記録から読み取れない（`Unit_Localization` はタスク一覧が未完了のまま、実施記録は完了と報告する）
+- 出典: `Unit_Switching/implementation_plan.md`, `Unit_Switching/walkthrough.md`, `Unit_Localization/implementation_plan.md`, `Unit_Localization/task.md`, `Unit_Localization/walkthrough.md`
+
+### 1000進と1024進の単位を使い分ける
+- 要望: 1000進（KB 系）と1024進（KiB 系）の単位を使い分けたい
+- 導かれた仕様: 両方の単位を併存させた。既定の単位は、Windows の内部の計算方式（1024進）に合わせて GiB とした
+- 補足: この要望より前の `Unit_Switching` の記録では、単位は KB〜TB の4種で、GB を1024進として換算していた。この要望で、KB 系は1000進の意味に定義し直された
+- 出典: `unit_redefinition/implementation_plan.md`, `unit_redefinition/walkthrough.md`, `Unit_Switching/implementation_plan.md`
+
+### 指示のあった訳文とラベルを短くする
+- 要望（利用者の指示）: UI の表示崩れを防ぐため、指示のあったキー（バージョン情報のメッセージ、検索サイズと区切りのツールチップ）と、指示のあったラベルの訳文を短くする
+- 計画の方針（利用者の指示ではない）: ラベルは英語を基準に短さを保つ
+- 訳した文面: 日本語の言語ファイルで変更された検索サイズのツールチップは、0 も指定できるが、数が多いとフィルタに時間がかかり重くなることを知らせる
+- 出典: `update_translations/implementation_plan.md`, `update_translations/task.md`, `update_translations/walkthrough.md`
+
+### フォルダ選択ダイアログの失敗をログに残す
+- 要望: フォルダ選択ダイアログの呼び出しで例外を捕まえ、ログに記録する
+- 背景: ダイアログが開かない不具合（COM インターフェースの定義の省略によるメソッドの順序のずれ）を直した際に加えた。フォルダ名と中身は一致しない
+- 出典: `fix_scan_completion_display/implementation_plan.md`, `fix_scan_completion_display/walkthrough.md`
