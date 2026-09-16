@@ -5,8 +5,9 @@ namespace LargeFolderFinder.GoldenBaseline.Model;
 
 /// <summary>
 /// 期待値データのヘッダを表す不変のデータ型。
-/// 走査条件のメタデータ（形式のバージョン、基準の論理名、生成日時、物理サイズ換算の有無、
-/// 換算に用いたクラスタサイズ、フィクスチャの完全性と未生成項目）を保持する（要件2.5, 3.7, 6.1, 6.4）。
+/// 走査条件のメタデータ（形式のバージョン、基準の論理名、基準フォルダの実効絶対パス長、生成日時、
+/// 物理サイズ換算の有無、換算に用いたクラスタサイズ、フィクスチャの完全性と未生成項目）を保持する
+/// （要件2.5, 3.7, 6.1, 6.4、タスク7.1）。
 /// </summary>
 public sealed class GoldenHeader
 {
@@ -15,6 +16,14 @@ public sealed class GoldenHeader
 
     /// <summary>基準フォルダの論理名。実パスではなく論理名を用い、環境差を持ち込まない。</summary>
     public string BaseFolderLabel { get; }
+
+    /// <summary>
+    /// 期待値データの生成に用いた基準フォルダの実効絶対パス長（文字数）。
+    /// 走査で項目が欠落する境界が「親フォルダの絶対パスが258文字以上だと直下を一覧できない」ことだけであるため、
+    /// 期待値の内容は基準フォルダの長さに左右される。長さそのものを記録し、比較時に照合する（タスク7.1）。
+    /// パスそのものは記録しない（環境差・ユーザー名を持ち込まないため）。
+    /// </summary>
+    public int BaseFolderPathLength { get; }
 
     /// <summary>期待値データの生成日時。</summary>
     public DateTimeOffset GeneratedAt { get; }
@@ -37,6 +46,7 @@ public sealed class GoldenHeader
     public GoldenHeader(
         int formatVersion,
         string baseFolderLabel,
+        int baseFolderPathLength,
         DateTimeOffset generatedAt,
         bool usePhysicalSize,
         long clusterSizeInBytes,
@@ -48,6 +58,11 @@ public sealed class GoldenHeader
             throw new ArgumentException("基準の論理名が空です。", nameof(baseFolderLabel));
         }
 
+        if (baseFolderPathLength < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(baseFolderPathLength), baseFolderPathLength, "基準フォルダの実効絶対パス長は0以上である必要があります。");
+        }
+
         if (clusterSizeInBytes < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(clusterSizeInBytes), clusterSizeInBytes, "クラスタサイズは0以上である必要があります。");
@@ -55,6 +70,7 @@ public sealed class GoldenHeader
 
         FormatVersion = formatVersion;
         BaseFolderLabel = baseFolderLabel;
+        BaseFolderPathLength = baseFolderPathLength;
         GeneratedAt = generatedAt;
         UsePhysicalSize = usePhysicalSize;
         ClusterSizeInBytes = clusterSizeInBytes;

@@ -50,8 +50,12 @@ public sealed class GoldenFormatException : Exception
 /// </summary>
 public sealed class GoldenSerializer : IGoldenSerializer
 {
-    /// <summary>この実装が読み書きできる期待値データの形式バージョン。</summary>
-    private const int CurrentFormatVersion = 1;
+    /// <summary>
+    /// この実装が読み書きできる期待値データの形式バージョン。
+    /// 初版は 1。タスク7.1 でヘッダに BaseFolderPathLength（基準フォルダの実効絶対パス長）を追加したため 2 へ上げた。
+    /// バージョン1の期待値ファイルは、未知のバージョンとして読み取りを拒否する（要件7.3 の経路）。
+    /// </summary>
+    private const int CurrentFormatVersion = 2;
 
     /// <summary>日時の往復表記に用いる不変カルチャの丸め表現形式。</summary>
     private const string DateTimeRoundtripFormat = "o";
@@ -61,6 +65,7 @@ public sealed class GoldenSerializer : IGoldenSerializer
 
     private const string HeaderKeyFormatVersion = "FormatVersion";
     private const string HeaderKeyBaseFolderLabel = "BaseFolderLabel";
+    private const string HeaderKeyBaseFolderPathLength = "BaseFolderPathLength";
     private const string HeaderKeyGeneratedAt = "GeneratedAt";
     private const string HeaderKeyUsePhysicalSize = "UsePhysicalSize";
     private const string HeaderKeyClusterSizeInBytes = "ClusterSizeInBytes";
@@ -211,6 +216,7 @@ public sealed class GoldenSerializer : IGoldenSerializer
     {
         AppendHeaderLine(builder, HeaderKeyFormatVersion, header.FormatVersion.ToString(CultureInfo.InvariantCulture));
         AppendHeaderLine(builder, HeaderKeyBaseFolderLabel, header.BaseFolderLabel);
+        AppendHeaderLine(builder, HeaderKeyBaseFolderPathLength, header.BaseFolderPathLength.ToString(CultureInfo.InvariantCulture));
         AppendHeaderLine(builder, HeaderKeyGeneratedAt, header.GeneratedAt.ToString(DateTimeRoundtripFormat, CultureInfo.InvariantCulture));
         AppendHeaderLine(builder, HeaderKeyUsePhysicalSize, header.UsePhysicalSize ? BoolTrueToken : BoolFalseToken);
         AppendHeaderLine(builder, HeaderKeyClusterSizeInBytes, header.ClusterSizeInBytes.ToString(CultureInfo.InvariantCulture));
@@ -305,6 +311,7 @@ public sealed class GoldenSerializer : IGoldenSerializer
         }
 
         string baseFolderLabel = RequireHeaderValue(headerValues, HeaderKeyBaseFolderLabel);
+        int baseFolderPathLength = ParseInt(RequireHeaderValue(headerValues, HeaderKeyBaseFolderPathLength), HeaderKeyBaseFolderPathLength);
         DateTimeOffset generatedAt = ParseDateTimeOffset(RequireHeaderValue(headerValues, HeaderKeyGeneratedAt));
         bool usePhysicalSize = ParseBool(RequireHeaderValue(headerValues, HeaderKeyUsePhysicalSize), HeaderKeyUsePhysicalSize);
         long clusterSizeInBytes = ParseLong(RequireHeaderValue(headerValues, HeaderKeyClusterSizeInBytes), HeaderKeyClusterSizeInBytes);
@@ -313,6 +320,7 @@ public sealed class GoldenSerializer : IGoldenSerializer
         return new GoldenHeader(
             formatVersion,
             baseFolderLabel,
+            baseFolderPathLength,
             generatedAt,
             usePhysicalSize,
             clusterSizeInBytes,

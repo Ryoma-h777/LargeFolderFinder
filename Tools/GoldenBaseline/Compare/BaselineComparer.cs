@@ -22,8 +22,8 @@ public interface IBaselineComparer
 
 /// <summary>
 /// 期待値と実測を突き合わせ、差分を分類する実装（design.md: Compare/BaselineComparer）。
-/// 走査条件（物理サイズ換算の有無）の照合をエントリの突き合わせより先に行い、
-/// 不一致の場合は突き合わせを行わずに設定不一致として報告する（要件6.2, 6.3）。
+/// 走査条件（物理サイズ換算の有無、基準フォルダの実効絶対パス長）の照合をエントリの突き合わせより先に行い、
+/// 不一致の場合は突き合わせを行わずに設定不一致として報告する（要件6.2, 6.3、タスク7.1）。
 /// 比較は対称であり、expected / actual いずれの並び順にも依存しない。
 /// </summary>
 public sealed class BaselineComparer : IBaselineComparer
@@ -45,6 +45,14 @@ public sealed class BaselineComparer : IBaselineComparer
         // 物理サイズ換算の有無が異なると全エントリが不一致になり報告が無意味になるため、
         // ここで打ち切って設定不一致として報告する（要件6.2, 6.3）。
         if (expected.Header.UsePhysicalSize != actual.Header.UsePhysicalSize)
+        {
+            return new DiffReport(BaselineVerdict.SettingsMismatch, Array.Empty<DiffEntry>());
+        }
+
+        // 基準フォルダの実効絶対パス長も、物理サイズ換算の有無と同じ扱いで突き合わせより先に照合する。
+        // 走査で項目が欠落する境界は「親フォルダの絶対パスが258文字以上だと直下を一覧できない」ことだけであり、
+        // 長さが違うと欠落する項目そのものが変わって報告が無意味になるため、ここで打ち切る（要件6.2, 6.3、タスク7.1）。
+        if (expected.Header.BaseFolderPathLength != actual.Header.BaseFolderPathLength)
         {
             return new DiffReport(BaselineVerdict.SettingsMismatch, Array.Empty<DiffEntry>());
         }

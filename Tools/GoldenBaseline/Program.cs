@@ -29,9 +29,24 @@ internal static class Program
 
     /// <summary>
     /// このツールが書き出す期待値データの形式バージョン。GoldenSerializer が読み書きできる版と一致させる
-    /// （tasks.md Implementation Notes: 「形式バージョンの初版は 1」）。
+    /// （初版は 1。タスク7.1 で BaseFolderPathLength をヘッダに追加したため 2 へ上げた）。
     /// </summary>
-    private const int GoldenFormatVersion = 1;
+    private const int GoldenFormatVersion = 2;
+
+    /// <summary>既定の基準フォルダ名の接頭辞（tasks.md Implementation Notes の既存規約 gb_fix_*）。</summary>
+    private const string DefaultRootPrefix = "gb_fix_";
+
+    /// <summary>既定の基準フォルダ名の長さ調整に使う文字（乱数の後ろに並べる）。</summary>
+    private const char DefaultRootPaddingChar = 'x';
+
+    /// <summary>
+    /// 既定の基準フォルダの実効絶対パス長（Path.GetFullPath 後の文字数）の固定値。
+    /// 走査で項目が欠落する境界は「親フォルダの絶対パスが258文字以上だと、その直下を一覧できない」ことだけであり
+    /// （2026-09-16 実測）、期待値データの内容は基準フォルダの長さに左右される。そのため長さを固定する。
+    /// 80 を選ぶ理由は、現行の期待値（エントリ17件・既知の欠落4件）がそのまま再現する範囲が実効長 56〜104 文字で、
+    /// その中央付近にあたり、ツールが異常終了する両端の長さ（54・55・105・106 文字）から十分離れているため。
+    /// </summary>
+    internal const int FixedBaseFolderPathLength = 80;
 
     private static int Main(string[] args)
     {
@@ -91,7 +106,7 @@ internal static class Program
         Console.WriteLine("  --help                    この使い方を表示する");
         Console.WriteLine();
         Console.WriteLine("オプション:");
-        Console.WriteLine("  --root <path>     フィクスチャを生成する基準フォルダ。省略時は %TEMP% 配下に自動生成する");
+        Console.WriteLine($"  --root <path>     フィクスチャを生成する基準フォルダ。省略時は %TEMP% 配下に実効絶対パス長{FixedBaseFolderPathLength}文字で自動生成する");
         Console.WriteLine("  --out <path>      生成した期待値ファイルの書き出し先（generate のみ必須）");
         Console.WriteLine("  --golden <path>   比較・更新の対象とする期待値ファイル（compare / update のみ必須）");
         Console.WriteLine("  --physical-size   物理サイズ換算を有効にして走査する（省略時は無効）");
@@ -200,7 +215,7 @@ internal static class Program
                 var scanRunner = new ScanRunner();
                 var outcome = scanRunner.Run(root, usePhysicalSize);
 
-                var header = BuildHeader(spec, usePhysicalSize, outcome.ClusterSizeInBytes, buildResult);
+                var header = BuildHeader(spec, root, usePhysicalSize, outcome.ClusterSizeInBytes, buildResult);
 
                 var projector = new GoldenProjector();
                 var document = projector.Project(outcome, header);
@@ -308,7 +323,7 @@ internal static class Program
 
             if (run.Report.Verdict == BaselineVerdict.SettingsMismatch)
             {
-                Console.WriteLine("設定（物理サイズ換算の有無）が一致しないため、期待値ファイルは更新しませんでした。");
+                Console.WriteLine("設定（物理サイズ換算の有無、または基準フォルダの実効絶対パス長）が一致しないため、期待値ファイルは更新しませんでした。");
                 return VerdictToExitCode(run.Report.Verdict);
             }
 
@@ -357,7 +372,7 @@ internal static class Program
             var scanRunner = new ScanRunner();
             var outcome = scanRunner.Run(root, usePhysicalSize);
 
-            var header = BuildHeader(spec, usePhysicalSize, outcome.ClusterSizeInBytes, buildResult);
+            var header = BuildHeader(spec, root, usePhysicalSize, outcome.ClusterSizeInBytes, buildResult);
 
             var projector = new GoldenProjector();
             actual = projector.Project(outcome, header);
@@ -414,9 +429,9 @@ internal static class Program
                 Console.WriteLine("判定: 一致");
                 return;
             case BaselineVerdict.SettingsMismatch:
-                // 物理サイズ換算の有無が異なると全エントリが不一致になり報告が無意味になるため、
-                // 突き合わせを行わない（design.md System Flows「比較の判定」、要件6.2, 6.3）。
-                Console.WriteLine("判定: 設定不一致（物理サイズ換算の有無が期待値データの生成時と異なります。エントリの突き合わせは行っていません）");
+                // 物理サイズ換算の有無や基準フォルダの実効絶対パス長が異なると全エントリが不一致になり
+                // 報告が無意味になるため、突き合わせを行わない（design.md System Flows「比較の判定」、要件6.2, 6.3、タスク7.1）。
+                Console.WriteLine("判定: 設定不一致（物理サイズ換算の有無、または基準フォルダの実効絶対パス長が期待値データの生成時と異なります。エントリの突き合わせは行っていません）");
                 return;
             case BaselineVerdict.Different:
                 Console.WriteLine($"判定: 差分あり（{report.Entries.Count} 件）");
@@ -441,11 +456,12 @@ internal static class Program
     /// 詳細な理由は <see cref="PrintFixtureBuildReport"/> で標準出力にのみ出す
     /// （design.md: Program の責務、要件2.3・3.7、2026-09-15 ユーザー決定）。
     /// </summary>
-    private static GoldenHeader BuildHeader(FixtureSpec spec, bool usePhysicalSize, long clusterSizeInBytes, FixtureBuildResult buildResult)
+    private static GoldenHeader BuildHeader(FixtureSpec spec, string root, bool usePhysicalSize, long clusterSizeInBytes, FixtureBuildResult buildResult)
     {
         return new GoldenHeader(
             GoldenFormatVersion,
             spec.Name,
+            MeasureEffectivePathLength(root),
             DateTimeOffset.UtcNow,
             usePhysicalSize,
             clusterSizeInBytes,
@@ -472,11 +488,12 @@ internal static class Program
     }
 
     /// <summary>
-    /// 基準パスを解決する。明示指定があればそれを用い、なければ %TEMP% 配下に短い既定パスを生成する
+    /// 基準パスを解決する。明示指定があればそれを用い（長さは強制せず、実際の長さがヘッダに記録される）、
+    /// なければ %TEMP% 配下に実効絶対パス長を固定した既定パスを生成する
     /// （design.md: FixtureBuilder.Build の Preconditions「基準側で長さを消費すると生成できる階層が浅くなる」、
-    /// tasks.md Implementation Notes の既存規約 gb_fix_* に合わせる）。
+    /// tasks.md Implementation Notes の既存規約 gb_fix_* に合わせる。長さの固定はタスク7.1）。
     /// </summary>
-    private static string ResolveRoot(IReadOnlyDictionary<string, string> options)
+    internal static string ResolveRoot(IReadOnlyDictionary<string, string> options)
     {
         if (options.TryGetValue("--root", out var root))
         {
@@ -485,10 +502,56 @@ internal static class Program
                 throw new GoldenCliArgumentException("--root の値が空です。");
             }
 
+            // 明示指定された基準フォルダは、長さを強制せずそのまま尊重する。実際の長さはヘッダに記録される。
             return root;
         }
 
-        return Path.Combine(Path.GetTempPath(), "gb_fix_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        return BuildDefaultRoot(Path.GetTempPath());
+    }
+
+    /// <summary>
+    /// 既定の基準フォルダのパスを、指定された置き場の下に組み立てる。
+    /// </summary>
+    /// <remarks>
+    /// 名前には乱数（GUID 由来）を残し、同時実行や後始末漏れとの衝突を避ける。長さの調整はその後ろのパディングで行い、
+    /// 実効絶対パス長が常に <see cref="FixedBaseFolderPathLength"/> になるようにする（タスク7.1）。
+    /// </remarks>
+    internal static string BuildDefaultRoot(string tempDirectory)
+    {
+        string probe = Path.Combine(tempDirectory, DefaultRootPrefix + Guid.NewGuid().ToString("N").Substring(0, 8));
+        int probeLength = MeasureEffectivePathLength(probe);
+        int paddingLength = FixedBaseFolderPathLength - probeLength;
+
+        if (paddingLength < 0)
+        {
+            throw new GoldenCliArgumentException(
+                $"既定の置き場（{tempDirectory}）が長すぎるため、基準フォルダの実効絶対パス長を {FixedBaseFolderPathLength} 文字に固定できません" +
+                $"（名前を最短にしても {probeLength} 文字になります）。" +
+                $"--root に、実効絶対パス長（Path.GetFullPath 後の文字数）が {FixedBaseFolderPathLength} 文字になるパスを指定してください。");
+        }
+
+        string root = probe + new string(DefaultRootPaddingChar, paddingLength);
+
+        // パディングの長さは実効長から逆算しているが、置き場の表記によっては正規化の結果が線形にならないこともありうる。
+        // 期待値の内容を左右する値なので、組み立てた結果を測り直して固定値と一致することを確かめる。
+        int actualLength = MeasureEffectivePathLength(root);
+        if (actualLength != FixedBaseFolderPathLength)
+        {
+            throw new GoldenCliArgumentException(
+                $"既定の基準フォルダの実効絶対パス長を {FixedBaseFolderPathLength} 文字に固定できませんでした（実際: {actualLength} 文字）。" +
+                $"--root に、実効絶対パス長が {FixedBaseFolderPathLength} 文字になるパスを指定してください。");
+        }
+
+        return root;
+    }
+
+    /// <summary>
+    /// パスの実効絶対パス長（文字数）を測る。8.3 短縮名（例: USERNA~1）や相対表記は .NET の正規化で展開されるため、
+    /// 文字列そのままの長さではなく <see cref="Path.GetFullPath(string)"/> を通した後の文字数で測る（タスク7.1）。
+    /// </summary>
+    internal static int MeasureEffectivePathLength(string path)
+    {
+        return Path.GetFullPath(path).Length;
     }
 
     private static string RequireOption(IReadOnlyDictionary<string, string> options, string name)
@@ -564,7 +627,7 @@ internal static class Program
     /// コマンドライン引数の誤りを表す例外。呼び出し元（各 Run* メソッド）で捕捉し、
     /// 終了コード2として扱う（design.md Error Handling「入力の誤り」）。
     /// </summary>
-    private sealed class GoldenCliArgumentException : Exception
+    internal sealed class GoldenCliArgumentException : Exception
     {
         public GoldenCliArgumentException(string message) : base(message)
         {

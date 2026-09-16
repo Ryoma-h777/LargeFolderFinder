@@ -47,6 +47,7 @@ internal static class SelfChecks
         RegisterKnownIssueBoundaryChecks(runner);
         RegisterProgramChecks(runner);
         RegisterIncompleteFixtureRecordChecks(runner);
+        RegisterBaseFolderPathLengthChecks(runner);
     }
 
     /// <summary>
@@ -109,15 +110,16 @@ internal static class SelfChecks
             var generatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
             var omissions = new List<string> { @"deep\path" };
             var header = new GoldenHeader(
-                formatVersion: 1,
+                formatVersion: 2,
                 baseFolderLabel: "fixture-v1",
+                baseFolderPathLength: 80,
                 generatedAt: generatedAt,
                 usePhysicalSize: true,
                 clusterSizeInBytes: 4096L,
                 fixtureComplete: false,
                 fixtureOmissions: omissions);
 
-            SelfAssert.That(header.FormatVersion == 1, "FormatVersion が設定した値と一致しません。");
+            SelfAssert.That(header.FormatVersion == 2, "FormatVersion が設定した値と一致しません。");
             SelfAssert.That(header.BaseFolderLabel == "fixture-v1", "BaseFolderLabel が設定した値と一致しません。");
             SelfAssert.That(header.GeneratedAt == generatedAt, "GeneratedAt が設定した値と一致しません。");
             SelfAssert.That(header.UsePhysicalSize, "UsePhysicalSize が設定した値と一致しません。");
@@ -130,7 +132,7 @@ internal static class SelfChecks
 
         runner.Add("GoldenDocument がヘッダとエントリ集合を束ねる", () =>
         {
-            var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            var header = new GoldenHeader(2, "fixture-v1", 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
             var entries = new List<GoldenEntry>
             {
                 new GoldenEntry(@"a", GoldenEntryKind.Folder, 0L),
@@ -145,7 +147,7 @@ internal static class SelfChecks
 
         runner.Add("GoldenDocument が相対パスの重複を許容しない", () =>
         {
-            var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            var header = new GoldenHeader(2, "fixture-v1", 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
             var duplicated = new List<GoldenEntry>
             {
                 new GoldenEntry(@"a\b.txt", GoldenEntryKind.File, 10L),
@@ -197,7 +199,7 @@ internal static class SelfChecks
         {
             Exception? caught = CaptureConstructionException(() =>
             {
-                _ = new GoldenHeader(1, string.Empty, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+                _ = new GoldenHeader(2, string.Empty, 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
             });
 
             SelfAssert.That(
@@ -209,12 +211,24 @@ internal static class SelfChecks
         {
             Exception? caught = CaptureConstructionException(() =>
             {
-                _ = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, true, -1L, true, Array.Empty<string>());
+                _ = new GoldenHeader(2, "fixture-v1", 80, DateTimeOffset.UtcNow, true, -1L, true, Array.Empty<string>());
             });
 
             SelfAssert.That(
                 caught is ArgumentOutOfRangeException,
                 $"負のクラスタサイズを与えても ArgumentOutOfRangeException が発生しませんでした（実際: {DescribeCaughtException(caught)}）。");
+        });
+
+        runner.Add("GoldenHeader が負の基準フォルダの実効絶対パス長をArgumentOutOfRangeExceptionで拒否する（Invariant: BaseFolderPathLengthは0以上、タスク7.1）", () =>
+        {
+            Exception? caught = CaptureConstructionException(() =>
+            {
+                _ = new GoldenHeader(2, "fixture-v1", -1, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            });
+
+            SelfAssert.That(
+                caught is ArgumentOutOfRangeException,
+                $"負の基準フォルダの実効絶対パス長を与えても ArgumentOutOfRangeException が発生しませんでした（実際: {DescribeCaughtException(caught)}）。");
         });
     }
 
@@ -434,7 +448,7 @@ internal static class SelfChecks
             string pathDescending = CreateTempGoldenFilePath();
             try
             {
-                var header = new GoldenHeader(1, "fixture-v1", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), true, 4096L, true, Array.Empty<string>());
+                var header = new GoldenHeader(2, "fixture-v1", 80, new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), true, 4096L, true, Array.Empty<string>());
 
                 // "co-op" / "coop" / "cop" は、序数(Ordinal)比較と既定のカルチャ依存比較とで
                 // 明確に並び順が分かれる組み合わせ（'-' の扱いが異なるため）。
@@ -476,6 +490,7 @@ internal static class SelfChecks
 
                 SelfAssert.That(roundTripped.Header.FormatVersion == document.Header.FormatVersion, "往復後の FormatVersion が一致しません。");
                 SelfAssert.That(roundTripped.Header.BaseFolderLabel == document.Header.BaseFolderLabel, "往復後の BaseFolderLabel が一致しません。");
+                SelfAssert.That(roundTripped.Header.BaseFolderPathLength == document.Header.BaseFolderPathLength, "往復後の BaseFolderPathLength が一致しません。");
                 SelfAssert.That(roundTripped.Header.GeneratedAt == document.Header.GeneratedAt, "往復後の GeneratedAt が一致しません。");
                 SelfAssert.That(roundTripped.Header.UsePhysicalSize == document.Header.UsePhysicalSize, "往復後の UsePhysicalSize が一致しません。");
                 SelfAssert.That(roundTripped.Header.ClusterSizeInBytes == document.Header.ClusterSizeInBytes, "往復後の ClusterSizeInBytes が一致しません。");
@@ -507,6 +522,7 @@ internal static class SelfChecks
                 string content =
                     "# FormatVersion: 9999\n" +
                     "# BaseFolderLabel: fixture-v1\n" +
+                    "# BaseFolderPathLength: 80\n" +
                     "# GeneratedAt: 2026-01-01T00:00:00.0000000+00:00\n" +
                     "# UsePhysicalSize: true\n" +
                     "# ClusterSizeInBytes: 4096\n" +
@@ -536,7 +552,7 @@ internal static class SelfChecks
 
         runner.Add("GoldenSerializer が相対パスにタブ文字を含むエントリの書き込みに失敗する", () =>
         {
-            var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            var header = new GoldenHeader(2, "fixture-v1", 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
             var entries = new List<GoldenEntry>
             {
                 new GoldenEntry("a\tb", GoldenEntryKind.File, 1L),
@@ -573,8 +589,9 @@ internal static class SelfChecks
             try
             {
                 string content =
-                    "# FormatVersion: 1\n" +
+                    "# FormatVersion: 2\n" +
                     "# BaseFolderLabel: fixture-v1\n" +
+                    "# BaseFolderPathLength: 80\n" +
                     "# GeneratedAt: 2026-01-01T00:00:00.0000000+00:00\n" +
                     "# UsePhysicalSize: true\n" +
                     "# ClusterSizeInBytes: 4096\n" +
@@ -766,8 +783,9 @@ internal static class SelfChecks
     private static GoldenDocument BuildHeaderValueDocument(string baseFolderLabel, IReadOnlyList<string> fixtureOmissions)
     {
         var header = new GoldenHeader(
-            formatVersion: 1,
+            formatVersion: 2,
             baseFolderLabel: baseFolderLabel,
+            baseFolderPathLength: 80,
             generatedAt: new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero),
             usePhysicalSize: false,
             clusterSizeInBytes: 0L,
@@ -833,8 +851,9 @@ internal static class SelfChecks
     private static GoldenDocument BuildOrderDiscriminatingDocument()
     {
         var header = new GoldenHeader(
-            formatVersion: 1,
+            formatVersion: 2,
             baseFolderLabel: "fixture-v1",
+            baseFolderPathLength: 80,
             generatedAt: new DateTimeOffset(2026, 1, 1, 12, 34, 56, TimeSpan.Zero),
             usePhysicalSize: true,
             clusterSizeInBytes: 4096L,
@@ -868,8 +887,9 @@ internal static class SelfChecks
     private static GoldenDocument BuildSampleDocument()
     {
         var header = new GoldenHeader(
-            formatVersion: 1,
+            formatVersion: 2,
             baseFolderLabel: "fixture-v1",
+            baseFolderPathLength: 80,
             generatedAt: new DateTimeOffset(2026, 1, 1, 12, 34, 56, TimeSpan.Zero),
             usePhysicalSize: true,
             clusterSizeInBytes: 4096L,
@@ -971,6 +991,7 @@ internal static class SelfChecks
                 var documentCrLf = serializer.Read(pathCrLf);
 
                 SelfAssert.That(documentLf.Header.FormatVersion == documentCrLf.Header.FormatVersion, "LF版とCRLF版でFormatVersionが一致しません。");
+                SelfAssert.That(documentLf.Header.BaseFolderPathLength == documentCrLf.Header.BaseFolderPathLength, "LF版とCRLF版でBaseFolderPathLengthが一致しません。");
                 SelfAssert.That(documentLf.Header.BaseFolderLabel == documentCrLf.Header.BaseFolderLabel, "LF版とCRLF版でBaseFolderLabelが一致しません。");
                 SelfAssert.That(documentLf.Header.GeneratedAt == documentCrLf.Header.GeneratedAt, "LF版とCRLF版でGeneratedAtが一致しません。");
                 SelfAssert.That(documentLf.Header.UsePhysicalSize == documentCrLf.Header.UsePhysicalSize, "LF版とCRLF版でUsePhysicalSizeが一致しません。");
@@ -997,6 +1018,8 @@ internal static class SelfChecks
     }
 
     private const string HandWrittenBaseFolderLabel = "手書き検証用基準";
+    private const string HandWrittenBaseFolderPathLengthText = "97";
+    private const int HandWrittenBaseFolderPathLengthExpected = 97;
     private const string HandWrittenGeneratedAtText = "2026-03-14T09:26:53.0000000+09:00";
     private static readonly DateTimeOffset HandWrittenGeneratedAtExpected = new DateTimeOffset(2026, 3, 14, 9, 26, 53, TimeSpan.FromHours(9));
     private const string HandWrittenFixtureOmission1 = @"除外候補\深い\1つ目";
@@ -1004,7 +1027,7 @@ internal static class SelfChecks
 
     /// <summary>
     /// <see cref="GoldenSerializer.Write"/> を一切経由せず、文字列リテラルのみで手書きの期待値テキストを組み立てる。
-    /// ヘッダの全キー（FormatVersion/BaseFolderLabel/GeneratedAt/UsePhysicalSize/ClusterSizeInBytes/FixtureComplete）、
+    /// ヘッダの全キー（FormatVersion/BaseFolderLabel/BaseFolderPathLength/GeneratedAt/UsePhysicalSize/ClusterSizeInBytes/FixtureComplete）、
     /// FixtureOmission の複数行、D と F のエントリ（日本語を含む相対パス）を持つ。
     /// </summary>
     private static string BuildHandWrittenGoldenText(string newline)
@@ -1012,8 +1035,9 @@ internal static class SelfChecks
         var builder = new StringBuilder();
         void AppendLine(string line) => builder.Append(line).Append(newline);
 
-        AppendLine("# FormatVersion: 1");
+        AppendLine("# FormatVersion: 2");
         AppendLine("# BaseFolderLabel: " + HandWrittenBaseFolderLabel);
+        AppendLine("# BaseFolderPathLength: " + HandWrittenBaseFolderPathLengthText);
         AppendLine("# GeneratedAt: " + HandWrittenGeneratedAtText);
         AppendLine("# UsePhysicalSize: true");
         AppendLine("# ClusterSizeInBytes: 4096");
@@ -1033,7 +1057,8 @@ internal static class SelfChecks
     /// </summary>
     private static void AssertMatchesHandWrittenExpectation(GoldenDocument document, string context)
     {
-        SelfAssert.That(document.Header.FormatVersion == 1, $"{context}: FormatVersion が1と一致しません（実際: {document.Header.FormatVersion}）。");
+        SelfAssert.That(document.Header.FormatVersion == 2, $"{context}: FormatVersion が2と一致しません（実際: {document.Header.FormatVersion}）。");
+        SelfAssert.That(document.Header.BaseFolderPathLength == HandWrittenBaseFolderPathLengthExpected, $"{context}: BaseFolderPathLength が{HandWrittenBaseFolderPathLengthExpected}と一致しません（実際: {document.Header.BaseFolderPathLength}）。");
         SelfAssert.That(document.Header.BaseFolderLabel == HandWrittenBaseFolderLabel, $"{context}: BaseFolderLabel がリテラルと一致しません（実際: '{document.Header.BaseFolderLabel}'）。");
         SelfAssert.That(document.Header.GeneratedAt == HandWrittenGeneratedAtExpected, $"{context}: GeneratedAt がリテラルと一致しません（実際: {document.Header.GeneratedAt:o}）。");
         SelfAssert.That(document.Header.UsePhysicalSize, $"{context}: UsePhysicalSize が true と一致しません。");
@@ -1727,11 +1752,19 @@ internal static class SelfChecks
     /// クラスタサイズを明示する場合に指定する。省略時は換算の有無に連動させる（換算あり: 4096、換算なし: 0）。
     /// 換算の有無とクラスタサイズを独立に変えた入力を作るために使う。
     /// </param>
-    private static GoldenDocument BuildComparerDocument(bool usePhysicalSize, IReadOnlyList<GoldenEntry> entries, long? clusterSizeInBytes = null)
+    /// <param name="baseFolderPathLength">
+    /// 基準フォルダの実効絶対パス長。省略時は固定値（80）。長さだけが異なる入力を作るために使う（タスク7.1）。
+    /// </param>
+    private static GoldenDocument BuildComparerDocument(
+        bool usePhysicalSize,
+        IReadOnlyList<GoldenEntry> entries,
+        long? clusterSizeInBytes = null,
+        int baseFolderPathLength = 80)
     {
         var header = new GoldenHeader(
-            formatVersion: 1,
+            formatVersion: 2,
             baseFolderLabel: "fixture-v1",
+            baseFolderPathLength: baseFolderPathLength,
             generatedAt: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
             usePhysicalSize: usePhysicalSize,
             clusterSizeInBytes: clusterSizeInBytes ?? (usePhysicalSize ? 4096L : 0L),
@@ -3039,8 +3072,9 @@ internal static class SelfChecks
 
                 var projector = new GoldenProjector();
                 var header = new GoldenHeader(
-                    formatVersion: 1,
+                    formatVersion: 2,
                     baseFolderLabel: "fixture-v1",
+                    baseFolderPathLength: 80,
                     generatedAt: DateTimeOffset.UtcNow,
                     usePhysicalSize: false,
                     clusterSizeInBytes: 0L,
@@ -3117,7 +3151,7 @@ internal static class SelfChecks
                 var outcome = scanRunner.Run(root, usePhysicalSize: false);
 
                 var projector = new GoldenProjector();
-                var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+                var header = new GoldenHeader(2, "fixture-v1", 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
                 var document = projector.Project(outcome, header);
                 var paths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
 
@@ -3207,7 +3241,7 @@ internal static class SelfChecks
                 var outcome = scanRunner.Run(root, usePhysicalSize: false);
 
                 var projector = new GoldenProjector();
-                var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+                var header = new GoldenHeader(2, "fixture-v1", 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
                 var document = projector.Project(outcome, header);
 
                 var observedPaths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
@@ -3278,7 +3312,7 @@ internal static class SelfChecks
                 var outcome = scanRunner.Run(root, usePhysicalSize: false);
 
                 var projector = new GoldenProjector();
-                var header = new GoldenHeader(1, "fixture-v1", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+                var header = new GoldenHeader(2, "fixture-v1", 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
                 var document = projector.Project(outcome, header);
 
                 var analyzer = new KnownIssueAnalyzer();
@@ -3328,7 +3362,7 @@ internal static class SelfChecks
             var syntheticSpec = new FixtureSpec("synthetic-known-issue-test", syntheticItems);
 
             // 観測結果には "present_ordinary" のみを含める。他の5項目はすべて「欠落」として扱われる。
-            var header = new GoldenHeader(1, "synthetic-known-issue-test", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            var header = new GoldenHeader(2, "synthetic-known-issue-test", 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
             var observedEntries = new List<GoldenEntry>
             {
                 new GoldenEntry("present_ordinary", GoldenEntryKind.Folder, 0L),
@@ -3384,7 +3418,7 @@ internal static class SelfChecks
             };
             var spec = new FixtureSpec("synthetic-all-present", items);
 
-            var header = new GoldenHeader(1, "synthetic-all-present", DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            var header = new GoldenHeader(2, "synthetic-all-present", 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
             var entries = new List<GoldenEntry>
             {
                 // LongPath トレイトを持つ項目であっても、実際に観測されていれば「不具合の判定」ではなく
@@ -3475,7 +3509,7 @@ internal static class SelfChecks
                 var outcome = new ScanRunner().Run(root, usePhysicalSize: false);
                 var scanMap = FlattenScanTree(outcome.Root);
 
-                var header = new GoldenHeader(1, spec.Name, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+                var header = new GoldenHeader(2, spec.Name, 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
                 var document = new GoldenProjector().Project(outcome, header);
                 var observedPaths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
 
@@ -3538,8 +3572,8 @@ internal static class SelfChecks
                 goldenPath != null,
                 $"コミット済みの期待値 'baselines\\{spec.Name}.golden.txt' を、実行ファイルの位置（{AppDomain.CurrentDomain.BaseDirectory}）から親方向に辿って見つけられませんでした。");
 
-            // 読み取りのみ。書き換えは行わない。
-            var document = new GoldenSerializer().Read(goldenPath!);
+            // 読み取りのみ。コミット済みのファイルは書き換えない。
+            var document = ReadCommittedGoldenAsCurrentFormat(goldenPath!);
             SelfAssert.That(
                 document.Header.BaseFolderLabel == spec.Name,
                 $"期待値の基準の論理名が定義と一致しません（期待値: {document.Header.BaseFolderLabel}、定義: {spec.Name}）。");
@@ -3601,6 +3635,46 @@ internal static class SelfChecks
                     $"{kindLabel} '{item.RelativePath}' の既知の欠落の根拠が LongPath ではありません（実際: {trait}）。");
             }
         });
+    }
+
+    /// <summary>
+    /// コミット済みの期待値を、現在の形式（バージョン2）として読み込む。
+    /// コミット済みの期待値はまだ形式バージョン1（タスク7.1 より前の形式）のままで、ヘッダに
+    /// BaseFolderPathLength を持たないため、そのままでは「未知のバージョン」として読めない。
+    /// この検証が見ているのは「どの項目が記録されているか」であって形式バージョンではないため、
+    /// 一時コピーの上でヘッダだけを現在の形式へ読み替えて読み込む（コミット済みのファイルは書き換えない）。
+    /// <para>
+    /// この読み替えはタスク7.3（期待値の作り直し）までの一時的な橋渡しである。作り直されて形式バージョンが
+    /// 2 になると、下の「形式バージョン1であること」の照合が失敗するため、この読み替えは必ず取り除かれる。
+    /// </para>
+    /// </summary>
+    private static GoldenDocument ReadCommittedGoldenAsCurrentFormat(string goldenPath)
+    {
+        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        string text = utf8.GetString(File.ReadAllBytes(goldenPath));
+
+        SelfAssert.That(
+            CountOccurrences(text, "# FormatVersion: 1\n") == 1,
+            "コミット済みの期待値が形式バージョン1ではありません。タスク7.3で形式バージョン2の期待値へ作り直された場合は、" +
+            "この読み替え（ReadCommittedGoldenAsCurrentFormat）を取り除き、GoldenSerializer で直接読むこと。");
+        SelfAssert.That(
+            !text.Contains("# BaseFolderPathLength: "),
+            "コミット済みの期待値に既に BaseFolderPathLength が記録されています。作り直し済みであれば読み替えを取り除くこと。");
+
+        // 形式バージョンを2へ読み替え、必須になった BaseFolderPathLength を補う。
+        // この検証は長さを参照しないため、値は「記録がない」ことを表す0とする。
+        string upgraded = text.Replace("# FormatVersion: 1\n", "# FormatVersion: 2\n# BaseFolderPathLength: 0\n");
+
+        string tempPath = CreateTempGoldenFilePath();
+        try
+        {
+            File.WriteAllBytes(tempPath, utf8.GetBytes(upgraded));
+            return new GoldenSerializer().Read(tempPath);
+        }
+        finally
+        {
+            DeleteIfExists(tempPath);
+        }
     }
 
     /// <summary>
@@ -4156,15 +4230,15 @@ internal static class SelfChecks
                     excluded2.GeneratedAtLineCount == 1,
                     $"2回目の出力に '# GeneratedAt:' で始まる行がちょうど1行ではありません（実際: {excluded2.GeneratedAtLineCount}行）。");
 
-                // 形骸化を防ぐ照合その2: GeneratedAt以外のヘッダ5行（FormatVersion/BaseFolderLabel/
-                // UsePhysicalSize/ClusterSizeInBytes/FixtureComplete）が除外後も残っていること。
+                // 形骸化を防ぐ照合その2: GeneratedAt以外のヘッダ6行（FormatVersion/BaseFolderLabel/
+                // BaseFolderPathLength/UsePhysicalSize/ClusterSizeInBytes/FixtureComplete）が除外後も残っていること。
                 // 除外対象を「行頭が # の行すべて」へ広げる変異では、この件数が0になり検出できる。
                 SelfAssert.That(
-                    excluded1.OtherHeaderLineCount == 5,
-                    $"1回目の出力の除外後ヘッダ行数が想定（5行）と異なります（実際: {excluded1.OtherHeaderLineCount}行）。除外範囲が広すぎる可能性があります。");
+                    excluded1.OtherHeaderLineCount == 6,
+                    $"1回目の出力の除外後ヘッダ行数が想定（6行）と異なります（実際: {excluded1.OtherHeaderLineCount}行）。除外範囲が広すぎる可能性があります。");
                 SelfAssert.That(
-                    excluded2.OtherHeaderLineCount == 5,
-                    $"2回目の出力の除外後ヘッダ行数が想定（5行）と異なります（実際: {excluded2.OtherHeaderLineCount}行）。除外範囲が広すぎる可能性があります。");
+                    excluded2.OtherHeaderLineCount == 6,
+                    $"2回目の出力の除外後ヘッダ行数が想定（6行）と異なります（実際: {excluded2.OtherHeaderLineCount}行）。除外範囲が広すぎる可能性があります。");
 
                 // 形骸化を防ぐ照合その3: 除外後にエントリ行が1行以上残っていること。
                 SelfAssert.That(excluded1.EntryLineCount >= 1, "1回目の出力の除外後にエントリ行が1件も残っていません。");
@@ -4287,7 +4361,9 @@ internal static class SelfChecks
                 var excluded1 = ExcludeGeneratedAtLine(bytes1);
                 var excluded2 = ExcludeGeneratedAtLine(bytes2);
                 SelfAssert.That(excluded1.GeneratedAtLineCount == 1 && excluded2.GeneratedAtLineCount == 1, "'# GeneratedAt:' の行がそれぞれちょうど1行ではありません。");
-                int expectedOtherHeaderLineCount = 5 + observed1.Count;
+                // GeneratedAt 以外のヘッダ6行（FormatVersion / BaseFolderLabel / BaseFolderPathLength /
+                // UsePhysicalSize / ClusterSizeInBytes / FixtureComplete）＋ 未生成項目の行数。
+                int expectedOtherHeaderLineCount = 6 + observed1.Count;
                 SelfAssert.That(
                     excluded1.OtherHeaderLineCount == expectedOtherHeaderLineCount && excluded2.OtherHeaderLineCount == expectedOtherHeaderLineCount,
                     $"生成日時の行を除いたヘッダ行数が想定（{expectedOtherHeaderLineCount}行）と異なります（実際: {excluded1.OtherHeaderLineCount}行 / {excluded2.OtherHeaderLineCount}行）。");
@@ -4480,6 +4556,659 @@ internal static class SelfChecks
         SelfAssert.That(
             actualOmissionLines.SequenceEqual(expectedOmissionLines, StringComparer.Ordinal),
             $"{context}: FixtureOmission の行が「相対パス: 例外の型名」の形で妨げた項目と一致しません。想定: [{string.Join(" | ", expectedOmissionLines)}] 実際: [{string.Join(" | ", actualOmissionLines)}]");
+    }
+
+    /// <summary>
+    /// 基準フォルダの実効絶対パス長を固定し、期待値に記録して照合する（タスク7.1）ための検証項目を登録する。
+    /// 走査で項目が欠落する境界は「親フォルダの絶対パスが258文字以上だと直下を一覧できない」ことだけであり、
+    /// 期待値の内容は基準フォルダの長さに左右される。長さの固定（Program）・記録（GoldenHeader / GoldenSerializer）・
+    /// 照合（BaselineComparer）の3点を、単体とコマンド経由の双方で確認する。
+    /// </summary>
+    private static void RegisterBaseFolderPathLengthChecks(SelfCheckRunner runner)
+    {
+        runner.Add("既定の基準フォルダの実効絶対パス長が、正規化後の文字数でちょうど80文字に固定される（乱数は保たれ、正規化で消える冗長な表記を含む置き場でも同じ）（タスク7.1）", () =>
+        {
+            string temp = Path.GetTempPath();
+
+            // 置き場2は、正規化で消える冗長な表記（<フォルダ>\..）を含む %TEMP% 相当のパス。
+            // 文字列そのままの長さと正規化後の長さが必ず食い違うため、長さを Path.GetFullPath を
+            // 通してから測っているかどうかを判別できる（8.3短縮名の展開と同じ性質を、環境に依存せず再現する）。
+            string redundantPlacement = Path.Combine(temp, "gb_len_" + Guid.NewGuid().ToString("N").Substring(0, 8), "..");
+
+            foreach (var placement in new[] { temp, redundantPlacement })
+            {
+                string first = Program.BuildDefaultRoot(placement);
+                string second = Program.BuildDefaultRoot(placement);
+
+                foreach (var root in new[] { first, second })
+                {
+                    int effectiveLength = Path.GetFullPath(root).Length;
+                    SelfAssert.That(
+                        effectiveLength == 80,
+                        $"既定の基準フォルダ（置き場: {placement}）の実効絶対パス長が80文字ではありません（実際: {effectiveLength}文字、パス: {root}）。");
+                    SelfAssert.That(
+                        Path.GetFileName(Path.GetFullPath(root)).StartsWith("gb_fix_", StringComparison.Ordinal),
+                        $"既定の基準フォルダ名が既存規約の接頭辞 'gb_fix_' で始まりません: {root}");
+                }
+
+                SelfAssert.That(
+                    !string.Equals(first, second, StringComparison.Ordinal),
+                    $"既定の基準フォルダが2回とも同一でした（乱数が失われ、同時実行や後始末漏れと衝突します）: {first}");
+            }
+
+            // --root を指定しない場合の解決経路（ResolveRoot）も、既定の組み立てを通って固定の長さになる。
+            string resolvedDefault = Program.ResolveRoot(new Dictionary<string, string>(StringComparer.Ordinal));
+            SelfAssert.That(
+                Path.GetFullPath(resolvedDefault).Length == 80,
+                $"--root を指定しないときの基準フォルダの実効絶対パス長が80文字ではありません（実際: {Path.GetFullPath(resolvedDefault).Length}文字、パス: {resolvedDefault}）。");
+
+            // --root を明示した場合は、その値をそのまま尊重する（長さは強制しない）。
+            string explicitRoot = Path.Combine(Path.GetTempPath(), "gb_fix_explicit");
+            string resolvedExplicit = Program.ResolveRoot(
+                new Dictionary<string, string>(StringComparer.Ordinal) { { "--root", explicitRoot } });
+            SelfAssert.That(
+                string.Equals(resolvedExplicit, explicitRoot, StringComparison.Ordinal),
+                $"--root で明示した基準フォルダが尊重されていません（指定: {explicitRoot}、実際: {resolvedExplicit}）。");
+
+            // この検証が「正規化後で測っているか」を判別できる入力になっていること自体を確かめる。
+            string redundantRoot = Program.BuildDefaultRoot(redundantPlacement);
+            SelfAssert.That(
+                redundantRoot.Length != Path.GetFullPath(redundantRoot).Length,
+                $"冗長な表記を含むはずの置き場で、文字列の長さと正規化後の長さが一致しています（測り方を判別できない入力です）: {redundantRoot}");
+        });
+
+        runner.Add("既定の置き場が長すぎて実効絶対パス長を80文字に収められない場合、原因と対処が分かるメッセージで失敗する（入力の誤りと同じ扱い）（タスク7.1）", () =>
+        {
+            // 実際にフォルダは作らない。パスの長さだけが問題になる経路である。
+            string tooLongPlacement = Path.Combine(Path.GetTempPath(), new string('L', 80));
+
+            Exception? caught = null;
+            try
+            {
+                string root = Program.BuildDefaultRoot(tooLongPlacement);
+                SelfAssert.That(
+                    false,
+                    $"長すぎる置き場でも失敗せず、基準フォルダ '{root}'（正規化後 {Path.GetFullPath(root).Length} 文字）を返しました。");
+            }
+            catch (Program.GoldenCliArgumentException ex)
+            {
+                // 入力の誤りと同じ例外型であること（＝終了コード2として扱われること）まで含めて確認する。
+                caught = ex;
+            }
+
+            SelfAssert.That(caught != null, "長すぎる置き場で、入力の誤りと同じ例外型（GoldenCliArgumentException）で失敗しませんでした。");
+
+            string message = caught!.Message;
+            SelfAssert.That(
+                !string.IsNullOrWhiteSpace(message) && message.Trim().Length >= 20,
+                $"失敗のメッセージが短すぎて原因を伝えられません（実際: '{message}'）。");
+            SelfAssert.That(
+                message.Contains("80"),
+                $"失敗のメッセージに固定する長さ（80文字）が示されていません: {message}");
+            SelfAssert.That(
+                message.Contains("--root"),
+                $"失敗のメッセージに対処（--root に長さ80のパスを渡す）が示されていません: {message}");
+        });
+
+        runner.Add("GoldenSerializer が BaseFolderPathLength を形式バージョン2のヘッダとして書き出し、読み戻しても値が保たれる（タスク7.1、要件6.1相当の記録）", () =>
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                // 固定値（80）とも、他のヘッダの数値（クラスタサイズ0）とも異なる値を使い、
+                // 値の取り違えや固定値の書き込みで通過しないようにする。
+                var header = new GoldenHeader(
+                    formatVersion: 2,
+                    baseFolderLabel: "fixture-v1",
+                    baseFolderPathLength: 123,
+                    generatedAt: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+                    usePhysicalSize: false,
+                    clusterSizeInBytes: 0L,
+                    fixtureComplete: true,
+                    fixtureOmissions: Array.Empty<string>());
+                var document = new GoldenDocument(header, new List<GoldenEntry> { new GoldenEntry("normal.bin", GoldenEntryKind.File, 10L) });
+
+                var serializer = new GoldenSerializer();
+                serializer.Write(document, path);
+
+                string text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetString(File.ReadAllBytes(path));
+                SelfAssert.That(
+                    CountOccurrences(text, "# FormatVersion: 2\n") == 1,
+                    $"書き出したヘッダに '# FormatVersion: 2' の行がちょうど1行ありません: {text}");
+                SelfAssert.That(
+                    CountOccurrences(text, "# BaseFolderPathLength: 123\n") == 1,
+                    $"書き出したヘッダに '# BaseFolderPathLength: 123' の行がちょうど1行ありません: {text}");
+
+                var roundTripped = serializer.Read(path);
+                SelfAssert.That(
+                    roundTripped.Header.BaseFolderPathLength == 123,
+                    $"往復後の BaseFolderPathLength が書き出した値と一致しません（想定: 123、実際: {roundTripped.Header.BaseFolderPathLength}）。");
+                SelfAssert.That(
+                    roundTripped.Header.FormatVersion == 2,
+                    $"往復後の FormatVersion が2ではありません（実際: {roundTripped.Header.FormatVersion}）。");
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+
+        runner.Add("GoldenSerializer が形式バージョン1の期待値ファイルと、BaseFolderPathLength を欠く期待値ファイルの読み取りを拒否する（タスク7.1）", () =>
+        {
+            string versionOnePath = CreateTempGoldenFilePath();
+            string missingKeyPath = CreateTempGoldenFilePath();
+            try
+            {
+                var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+                // 形式バージョン1（タスク7.1より前の形式）。ヘッダに項目が増えたため読めなくなる。
+                string versionOneText =
+                    "# FormatVersion: 1\n" +
+                    "# BaseFolderLabel: fixture-v1\n" +
+                    "# GeneratedAt: 2026-01-01T00:00:00.0000000+00:00\n" +
+                    "# UsePhysicalSize: false\n" +
+                    "# ClusterSizeInBytes: 0\n" +
+                    "# FixtureComplete: true\n" +
+                    "F\tnormal.bin\t10\n";
+                File.WriteAllBytes(versionOnePath, utf8.GetBytes(versionOneText));
+
+                // 形式バージョン2だが、必須になった BaseFolderPathLength を欠く。
+                string missingKeyText =
+                    "# FormatVersion: 2\n" +
+                    "# BaseFolderLabel: fixture-v1\n" +
+                    "# GeneratedAt: 2026-01-01T00:00:00.0000000+00:00\n" +
+                    "# UsePhysicalSize: false\n" +
+                    "# ClusterSizeInBytes: 0\n" +
+                    "# FixtureComplete: true\n" +
+                    "F\tnormal.bin\t10\n";
+                File.WriteAllBytes(missingKeyPath, utf8.GetBytes(missingKeyText));
+
+                var serializer = new GoldenSerializer();
+
+                GoldenFormatException? versionOneFailure = null;
+                try
+                {
+                    _ = serializer.Read(versionOnePath);
+                }
+                catch (GoldenFormatException ex)
+                {
+                    versionOneFailure = ex;
+                }
+
+                SelfAssert.That(
+                    versionOneFailure != null,
+                    "形式バージョン1の期待値ファイルを読んでも失敗しませんでした（未知のバージョンを拒否する経路が働いていません）。");
+                SelfAssert.That(
+                    versionOneFailure!.Message.Contains("1") && versionOneFailure.Message.Contains("2"),
+                    $"形式バージョン1を拒否したメッセージに、読んだ版（1）とこのツールが扱える版（2）が示されていません: {versionOneFailure.Message}");
+
+                bool missingKeyRejected = false;
+                try
+                {
+                    _ = serializer.Read(missingKeyPath);
+                }
+                catch (GoldenFormatException)
+                {
+                    missingKeyRejected = true;
+                }
+
+                SelfAssert.That(
+                    missingKeyRejected,
+                    "BaseFolderPathLength を欠く形式バージョン2の期待値ファイルを読んでも失敗しませんでした（必須のヘッダ項目として扱われていません）。");
+            }
+            finally
+            {
+                DeleteIfExists(versionOnePath);
+                DeleteIfExists(missingKeyPath);
+            }
+        });
+
+        runner.Add("BaselineComparer が基準フォルダの実効絶対パス長の違いを、突き合わせより先に設定不一致として報告する（両方向・片側が0の場合も含む）（要件6.2, 6.3、タスク7.1）", () =>
+        {
+            // 長さ以外は必ず差分が出る入力にしておく。判定値だけでなく Entries が空であることまで
+            // 照合することで、内部で突き合わせつつ判定値だけ差し替える実装を検出する
+            // （tasks.md Implementation Notes: タスク2.2のレビュー教訓）。
+            var expectedEntries = new List<GoldenEntry>
+            {
+                new GoldenEntry("keep.bin", GoldenEntryKind.File, 10L),
+                new GoldenEntry("size.bin", GoldenEntryKind.File, 100L),
+                new GoldenEntry("only-expected.bin", GoldenEntryKind.File, 5L),
+            };
+            var actualEntries = new List<GoldenEntry>
+            {
+                new GoldenEntry("keep.bin", GoldenEntryKind.File, 10L),
+                new GoldenEntry("size.bin", GoldenEntryKind.File, 200L),
+                new GoldenEntry("only-actual.bin", GoldenEntryKind.File, 7L),
+            };
+
+            var comparer = new BaselineComparer();
+
+            // 前提: 長さが等しければ、この入力は差分ありとして3件の明細が出る。
+            var sameLength = comparer.Compare(
+                BuildComparerDocument(false, expectedEntries, baseFolderPathLength: 80),
+                BuildComparerDocument(false, actualEntries, baseFolderPathLength: 80));
+            SelfAssert.That(
+                sameLength.Verdict == BaselineVerdict.Different,
+                $"長さの等しい入力が差分ありと判定されません（実際: {sameLength.Verdict}）。この検証の前提が崩れています。");
+            SelfAssert.That(
+                sameLength.Entries.Count == 3,
+                $"長さの等しい入力の差分件数が3件ではありません（実際: {sameLength.Entries.Count} 件）。この検証の前提が崩れています。");
+
+            foreach (var pair in new[] { (Expected: 80, Actual: 104), (Expected: 104, Actual: 80), (Expected: 0, Actual: 80), (Expected: 80, Actual: 0) })
+            {
+                var report = comparer.Compare(
+                    BuildComparerDocument(false, expectedEntries, baseFolderPathLength: pair.Expected),
+                    BuildComparerDocument(false, actualEntries, baseFolderPathLength: pair.Actual));
+
+                SelfAssert.That(
+                    report.Verdict == BaselineVerdict.SettingsMismatch,
+                    $"実効絶対パス長が期待値{pair.Expected}・実測{pair.Actual}で食い違うのに設定不一致と判定されません（実際: {report.Verdict}）。");
+                SelfAssert.That(
+                    report.Entries.Count == 0,
+                    $"実効絶対パス長が期待値{pair.Expected}・実測{pair.Actual}で食い違うのに、エントリの突き合わせが行われています（差分 {report.Entries.Count} 件）。");
+            }
+        });
+
+        runner.Add("BaselineComparer が実効絶対パス長の等しい入力では従来どおり判定まで進む（一致・差分ありの双方、固定値以外の長さでも）（要件6.3、タスク7.1）", () =>
+        {
+            var entries = new List<GoldenEntry>
+            {
+                new GoldenEntry("keep.bin", GoldenEntryKind.File, 10L),
+                new GoldenEntry("size.bin", GoldenEntryKind.File, 100L),
+            };
+            var changedEntries = new List<GoldenEntry>
+            {
+                new GoldenEntry("keep.bin", GoldenEntryKind.File, 10L),
+                new GoldenEntry("size.bin", GoldenEntryKind.File, 200L),
+            };
+
+            var comparer = new BaselineComparer();
+
+            // 固定値（80）以外の長さでも、双方が等しければ照合を通過して判定まで進む。
+            var match = comparer.Compare(
+                BuildComparerDocument(false, entries, baseFolderPathLength: 104),
+                BuildComparerDocument(false, entries, baseFolderPathLength: 104));
+            SelfAssert.That(
+                match.Verdict == BaselineVerdict.Match,
+                $"実効絶対パス長の等しい同一内容の入力が一致と判定されません（実際: {match.Verdict}）。");
+
+            var different = comparer.Compare(
+                BuildComparerDocument(false, entries, baseFolderPathLength: 104),
+                BuildComparerDocument(false, changedEntries, baseFolderPathLength: 104));
+            SelfAssert.That(
+                different.Verdict == BaselineVerdict.Different,
+                $"実効絶対パス長の等しい入力の差分が判定まで進みません（実際: {different.Verdict}）。");
+            AssertContainsDiff(different, DiffKind.SizeMismatch, "size.bin", "100", "200");
+        });
+
+        runner.Add("generate が --root なしのとき既定の基準フォルダの実効絶対パス長が80文字になり、期待値に形式バージョン2と BaseFolderPathLength: 80 が記録され、パスそのものは記録されない（要件2.3、タスク7.1）", () =>
+        {
+            string goldenPath = CreateTempCliGoldenFilePath();
+            var entriesBefore = SnapshotTempGbEntries();
+
+            try
+            {
+                var result = RunGoldenBaselineProcess("generate", "--out", goldenPath);
+                SelfAssert.That(
+                    result.ExitCode == 0,
+                    $"generate（--root なし）の終了コードが0ではありません（実際: {result.ExitCode}）。標準出力: {result.StdOut} 標準エラー: {result.StdErr}");
+
+                string reportedRoot = ExtractReportedBaseFolder(result.StdOut);
+                int effectiveLength = Path.GetFullPath(reportedRoot).Length;
+                SelfAssert.That(
+                    effectiveLength == 80,
+                    $"generate が使った既定の基準フォルダの実効絶対パス長が80文字ではありません（実際: {effectiveLength}文字、パス: {reportedRoot}）。");
+
+                string text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetString(File.ReadAllBytes(goldenPath));
+                SelfAssert.That(
+                    CountOccurrences(text, "# FormatVersion: 2\n") == 1,
+                    $"期待値ファイルに '# FormatVersion: 2' の行がちょうど1行ありません。");
+                SelfAssert.That(
+                    CountOccurrences(text, "# BaseFolderPathLength: 80\n") == 1,
+                    $"期待値ファイルに '# BaseFolderPathLength: 80' の行がちょうど1行ありません。");
+
+                // パスそのもの（環境差・ユーザー名を持ち込む情報）は記録しない。
+                SelfAssert.That(
+                    !text.Contains(reportedRoot),
+                    "期待値ファイルに基準フォルダの絶対パスが記録されています。");
+                SelfAssert.That(
+                    !text.Contains(Path.GetFileName(reportedRoot)),
+                    "期待値ファイルに基準フォルダの名前が記録されています。");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                AssertNoNewTempGbEntries("generate（--root なし）", entriesBefore);
+            }
+        });
+
+        runner.Add("置き場の異なる2つの基準フォルダ（どちらも実効絶対パス長80文字）で generate した期待値が、生成日時の行を除いてバイト単位で一致する（要件2.3, 7.1、タスク7.1）", () =>
+        {
+            string defaultRootGoldenPath = CreateTempCliGoldenFilePath();
+            string altRootGoldenPath = CreateTempCliGoldenFilePath();
+            var entriesBefore = SnapshotTempGbEntries();
+
+            // %TEMP% 直下ではない別の置き場を用意し、そこに実効80文字の基準フォルダを組み立てる。
+            // 長さの調整はこの検証コード自身が Path.GetFullPath で行い、本番実装には依存しない。
+            string altPlacement = Path.Combine(Path.GetTempPath(), "gb_alt_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            string altRoot = BuildRootWithEffectiveLength(altPlacement, 80);
+
+            try
+            {
+                Directory.CreateDirectory(altPlacement);
+
+                var defaultResult = RunGoldenBaselineProcess("generate", "--out", defaultRootGoldenPath);
+                SelfAssert.That(
+                    defaultResult.ExitCode == 0,
+                    $"generate（既定の基準フォルダ）の終了コードが0ではありません（実際: {defaultResult.ExitCode}）。標準エラー: {defaultResult.StdErr}");
+
+                var altResult = RunGoldenBaselineProcess("generate", "--out", altRootGoldenPath, "--root", altRoot);
+                SelfAssert.That(
+                    altResult.ExitCode == 0,
+                    $"generate（別の置き場の基準フォルダ）の終了コードが0ではありません（実際: {altResult.ExitCode}）。標準エラー: {altResult.StdErr}");
+
+                string defaultReportedRoot = ExtractReportedBaseFolder(defaultResult.StdOut);
+                SelfAssert.That(
+                    !string.Equals(
+                        Path.GetDirectoryName(Path.GetFullPath(defaultReportedRoot)),
+                        Path.GetDirectoryName(Path.GetFullPath(altRoot)),
+                        StringComparison.OrdinalIgnoreCase),
+                    "2回の generate が同じ置き場の基準フォルダを使っており、置き場の違いを確かめられていません。");
+
+                byte[] defaultBytes = File.ReadAllBytes(defaultRootGoldenPath);
+                byte[] altBytes = File.ReadAllBytes(altRootGoldenPath);
+
+                var defaultFiltered = ExcludeGeneratedAtLine(defaultBytes);
+                var altFiltered = ExcludeGeneratedAtLine(altBytes);
+
+                SelfAssert.That(defaultFiltered.GeneratedAtLineCount == 1, $"既定の置き場の期待値から除外した生成日時の行が1行ではありません（実際: {defaultFiltered.GeneratedAtLineCount} 行）。");
+                SelfAssert.That(altFiltered.GeneratedAtLineCount == 1, $"別の置き場の期待値から除外した生成日時の行が1行ではありません（実際: {altFiltered.GeneratedAtLineCount} 行）。");
+                SelfAssert.That(defaultFiltered.EntryLineCount > 0, "既定の置き場の期待値にエントリ行がありません。");
+                SelfAssert.That(
+                    defaultFiltered.FilteredBytes.SequenceEqual(altFiltered.FilteredBytes),
+                    "置き場の異なる2つの基準フォルダ（どちらも実効80文字）で生成した期待値が、生成日時の行を除いてバイト単位で一致しません。" +
+                    $"（既定の置き場: {defaultFiltered.EntryLineCount} エントリ / 別の置き場: {altFiltered.EntryLineCount} エントリ）");
+            }
+            finally
+            {
+                DeleteIfExists(defaultRootGoldenPath);
+                DeleteIfExists(altRootGoldenPath);
+                ForceCleanupFixtureResidue(altRoot);
+                if (Directory.Exists(altPlacement))
+                {
+                    Directory.Delete(altPlacement, recursive: true);
+                }
+
+                AssertNoNewTempGbEntries("置き場を変えた generate", entriesBefore);
+            }
+        });
+
+        runner.Add("実効絶対パス長だけが異なる期待値との compare が設定不一致として終了コード2を返し、エントリの突き合わせを行わない（長さが同じなら一致する）（要件6.2, 6.3, 4.7、タスク7.1）", () =>
+        {
+            string goldenPath = CreateTempCliGoldenFilePath();
+            string tamperedPath = CreateTempCliGoldenFilePath();
+            var entriesBefore = SnapshotTempGbEntries();
+
+            try
+            {
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath);
+                SelfAssert.That(
+                    genResult.ExitCode == 0,
+                    $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
+
+                // 対比: 長さが同じ（どちらも既定の基準フォルダ = 実効80文字）なら判定まで進み、一致になる。
+                var matchResult = RunGoldenBaselineProcess("compare", "--golden", goldenPath);
+                SelfAssert.That(
+                    matchResult.ExitCode == 0,
+                    $"長さの等しい compare の終了コードが0ではありません（実際: {matchResult.ExitCode}）。標準出力: {matchResult.StdOut} 標準エラー: {matchResult.StdErr}");
+                SelfAssert.That(
+                    matchResult.StdOut.Contains("判定: 一致"),
+                    $"長さの等しい compare の標準出力に一致の判定が含まれません: {matchResult.StdOut}");
+
+                // 期待値の実効絶対パス長だけを書き換える（エントリには一切手を触れない）。
+                var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+                string original = utf8.GetString(File.ReadAllBytes(goldenPath));
+                string tampered = ReplaceGoldenHeaderValue(original, "BaseFolderPathLength", "104");
+                File.WriteAllBytes(tamperedPath, utf8.GetBytes(tampered));
+
+                var mismatchResult = RunGoldenBaselineProcess("compare", "--golden", tamperedPath);
+                SelfAssert.That(
+                    mismatchResult.ExitCode == 2,
+                    $"実効絶対パス長の異なる compare の終了コードが2ではありません（実際: {mismatchResult.ExitCode}）。標準出力: {mismatchResult.StdOut} 標準エラー: {mismatchResult.StdErr}");
+                SelfAssert.That(
+                    mismatchResult.StdOut.Contains("設定不一致"),
+                    $"実効絶対パス長の異なる compare の標準出力に設定不一致の判定が含まれません: {mismatchResult.StdOut}");
+
+                // 判定値だけでなく、実際にエントリの突き合わせが行われていないことまで確認する。
+                foreach (var forbidden in new[] { "判定: 差分あり", "SizeMismatch", "Missing", "Unexpected", "KindMismatch" })
+                {
+                    SelfAssert.That(
+                        !mismatchResult.StdOut.Contains(forbidden),
+                        $"設定不一致にもかかわらず '{forbidden}' が出力されています: {mismatchResult.StdOut}");
+                }
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                DeleteIfExists(tamperedPath);
+                AssertNoNewTempGbEntries("長さの異なる期待値との compare", entriesBefore);
+            }
+        });
+
+        runner.Add("--root を明示して実効絶対パス長が固定値（80文字）以外の基準フォルダで generate すると、期待値にその実測値が記録され、既定の基準フォルダとの compare が設定不一致で止まる（要件6.2, 6.3, 7.1、タスク7.1）", () =>
+        {
+            // この検証の要点は「ヘッダに記録される値が、実際に使った基準フォルダの実測値であること」。
+            // --root を明示したときは長さを強制しない仕様なので、固定値（80）を書き込むだけの実装だと
+            // 長さの違う環境との比較が設定不一致で止まらず、黙って差分ありや一致と誤判定してしまう
+            // （research.md の Rationale「記録と照合を併せることで、長さを固定し損ねたときに黙って
+            // 差分ありと誤判定せず、設定不一致として止まる」）。既定の基準フォルダも、検証側が自前で
+            // 80文字に作った --root も、どちらも実効80文字なので固定値との区別がつかない。
+            // そのため、ここでは固定値と必ず異なる長さの --root を使う。
+            //
+            // 長さは固定値より短い側から選ぶ。走査結果が同じになる範囲は実測で56〜104文字だが、
+            // 長い側を選ぶと（将来その範囲が変わったときに）走査結果そのものが変わり、
+            // 設定不一致で止まった理由が「長さの記録違い」なのか「走査結果の違い」なのか混ざるため。
+            // 値は70。60だと、この環境では最短の基準フォルダが59文字のため余裕が1文字しかなく、
+            // ユーザー名が1文字長い環境で検証自体が組み立てられなくなる（レビュー指摘）。
+            const int ShortRootLength = 70;
+
+            string shortRootGoldenPath = CreateTempCliGoldenFilePath();
+            var entriesBefore = SnapshotTempGbEntries();
+
+            // 長さの調整はこの検証コード自身が Path.GetFullPath で行い、本番実装には依存しない。
+            string shortRoot = BuildRootWithEffectiveLength(Path.GetTempPath(), ShortRootLength);
+            string anotherShortRoot = BuildRootWithEffectiveLength(Path.GetTempPath(), ShortRootLength);
+
+            // --root には、同じ場所を指しつつ正規化で消える冗長な表記（<フォルダ>\..）を含む綴りを渡す。
+            // 文字列そのままの長さと正規化後の長さが必ず食い違うため、記録される値が
+            // 「Path.GetFullPath を通した後の文字数」で測られているかどうかまで判別できる
+            // （タスク7.1「8.3短縮名が展開されて長さが変わるため」と同じ性質を、環境に依存せず再現する）。
+            string redundantSpelling = BuildRedundantSpelling(shortRoot);
+
+            try
+            {
+                // 前提: 用意した --root の実効絶対パス長が、固定値（80）と実際に異なること。
+                int measuredShortLength = Path.GetFullPath(shortRoot).Length;
+                SelfAssert.That(
+                    measuredShortLength == ShortRootLength,
+                    $"検証用の基準フォルダの実効絶対パス長が{ShortRootLength}文字ではありません（実際: {measuredShortLength}文字、パス: {shortRoot}）。この検証の前提が崩れています。");
+                SelfAssert.That(
+                    measuredShortLength != Program.FixedBaseFolderPathLength,
+                    $"検証用の基準フォルダの実効絶対パス長が固定値（{Program.FixedBaseFolderPathLength}文字）と同じです。固定値を書き込むだけの実装と区別できません。");
+
+                // 前提: 冗長な表記が同じ場所を指し、かつ文字列の長さが正規化後と食い違うこと（測り方を判別できる入力であること）。
+                SelfAssert.That(
+                    string.Equals(Path.GetFullPath(redundantSpelling), Path.GetFullPath(shortRoot), StringComparison.OrdinalIgnoreCase),
+                    $"冗長な表記が同じ基準フォルダを指していません（冗長表記: {redundantSpelling}、実体: {shortRoot}）。この検証の前提が崩れています。");
+                SelfAssert.That(
+                    redundantSpelling.Length != ShortRootLength,
+                    $"冗長な表記の文字列の長さが正規化後の長さ（{ShortRootLength}文字）と一致しています（測り方を判別できない入力です）: {redundantSpelling}");
+
+                var genResult = RunGoldenBaselineProcess("generate", "--out", shortRootGoldenPath, "--root", redundantSpelling);
+                SelfAssert.That(
+                    genResult.ExitCode == 0,
+                    $"固定値以外の長さの --root を指定した generate の終了コードが0ではありません（実際: {genResult.ExitCode}）。標準出力: {genResult.StdOut} 標準エラー: {genResult.StdErr}");
+
+                // 実際に使われた基準フォルダが、指定したものと同じ（＝長さを強制されていない）こと。
+                string reportedRoot = ExtractReportedBaseFolder(genResult.StdOut);
+                SelfAssert.That(
+                    Path.GetFullPath(reportedRoot).Length == ShortRootLength,
+                    $"generate が使った基準フォルダの実効絶対パス長が{ShortRootLength}文字ではありません（実際: {Path.GetFullPath(reportedRoot).Length}文字、パス: {reportedRoot}）。--root の長さが強制されています。");
+
+                // (a) 記録された値が、その --root の実測値であること。固定値でも、他の値の取り違えでもないこと。
+                string text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetString(File.ReadAllBytes(shortRootGoldenPath));
+                SelfAssert.That(
+                    CountOccurrences(text, $"# BaseFolderPathLength: {ShortRootLength}\n") == 1,
+                    $"期待値ファイルに '# BaseFolderPathLength: {ShortRootLength}'（実際に使った基準フォルダの実測値）の行がちょうど1行ありません。" +
+                    $"記録されているヘッダ: {ExtractGoldenHeaderValue(text, "BaseFolderPathLength")}");
+                SelfAssert.That(
+                    CountOccurrences(text, $"# BaseFolderPathLength: {Program.FixedBaseFolderPathLength}\n") == 0,
+                    $"期待値ファイルに固定値（{Program.FixedBaseFolderPathLength}文字）が記録されています。実際に使った基準フォルダは{ShortRootLength}文字です。");
+                SelfAssert.That(
+                    CountOccurrences(text, $"# BaseFolderPathLength: {redundantSpelling.Length}\n") == 0,
+                    $"期待値ファイルに --root の文字列そのままの長さ（{redundantSpelling.Length}文字）が記録されています。Path.GetFullPath を通した後の文字数で測られていません。");
+
+                // (b) その期待値と、既定の基準フォルダ（実効80文字）との compare が設定不一致で止まること。
+                // 長さを記録し損ねていると、この比較が設定不一致にならず、黙って一致や差分ありと誤判定される。
+                var mismatchResult = RunGoldenBaselineProcess("compare", "--golden", shortRootGoldenPath);
+                SelfAssert.That(
+                    mismatchResult.ExitCode == 2,
+                    $"長さの異なる基準フォルダで作った期待値との compare の終了コードが2ではありません（実際: {mismatchResult.ExitCode}）。" +
+                    $"標準出力: {mismatchResult.StdOut} 標準エラー: {mismatchResult.StdErr}");
+                SelfAssert.That(
+                    mismatchResult.StdOut.Contains("設定不一致"),
+                    $"長さの異なる基準フォルダで作った期待値との compare の標準出力に設定不一致の判定が含まれません: {mismatchResult.StdOut}");
+
+                // 判定値だけでなく、実際に差分明細が出ていないこと（＝突き合わせが行われていないこと）まで確認する。
+                foreach (var forbidden in new[] { "判定: 差分あり", "判定: 一致", "SizeMismatch", "Missing", "Unexpected", "KindMismatch" })
+                {
+                    SelfAssert.That(
+                        !mismatchResult.StdOut.Contains(forbidden),
+                        $"設定不一致にもかかわらず '{forbidden}' が出力されています: {mismatchResult.StdOut}");
+                }
+
+                // 対比: 同じ長さ（実効70文字）の別の基準フォルダとなら、照合を通過して一致まで進む。
+                // これにより (b) の設定不一致が「長さの違い」だけを理由にしていることを確かめる。
+                var matchResult = RunGoldenBaselineProcess("compare", "--golden", shortRootGoldenPath, "--root", anotherShortRoot);
+                SelfAssert.That(
+                    matchResult.ExitCode == 0,
+                    $"同じ長さ（{ShortRootLength}文字）の別の基準フォルダとの compare の終了コードが0ではありません（実際: {matchResult.ExitCode}）。" +
+                    $"標準出力: {matchResult.StdOut} 標準エラー: {matchResult.StdErr}");
+                SelfAssert.That(
+                    matchResult.StdOut.Contains("判定: 一致"),
+                    $"同じ長さ（{ShortRootLength}文字）の別の基準フォルダとの compare の標準出力に一致の判定が含まれません: {matchResult.StdOut}");
+            }
+            finally
+            {
+                DeleteIfExists(shortRootGoldenPath);
+                ForceCleanupFixtureResidue(shortRoot);
+                ForceCleanupFixtureResidue(anotherShortRoot);
+                AssertNoNewTempGbEntries("固定値以外の長さの --root での generate と compare", entriesBefore);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 与えられたパスと同じ場所を指しつつ、正規化で消える冗長な表記（&lt;実在しないフォルダ&gt;\..）を
+    /// 途中に挟んだ綴りを組み立てる。文字列そのままの長さと正規化後の長さを必ず食い違わせるためのヘルパー。
+    /// 挟むフォルダは正規化の時点で消えるため、実際に作成されることはない。
+    /// </summary>
+    private static string BuildRedundantSpelling(string path)
+    {
+        string parent = Path.GetDirectoryName(path) ?? throw new InvalidOperationException($"親フォルダを取り出せないパスです: {path}");
+        string name = Path.GetFileName(path);
+
+        return Path.Combine(parent, "gb_red_" + Guid.NewGuid().ToString("N").Substring(0, 8), "..", name);
+    }
+
+    /// <summary>
+    /// 期待値テキストのヘッダ項目「# キー: 値」の値を取り出す。失敗のメッセージで実際の記録内容を示すために使う。
+    /// 該当行がなければ、その旨を表す文字列を返す（この関数自体は検証を失敗させない）。
+    /// </summary>
+    private static string ExtractGoldenHeaderValue(string text, string key)
+    {
+        string prefix = "# " + key + ": ";
+
+        var values = text
+            .Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .Where(line => line.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(line => line.Substring(prefix.Length))
+            .ToList();
+
+        return values.Count == 0 ? $"（'{key}' の行がありません）" : string.Join(" / ", values);
+    }
+
+    /// <summary>
+    /// 標準出力の「基準フォルダ: &lt;パス&gt;」の行から、実際に使われた基準フォルダのパスを取り出す。
+    /// 行が1行だけ存在することまで確かめ、取り違えを防ぐ。
+    /// </summary>
+    private static string ExtractReportedBaseFolder(string stdOut)
+    {
+        const string Marker = "基準フォルダ: ";
+
+        var values = stdOut
+            .Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .Where(line => line.StartsWith(Marker, StringComparison.Ordinal))
+            .Select(line => line.Substring(Marker.Length))
+            .ToList();
+
+        SelfAssert.That(
+            values.Count == 1,
+            $"標準出力に '基準フォルダ: ' の行がちょうど1行ありません（実際: {values.Count} 行）。標準出力: {stdOut}");
+        SelfAssert.That(
+            !string.IsNullOrWhiteSpace(values[0]),
+            $"標準出力の '基準フォルダ: ' の値が空です。標準出力: {stdOut}");
+
+        return values[0];
+    }
+
+    /// <summary>
+    /// 指定した置き場の下に、実効絶対パス長（Path.GetFullPath 後の文字数）がちょうど targetLength になる
+    /// 基準フォルダのパスを組み立てる。検証側で独立に長さを調整するためのヘルパーであり、
+    /// 本番実装（Program.BuildDefaultRoot）には依存しない。フォルダ自体はまだ作成しない。
+    /// </summary>
+    private static string BuildRootWithEffectiveLength(string placementDirectory, int targetLength)
+    {
+        string probe = Path.Combine(placementDirectory, "gb_fix_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        int padding = targetLength - Path.GetFullPath(probe).Length;
+
+        SelfAssert.That(
+            padding >= 0,
+            $"置き場 '{placementDirectory}' では実効絶対パス長を{targetLength}文字に収められません（最短 {Path.GetFullPath(probe).Length} 文字）。");
+
+        string root = probe + new string('x', padding);
+        SelfAssert.That(
+            Path.GetFullPath(root).Length == targetLength,
+            $"検証用の基準フォルダの実効絶対パス長が{targetLength}文字になりません（実際: {Path.GetFullPath(root).Length} 文字）。");
+
+        return root;
+    }
+
+    /// <summary>
+    /// 期待値テキストのヘッダ項目「# キー: 値」の値だけを差し替える。該当行がちょうど1行あることを確かめる。
+    /// </summary>
+    private static string ReplaceGoldenHeaderValue(string text, string key, string newValue)
+    {
+        string prefix = "# " + key + ": ";
+        string[] lines = text.Split('\n');
+        int replaced = 0;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].StartsWith(prefix, StringComparison.Ordinal))
+            {
+                lines[i] = prefix + newValue;
+                replaced++;
+            }
+        }
+
+        SelfAssert.That(
+            replaced == 1,
+            $"期待値テキストのヘッダ項目 '{key}' の行がちょうど1行見つかりませんでした（実際: {replaced} 行）。");
+
+        return string.Join("\n", lines);
     }
 
     /// <summary>

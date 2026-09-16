@@ -51,7 +51,7 @@
 
 - `FolderInfo` の構造変更、または `Scanner.RunScan` のシグネチャ変更（`scan-performance` で発生見込み）
 - 走査対象の実行基盤の変更（`dotnet10-migration` での TFM 変更、およびアクセス制御 API の変更）
-- 期待値データのファイル形式の変更。既存の期待値ファイルが読めなくなるため、形式バージョンの更新と再生成が必要
+- 期待値データのファイル形式の変更。既存の期待値ファイルが読めなくなるため、形式バージョンの更新と再生成が必要（2026-09-16: 基準フォルダの実効絶対パス長を記録するため形式バージョンを 2 へ上げる。期待値の作り直しはタスク7.3で行う）
 - 既知の不具合が修正され、観測結果が変化したとき（`scan-correctness` で発生見込み）
 
 ## Architecture
@@ -260,7 +260,7 @@ public sealed class GoldenEntry
 
 public sealed class GoldenHeader
 {
-    public int FormatVersion { get; }
+    public int FormatVersion { get; }           // 現行は 2。基準フォルダの実効絶対パス長の追加で 1 から上げた
     public string BaseFolderLabel { get; }      // 実パスではなく論理名。環境差を持ち込まない
     public int BaseFolderPathLength { get; }    // 基準フォルダの実効絶対パス長（文字数）。パスそのものは記録しない
     public DateTimeOffset GeneratedAt { get; }
