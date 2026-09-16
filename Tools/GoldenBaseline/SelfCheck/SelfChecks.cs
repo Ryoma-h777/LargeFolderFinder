@@ -3575,8 +3575,13 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("コミット済みの期待値 baselines/fixture-v1.golden.txt に、文字数境界を超える項目（日本語を含む長いパスのフォルダ・ファイルを含む）が現行版の挙動どおり記録されておらず、その記録から KnownIssueAnalyzer が根拠 LongPath とともに列挙する（要件5.1, 5.2、タスク6.3）", () =>
+        runner.Add("コミット済みの期待値 baselines/fixture-v1.golden.txt が形式バージョン2・基準フォルダの実効絶対パス長80文字で記録されており、そこに文字数境界を超える項目（日本語を含む長いパスのフォルダ・ファイルを含む）が現行版の挙動どおり記録されておらず、その記録から KnownIssueAnalyzer が根拠 LongPath とともに列挙する（要件2.3, 5.1, 5.2, 7.1、タスク6.3, 7.3）", () =>
         {
+            // 期待値の内容は基準フォルダの長さに左右されるため、コミット済みの期待値が「固定した長さ」で
+            // 生成されていることまで照合する。ここが固定値でなければ、以下の欠落の照合は環境によって結論が変わる。
+            const int ExpectedFormatVersion = 2;
+            const int ExpectedBaseFolderPathLength = 80;
+
             var spec = FixtureSpec.Standard;
 
             string? goldenPath = FindCommittedGoldenFile(spec.Name);
@@ -3585,7 +3590,29 @@ internal static class SelfChecks
                 $"コミット済みの期待値 'baselines\\{spec.Name}.golden.txt' を、実行ファイルの位置（{AppDomain.CurrentDomain.BaseDirectory}）から親方向に辿って見つけられませんでした。");
 
             // 読み取りのみ。コミット済みのファイルは書き換えない。
-            var document = ReadCommittedGoldenAsCurrentFormat(goldenPath!);
+            // タスク7.3で形式バージョン2の期待値へ作り直したため、通常の読み取り経路でそのまま読む。
+            var document = new GoldenSerializer().Read(goldenPath!);
+
+            // 生のテキストでも照合する。読み取り経路は未知のバージョンを拒否するが、記録された値そのものが
+            // 固定値であることは、読み取り後の値と生のテキストの双方で見ておく（環境非依存であることの記録）。
+            string goldenText = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetString(File.ReadAllBytes(goldenPath!));
+            SelfAssert.That(
+                CountOccurrences(goldenText, $"# FormatVersion: {ExpectedFormatVersion}\n") == 1,
+                $"コミット済みの期待値に '# FormatVersion: {ExpectedFormatVersion}' の行がちょうど1行ありません（形式バージョン{ExpectedFormatVersion}へ作り直されていません）。");
+            SelfAssert.That(
+                document.Header.FormatVersion == ExpectedFormatVersion,
+                $"コミット済みの期待値の形式バージョンが{ExpectedFormatVersion}ではありません（実際: {document.Header.FormatVersion}）。");
+            SelfAssert.That(
+                CountOccurrences(goldenText, $"# BaseFolderPathLength: {ExpectedBaseFolderPathLength}\n") == 1,
+                $"コミット済みの期待値に '# BaseFolderPathLength: {ExpectedBaseFolderPathLength}' の行がちょうど1行ありません（固定した長さの基準フォルダで生成されていません）。");
+            SelfAssert.That(
+                document.Header.BaseFolderPathLength == ExpectedBaseFolderPathLength,
+                $"コミット済みの期待値の基準フォルダの実効絶対パス長が固定値と一致しません（期待値: {document.Header.BaseFolderPathLength}文字、固定値: {ExpectedBaseFolderPathLength}文字）。");
+            // 固定値そのものが実装（generate の既定の基準フォルダ）と食い違っていれば、期待値は作り直しが必要になる。
+            SelfAssert.That(
+                Program.FixedBaseFolderPathLength == ExpectedBaseFolderPathLength,
+                $"generate が固定する基準フォルダの実効絶対パス長（{Program.FixedBaseFolderPathLength}文字）が、コミット済みの期待値の前提（{ExpectedBaseFolderPathLength}文字）と一致しません（期待値の作り直しが必要です）。");
+
             SelfAssert.That(
                 document.Header.BaseFolderLabel == spec.Name,
                 $"期待値の基準の論理名が定義と一致しません（期待値: {document.Header.BaseFolderLabel}、定義: {spec.Name}）。");
@@ -3647,46 +3674,6 @@ internal static class SelfChecks
                     $"{kindLabel} '{item.RelativePath}' の既知の欠落の根拠が LongPath ではありません（実際: {trait}）。");
             }
         });
-    }
-
-    /// <summary>
-    /// コミット済みの期待値を、現在の形式（バージョン2）として読み込む。
-    /// コミット済みの期待値はまだ形式バージョン1（タスク7.1 より前の形式）のままで、ヘッダに
-    /// BaseFolderPathLength を持たないため、そのままでは「未知のバージョン」として読めない。
-    /// この検証が見ているのは「どの項目が記録されているか」であって形式バージョンではないため、
-    /// 一時コピーの上でヘッダだけを現在の形式へ読み替えて読み込む（コミット済みのファイルは書き換えない）。
-    /// <para>
-    /// この読み替えはタスク7.3（期待値の作り直し）までの一時的な橋渡しである。作り直されて形式バージョンが
-    /// 2 になると、下の「形式バージョン1であること」の照合が失敗するため、この読み替えは必ず取り除かれる。
-    /// </para>
-    /// </summary>
-    private static GoldenDocument ReadCommittedGoldenAsCurrentFormat(string goldenPath)
-    {
-        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        string text = utf8.GetString(File.ReadAllBytes(goldenPath));
-
-        SelfAssert.That(
-            CountOccurrences(text, "# FormatVersion: 1\n") == 1,
-            "コミット済みの期待値が形式バージョン1ではありません。タスク7.3で形式バージョン2の期待値へ作り直された場合は、" +
-            "この読み替え（ReadCommittedGoldenAsCurrentFormat）を取り除き、GoldenSerializer で直接読むこと。");
-        SelfAssert.That(
-            !text.Contains("# BaseFolderPathLength: "),
-            "コミット済みの期待値に既に BaseFolderPathLength が記録されています。作り直し済みであれば読み替えを取り除くこと。");
-
-        // 形式バージョンを2へ読み替え、必須になった BaseFolderPathLength を補う。
-        // この検証は長さを参照しないため、値は「記録がない」ことを表す0とする。
-        string upgraded = text.Replace("# FormatVersion: 1\n", "# FormatVersion: 2\n# BaseFolderPathLength: 0\n");
-
-        string tempPath = CreateTempGoldenFilePath();
-        try
-        {
-            File.WriteAllBytes(tempPath, utf8.GetBytes(upgraded));
-            return new GoldenSerializer().Read(tempPath);
-        }
-        finally
-        {
-            DeleteIfExists(tempPath);
-        }
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
-# FormatVersion: 1
+# FormatVersion: 2
 # BaseFolderLabel: fixture-v1
-# GeneratedAt: 2026-09-15T12:53:07.3421950+00:00
+# BaseFolderPathLength: 80
+# GeneratedAt: 2026-09-16T04:16:00.3031563+00:00
 # UsePhysicalSize: false
 # ClusterSizeInBytes: 0
 # FixtureComplete: true
