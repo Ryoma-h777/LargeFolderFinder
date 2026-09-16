@@ -48,6 +48,7 @@ internal static class SelfChecks
         RegisterProgramChecks(runner);
         RegisterIncompleteFixtureRecordChecks(runner);
         RegisterBaseFolderPathLengthChecks(runner);
+        RegisterPathLengthBoundaryChecks(runner);
     }
 
     /// <summary>
@@ -2011,7 +2012,7 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("FixtureSpec.Standard が248文字を超えるフォルダを実際の文字数として持つ（要件3.1、ディレクトリ境界248文字）", () =>
+        runner.Add("FixtureSpec.Standard が相対パス248文字を超えるフォルダを実際の文字数として持つ（要件3.1。248はフィクスチャ設計上の長さであり、走査の境界は「親フォルダの絶対パスが258文字以上」の1つだけ）", () =>
         {
             var spec = FixtureSpec.Standard;
 
@@ -2027,11 +2028,11 @@ internal static class SelfChecks
             {
                 SelfAssert.That(
                     folder.RelativePath.Length > 248,
-                    $"LongPath トレイトを持つフォルダ '{folder.RelativePath}' の実際の文字数（{folder.RelativePath.Length}文字）が、ディレクトリ境界248文字を超えていません。");
+                    $"LongPath トレイトを持つフォルダ '{folder.RelativePath}' の実際の文字数（{folder.RelativePath.Length}文字）が、フィクスチャ設計上の長さ248文字を超えていません。");
             }
         });
 
-        runner.Add("FixtureSpec.Standard が260文字を超えるファイルパスを実際の文字数として持つ（要件3.1、ファイルパス境界260文字）", () =>
+        runner.Add("FixtureSpec.Standard が相対パス260文字を超えるファイルを実際の文字数として持つ（要件3.1。260はフィクスチャ設計上の長さであり、走査の境界は「親フォルダの絶対パスが258文字以上」の1つだけ）", () =>
         {
             var spec = FixtureSpec.Standard;
 
@@ -2045,7 +2046,7 @@ internal static class SelfChecks
             {
                 SelfAssert.That(
                     file.RelativePath.Length > 260,
-                    $"LongPath トレイトを持つファイル '{file.RelativePath}' の実際の文字数（{file.RelativePath.Length}文字）が、ファイルパス境界260文字を超えていません。");
+                    $"LongPath トレイトを持つファイル '{file.RelativePath}' の実際の文字数（{file.RelativePath.Length}文字）が、フィクスチャ設計上の長さ260文字を超えていません。");
             }
         });
 
@@ -2343,17 +2344,19 @@ internal static class SelfChecks
                     }
                 }
 
+                // 248 / 260 はフィクスチャ設計上の長さであり、走査の境界ではない（走査の境界は「親フォルダの絶対パスが258文字以上」）。
                 SelfAssert.That(maxFolderLength > 248, $"検証対象の最長フォルダの相対パスが248文字を超えていません（実際: {maxFolderLength}文字）。");
                 SelfAssert.That(maxFileLength > 260, $"検証対象の最長ファイルの相対パスが260文字を超えていません（実際: {maxFileLength}文字）。");
 
-                // 対比: プレーンなパスでは260文字超のフォルダの実在確認自体ができないことを確認する。
+                // 対比: プレーンなパスでは絶対パス260文字以上のフォルダの実在確認自体ができないことを確認する
+                // （これは生成・参照側の上限であり、走査で項目が欠落する境界とは別の話である）。
                 // これにより、上記の確認が拡張長パス経由でなければ通らない検証であることを保証する。
                 var longFolderItem = FixtureSpec.Standard.Items
                     .First(i => i.Kind == GoldenEntryKind.Folder && i.Traits.Contains(FixtureTrait.LongPath) && i.RelativePath.Length > 248);
                 string plainLongFolderPath = Path.Combine(root, longFolderItem.RelativePath);
                 SelfAssert.That(
                     !Directory.Exists(plainLongFolderPath),
-                    "対比検証: プレーンなパスで248文字超のフォルダが「存在する」と判定されました（拡張長パス経由の確認でなければ意味を持たない検証になっています）。");
+                    "対比検証: プレーンなパスで長いパスのフォルダが「存在する」と判定されました（拡張長パス経由の確認でなければ意味を持たない検証になっています）。");
             }
             finally
             {
@@ -2890,7 +2893,7 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("ScanRunner が走査結果に手を加えず、260文字を超える項目は現行版のまま走査結果に現れない（要件5.1, 5.5）", () =>
+        runner.Add("ScanRunner が走査結果に手を加えず、長いパスの項目は現行版のまま走査結果に現れない（要件5.1, 5.5）", () =>
         {
             string root = CreateTempFixtureRoot();
             var builder = new FixtureBuilder();
@@ -2905,8 +2908,9 @@ internal static class SelfChecks
                 var outcome = scanRunner.Run(root, usePhysicalSize: false);
                 var map = FlattenScanTree(outcome.Root);
 
-                // 境界を超える項目（LongPath トレイト かつ 実際の文字数境界超過）を、FixtureSpec の定義から
+                // 長いパスの項目（LongPath トレイト かつ 実際の相対パスが設計上の長さを超える）を、FixtureSpec の定義から
                 // 機械的に抽出する。手作業の列挙はしない（tasks.md「手作業の注釈に頼らない」の趣旨に合わせる）。
+                // 248 / 260 はフィクスチャ設計上の長さであり、走査の境界ではない。
                 var overBoundaryItems = FixtureSpec.Standard.Items
                     .Where(i => i.Traits.Contains(FixtureTrait.LongPath))
                     .Where(i => (i.Kind == GoldenEntryKind.Folder && i.RelativePath.Length > 248)
@@ -3136,7 +3140,7 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("GoldenProjector が走査結果に手を加えず、260文字を超える項目は射影結果にも現れない（要件5.1）", () =>
+        runner.Add("GoldenProjector が走査結果に手を加えず、長いパスの項目は射影結果にも現れない（要件5.1）", () =>
         {
             string root = CreateTempFixtureRoot();
             var builder = new FixtureBuilder();
@@ -3155,7 +3159,8 @@ internal static class SelfChecks
                 var document = projector.Project(outcome, header);
                 var paths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
 
-                // 境界を超える項目（LongPath トレイト かつ 実際の文字数境界超過）を、FixtureSpec の定義から機械的に抽出する。
+                // 長いパスの項目（LongPath トレイト かつ 実際の相対パスが設計上の長さを超える）を、FixtureSpec の定義から機械的に抽出する。
+                // 248 / 260 はフィクスチャ設計上の長さであり、走査の境界ではない。
                 var overBoundaryItems = FixtureSpec.Standard.Items
                     .Where(i => i.Traits.Contains(FixtureTrait.LongPath))
                     .Where(i => (i.Kind == GoldenEntryKind.Folder && i.RelativePath.Length > 248)
@@ -3253,15 +3258,15 @@ internal static class SelfChecks
 
                 SelfAssert.That(actuallyMissingItems.Count > 0, "検証対象となる欠落項目が見つかりません（走査環境が想定と異なる可能性があります）。");
 
-                // 欠落項目のうち LongPath トレイトを持つものが実在すること（248/260文字境界超過の実測、タスク3.1の教訓に合わせトレイトのラベルだけでなく実体も確認する）。
+                // 欠落項目のうち LongPath トレイトを持つものが実在すること（相対パスの実測値で確認し、タスク3.1の教訓に合わせトレイトのラベルだけでなく実体も見る）。
                 var missingLongPathItems = actuallyMissingItems.Where(i => i.Traits.Contains(FixtureTrait.LongPath)).ToList();
                 SelfAssert.That(missingLongPathItems.Count > 0, "欠落項目の中に LongPath トレイトを持つものが見つかりません。");
                 SelfAssert.That(
                     missingLongPathItems.Any(i => i.Kind == GoldenEntryKind.Folder && i.RelativePath.Length > 248),
-                    "248文字境界を超えるフォルダの欠落が見つかりません。");
+                    "相対パス248文字（フィクスチャ設計上の長さ）を超えるフォルダの欠落が見つかりません。");
                 SelfAssert.That(
                     missingLongPathItems.Any(i => i.Kind == GoldenEntryKind.File && i.RelativePath.Length > 260),
-                    "260文字境界を超えるファイルの欠落が見つかりません。");
+                    "相対パス260文字（フィクスチャ設計上の長さ）を超えるファイルの欠落が見つかりません。");
 
                 var analyzer = new KnownIssueAnalyzer();
                 var findings = analyzer.Analyze(FixtureSpec.Standard, document);
@@ -3434,20 +3439,27 @@ internal static class SelfChecks
         });
     }
 
-    /// <summary>ディレクトリの文字数境界（tasks.md Implementation Notes: 文字数で数える）。</summary>
-    private const int DirectoryCharacterBoundary = 248;
-
-    /// <summary>ファイルパスの文字数境界（tasks.md Implementation Notes: 文字数で数える）。</summary>
-    private const int FilePathCharacterBoundary = 260;
+    /// <summary>
+    /// LongPath トレイトを持つフォルダが備えるべき、フィクスチャ設計上の相対パスの長さ（文字数で数える）。
+    /// 走査で項目が欠落する境界そのものではない。実測（2026-09-16）の境界は「親フォルダの絶対パスが
+    /// 258文字以上だと、その直下を一覧できない」の1つだけで、フォルダとファイルに差はない。
+    /// </summary>
+    private const int LongPathFolderDesignLength = 248;
 
     /// <summary>
-    /// 項目の相対パスが、種別に応じた文字数境界（フォルダ248文字・ファイル260文字）を実際に超えているかを返す。
+    /// LongPath トレイトを持つファイルが備えるべき、フィクスチャ設計上の相対パスの長さ（文字数で数える）。
+    /// フォルダとの値の違いは、この定義がフィクスチャ設計の名残であることによるもので、走査の境界の違いではない。
+    /// </summary>
+    private const int LongPathFileDesignLength = 260;
+
+    /// <summary>
+    /// 項目の相対パスが、種別に応じたフィクスチャ設計上の長さを実際に超えているかを返す。
     /// トレイトのラベルではなく実体（文字数）で判定する（タスク3.1の教訓）。
     /// </summary>
-    private static bool IsOverCharacterBoundary(FixtureItem item)
+    private static bool IsOverLongPathDesignLength(FixtureItem item)
     {
-        return (item.Kind == GoldenEntryKind.Folder && item.RelativePath.Length > DirectoryCharacterBoundary)
-            || (item.Kind == GoldenEntryKind.File && item.RelativePath.Length > FilePathCharacterBoundary);
+        return (item.Kind == GoldenEntryKind.Folder && item.RelativePath.Length > LongPathFolderDesignLength)
+            || (item.Kind == GoldenEntryKind.File && item.RelativePath.Length > LongPathFileDesignLength);
     }
 
     /// <summary>文字列が非ASCII文字（コードポイント127超）を実際に含むかを返す。</summary>
@@ -3465,7 +3477,7 @@ internal static class SelfChecks
     /// </summary>
     private static void RegisterKnownIssueBoundaryChecks(SelfCheckRunner runner)
     {
-        runner.Add("日本語を含む長いパス（フォルダは248文字超・ファイルは260文字超）の項目が、生成されているのに現行版の走査で観測されず、KnownIssueAnalyzer が根拠 LongPath とともに既知の欠落として列挙する（要件3.1, 3.2, 5.1, 5.2、タスク6.3）", () =>
+        runner.Add("日本語を含む長いパス（相対パスがフィクスチャ設計上の長さを超える）の項目が、生成されているのに現行版の走査で観測されず、KnownIssueAnalyzer が根拠 LongPath とともに既知の欠落として列挙する（要件3.1, 3.2, 5.1, 5.2、タスク6.3）", () =>
         {
             var spec = FixtureSpec.Standard;
 
@@ -3478,14 +3490,14 @@ internal static class SelfChecks
             {
                 SelfAssert.That(ContainsNonAscii(item.RelativePath), $"Japanese と LongPath を持つ項目 '{item.RelativePath}' に非ASCII文字が含まれていません。");
                 SelfAssert.That(
-                    IsOverCharacterBoundary(item),
+                    IsOverLongPathDesignLength(item),
                     $"Japanese と LongPath を持つ項目 '{item.RelativePath}'（{item.Kind}、{item.RelativePath.Length}文字）が種別ごとの文字数境界を超えていません。");
             }
 
             var japaneseLongFolders = japaneseLongLabeled.Where(i => i.Kind == GoldenEntryKind.Folder).ToList();
             var japaneseLongFiles = japaneseLongLabeled.Where(i => i.Kind == GoldenEntryKind.File).ToList();
-            SelfAssert.That(japaneseLongFolders.Count >= 1, "日本語を含み248文字を超えるフォルダ（Japanese と LongPath を持つ）が定義に1件もありません。");
-            SelfAssert.That(japaneseLongFiles.Count >= 1, "日本語を含み260文字を超えるファイル（Japanese と LongPath を持つ）が定義に1件もありません。");
+            SelfAssert.That(japaneseLongFolders.Count >= 1, "日本語を含み相対パス248文字（フィクスチャ設計上の長さ）を超えるフォルダ（Japanese と LongPath を持つ）が定義に1件もありません。");
+            SelfAssert.That(japaneseLongFiles.Count >= 1, "日本語を含み相対パス260文字（フィクスチャ設計上の長さ）を超えるファイル（Japanese と LongPath を持つ）が定義に1件もありません。");
 
             string root = CreateTempFixtureRoot();
             var builder = new FixtureBuilder();
@@ -3584,16 +3596,16 @@ internal static class SelfChecks
             var recordedPaths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
 
             var overBoundaryItems = spec.Items
-                .Where(i => i.Traits.Contains(FixtureTrait.LongPath) && IsOverCharacterBoundary(i))
+                .Where(i => i.Traits.Contains(FixtureTrait.LongPath) && IsOverLongPathDesignLength(i))
                 .ToList();
             var japaneseOverBoundaryItems = overBoundaryItems
                 .Where(i => i.Traits.Contains(FixtureTrait.Japanese) && ContainsNonAscii(i.RelativePath))
                 .ToList();
 
-            SelfAssert.That(overBoundaryItems.Any(i => i.Kind == GoldenEntryKind.Folder), "248文字を超えるフォルダ（LongPath）が定義に1件もありません。");
-            SelfAssert.That(overBoundaryItems.Any(i => i.Kind == GoldenEntryKind.File), "260文字を超えるファイル（LongPath）が定義に1件もありません。");
-            SelfAssert.That(japaneseOverBoundaryItems.Any(i => i.Kind == GoldenEntryKind.Folder), "日本語を含み248文字を超えるフォルダ（Japanese と LongPath）が定義に1件もありません。");
-            SelfAssert.That(japaneseOverBoundaryItems.Any(i => i.Kind == GoldenEntryKind.File), "日本語を含み260文字を超えるファイル（Japanese と LongPath）が定義に1件もありません。");
+            SelfAssert.That(overBoundaryItems.Any(i => i.Kind == GoldenEntryKind.Folder), "相対パス248文字（フィクスチャ設計上の長さ）を超えるフォルダ（LongPath）が定義に1件もありません。");
+            SelfAssert.That(overBoundaryItems.Any(i => i.Kind == GoldenEntryKind.File), "相対パス260文字（フィクスチャ設計上の長さ）を超えるファイル（LongPath）が定義に1件もありません。");
+            SelfAssert.That(japaneseOverBoundaryItems.Any(i => i.Kind == GoldenEntryKind.Folder), "日本語を含み相対パス248文字を超えるフォルダ（Japanese と LongPath）が定義に1件もありません。");
+            SelfAssert.That(japaneseOverBoundaryItems.Any(i => i.Kind == GoldenEntryKind.File), "日本語を含み相対パス260文字を超えるファイル（Japanese と LongPath）が定義に1件もありません。");
 
             foreach (var item in overBoundaryItems)
             {
@@ -3608,7 +3620,7 @@ internal static class SelfChecks
                 for (int depth = segments.Length - 1; depth >= 1; depth--)
                 {
                     string ancestor = string.Join("\\", segments, 0, depth);
-                    if (itemsByPath.TryGetValue(ancestor, out var ancestorItem) && !IsOverCharacterBoundary(ancestorItem))
+                    if (itemsByPath.TryGetValue(ancestor, out var ancestorItem) && !IsOverLongPathDesignLength(ancestorItem))
                     {
                         nearestWithinBoundary = ancestor;
                         break;
@@ -5106,6 +5118,664 @@ internal static class SelfChecks
                 AssertNoNewTempGbEntries("固定値以外の長さの --root での generate と compare", entriesBefore);
             }
         });
+    }
+
+
+    /// <summary>
+    /// 基準フォルダの絶対パス長に由来する境界に関する検証項目を登録する（タスク7.2）。
+    /// 実測の境界は「親フォルダの絶対パスが258文字以上だと、その直下を一覧できない」の1つだけであり
+    /// （2026-09-16 実測）、フォルダとファイルに差はない。ここでは次の2点を守る。
+    /// 1. スキップ検出が境界の長さのフォルダで例外を外へ漏らさないこと（要件2.4）
+    /// 2. 既知の不具合では説明できない欠落が、黙って消えずに報告されること（要件5.2, 5.5）
+    /// </summary>
+    private static void RegisterPathLengthBoundaryChecks(SelfCheckRunner runner)
+    {
+        runner.Add("ScanRunner が、絶対パスが258・259・260・261文字ちょうどのフォルダを含む基準フォルダでも例外を外へ漏らさず走査を完了し、長さのせいで列挙できない対象をアクセス拒否によるスキップと取り違えない（要件2.4、タスク7.2）", () =>
+        {
+            var entriesBefore = SnapshotTempGbEntries();
+            string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "gb_len_" + Guid.NewGuid().ToString("N").Substring(0, 8)));
+            string deniedFolder = Path.Combine(root, "denied");
+            var gate = new AccessControlGate();
+            var boundaryFolders = new Dictionary<int, string>();
+
+            try
+            {
+                Directory.CreateDirectory(LongPath.Extend(root));
+
+                // 絶対パスの長さがちょうど目的の値になるフォルダを作る。長さは実効（正規化後）の文字数で数える。
+                foreach (int length in new[] { 258, 259, 260, 261 })
+                {
+                    int nameLength = length - root.Length - 1;
+                    SelfAssert.That(
+                        nameLength >= 1 && nameLength <= 255,
+                        $"基準フォルダ '{root}'（{root.Length}文字）の下に絶対パス{length}文字のフォルダを作れません（必要な名前の長さ: {nameLength}文字）。");
+
+                    string folder = root + "\\" + new string('n', nameLength);
+                    SelfAssert.That(
+                        Path.GetFullPath(folder).Length == length,
+                        $"検証用フォルダの絶対パスが{length}文字になりません（実際: {Path.GetFullPath(folder).Length}文字）。");
+
+                    // 生成は必ず拡張長パス経由で行う（プレーンなパスでは260文字以上を作成できない）。
+                    Directory.CreateDirectory(LongPath.Extend(folder));
+                    SelfAssert.That(Directory.Exists(LongPath.Extend(folder)), $"絶対パス{length}文字のフォルダを作成できませんでした。");
+
+                    // 「列挙できていれば見えるはず」の対比として直下に1件置く。
+                    File.WriteAllText(LongPath.Extend(folder + "\\child.txt"), "x");
+
+                    boundaryFolders[length] = folder;
+                }
+
+                // 下側の対比: 絶対257文字のフォルダは一覧できる（境界が258文字であることを示す）。
+                int enumerableNameLength = 257 - root.Length - 1;
+                SelfAssert.That(
+                    enumerableNameLength >= 1 && enumerableNameLength <= 255,
+                    $"基準フォルダ '{root}'（{root.Length}文字）の下に絶対パス257文字のフォルダを作れません（必要な名前の長さ: {enumerableNameLength}文字）。");
+                string enumerableFolder = root + "\\" + new string('s', enumerableNameLength);
+                SelfAssert.That(
+                    Path.GetFullPath(enumerableFolder).Length == 257,
+                    $"対比用フォルダの絶対パスが257文字になりません（実際: {Path.GetFullPath(enumerableFolder).Length}文字）。");
+                Directory.CreateDirectory(LongPath.Extend(enumerableFolder));
+                File.WriteAllText(LongPath.Extend(enumerableFolder + "\\child.txt"), "x");
+
+                // アクセス拒否によるスキップの対比。長さ由来の失敗と取り違えていないことを示すために同居させる。
+                Directory.CreateDirectory(LongPath.Extend(deniedFolder));
+                gate.DenyRead(deniedFolder);
+
+                var scanRunner = new ScanRunner();
+
+                ScanOutcome outcome;
+                try
+                {
+                    outcome = scanRunner.Run(root, usePhysicalSize: false);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"境界の長さ（258・259・260・261文字）のフォルダを含む基準フォルダの走査で例外が外へ漏れました: {ex.GetType().Name}: {ex.Message}",
+                        ex);
+                }
+
+                // 走査自体は完了している（要件2.4: スキップを記録して継続する）。
+                SelfAssert.That(outcome.Root != null, "走査結果のルートが得られていません。");
+
+                // スキップとして記録されるのはアクセス拒否だけであり、長さのせいで列挙できない対象は含まない。
+                SelfAssert.That(
+                    outcome.SkippedPaths.Count == 1,
+                    $"スキップされた対象がちょうど1件（読み取り拒否フォルダのみ）ではありません（実際: {outcome.SkippedPaths.Count} 件）。実際の内容: {string.Join(" / ", outcome.SkippedPaths)}");
+                SelfAssert.That(
+                    string.Equals(outcome.SkippedPaths[0], deniedFolder, StringComparison.OrdinalIgnoreCase),
+                    $"スキップされた対象が読み取り拒否フォルダではありません（実際: {outcome.SkippedPaths[0]}）。");
+
+                foreach (var pair in boundaryFolders)
+                {
+                    SelfAssert.That(
+                        !outcome.SkippedPaths.Any(p => string.Equals(p, pair.Value, StringComparison.OrdinalIgnoreCase)),
+                        $"絶対パス{pair.Key}文字のフォルダが「アクセス拒否によるスキップ」として記録されています。長さのせいで列挙できないことはアクセス拒否とは別の事象であり、取り違えてはならない。");
+                }
+
+                // 長さのせいで列挙できなかった対象は、黙って消さずに別の一覧として記録する。
+                foreach (var pair in boundaryFolders)
+                {
+                    SelfAssert.That(
+                        outcome.UnenumerablePaths.Any(p => string.Equals(p, pair.Value, StringComparison.OrdinalIgnoreCase)),
+                        $"絶対パス{pair.Key}文字のフォルダが「長さのせいで列挙できなかった対象」として記録されていません。" +
+                        $"実際の内容: {string.Join(" / ", outcome.UnenumerablePaths)}");
+                }
+
+                SelfAssert.That(
+                    outcome.UnenumerablePaths.Count == boundaryFolders.Count,
+                    $"長さのせいで列挙できなかった対象が{boundaryFolders.Count}件ではありません（実際: {outcome.UnenumerablePaths.Count} 件）。実際の内容: {string.Join(" / ", outcome.UnenumerablePaths)}");
+                SelfAssert.That(
+                    !outcome.UnenumerablePaths.Any(p => string.Equals(p, deniedFolder, StringComparison.OrdinalIgnoreCase)),
+                    "読み取り拒否フォルダが「長さのせいで列挙できなかった対象」として記録されています。アクセス拒否とは別の事象であり、取り違えてはならない。");
+
+                // 下側の対比: 257文字は一覧できるので、どちらの一覧にも現れない。
+                SelfAssert.That(
+                    !outcome.UnenumerablePaths.Any(p => string.Equals(p, enumerableFolder, StringComparison.OrdinalIgnoreCase))
+                    && !outcome.SkippedPaths.Any(p => string.Equals(p, enumerableFolder, StringComparison.OrdinalIgnoreCase)),
+                    "絶対パス257文字のフォルダが列挙できない対象として記録されています（実測の境界は258文字であり、257文字は一覧できるはず）。");
+            }
+            finally
+            {
+                try
+                {
+                    gate.RestoreRead(deniedFolder);
+                }
+                catch
+                {
+                    // 後始末の再試行（icacls 経由）へ進む。
+                }
+
+                ForceCleanupFixtureResidue(root);
+                AssertNoNewTempGbEntries("境界の長さのフォルダを含む走査", entriesBefore);
+            }
+        });
+
+        runner.Add("実効絶対パス長105文字の基準フォルダで generate が完走して終了コード0を返し、既知の欠落（LongPath 由来）と、既知の不具合では説明できない欠落とを区別して標準出力に列挙する（要件2.4, 5.2, 5.5、タスク7.2）", () =>
+        {
+            // 実効絶対パス長105文字を選ぶ理由: FixtureSpec.Standard の長い連鎖の3階層目（相対152文字）の
+            // 絶対パスがちょうど258文字になり、(a) スキップ検出が例外を漏らす境界と、
+            // (b) 印（LongPath）の付いていない項目まで観測されなくなる状況とを同時に再現できるため。
+            const int RootLength = 105;
+
+            // 実測の境界（2026-09-16）: 親フォルダの絶対パスが258文字以上だと、その直下を一覧できない。
+            // 本番コードの実装には依存せず、この検証コード自身が独立に期待を導く。
+            const int EnumerationBoundary = 258;
+
+            var entriesBefore = SnapshotTempGbEntries();
+            string root = BuildRootWithEffectiveLength(Path.GetTempPath(), RootLength);
+            string goldenPath = CreateTempCliGoldenFilePath();
+
+            var spec = FixtureSpec.Standard;
+
+            bool IsUnobservable(FixtureItem item)
+            {
+                return EnumerateAncestorRelativePaths(item.RelativePath)
+                    .Any(ancestor => RootLength + 1 + ancestor.Length >= EnumerationBoundary);
+            }
+
+            var unobservable = spec.Items.Where(IsUnobservable).ToList();
+            var expectedKnown = unobservable
+                .Where(i => i.Traits.Contains(FixtureTrait.LongPath))
+                .Select(i => i.RelativePath)
+                .ToList();
+            var expectedUnexplained = unobservable
+                .Where(i => !i.Traits.Contains(FixtureTrait.LongPath))
+                .Select(i => i.RelativePath)
+                .ToList();
+
+            // 一覧できないフォルダ自身（その親までは一覧できる）。
+            var expectedUnenumerable = spec.Items
+                .Where(i => i.Kind == GoldenEntryKind.Folder)
+                .Where(i => RootLength + 1 + i.RelativePath.Length >= EnumerationBoundary && !IsUnobservable(i))
+                .Select(i => root + "\\" + i.RelativePath)
+                .ToList();
+
+            SelfAssert.That(
+                expectedKnown.Count == 4,
+                $"前提が崩れています: 実効{RootLength}文字の基準フォルダで観測されなくなる LongPath の項目が4件ではありません（実際: {expectedKnown.Count} 件）。");
+            SelfAssert.That(
+                expectedUnexplained.Count == 2,
+                $"前提が崩れています: 実効{RootLength}文字の基準フォルダで観測されなくなる「LongPath の印がない」項目が2件ではありません（実際: {expectedUnexplained.Count} 件）。この検証は説明できない欠落が実在する状況を必要とする。");
+            SelfAssert.That(
+                expectedUnenumerable.Count == 2,
+                $"前提が崩れています: 長さのせいで一覧できないフォルダが2件ではありません（実際: {expectedUnenumerable.Count} 件）。");
+
+            try
+            {
+                var result = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", root);
+
+                SelfAssert.That(
+                    result.ExitCode == 0,
+                    $"実効{RootLength}文字の基準フォルダでの generate の終了コードが0ではありません（実際: {result.ExitCode}）。" +
+                    $"標準出力: {result.StdOut} 標準エラー: {result.StdErr}");
+
+                var reportedKnown = ExtractReportItems(result.StdOut, "既知の欠落（境界条件に由来）: ");
+                AssertReportedSetEquals(
+                    "既知の欠落",
+                    expectedKnown,
+                    reportedKnown,
+                    result.StdOut);
+
+                var reportedUnexplained = ExtractReportItems(result.StdOut, "説明できない欠落（既知の不具合では説明できない未観測の項目）: ");
+                AssertReportedSetEquals(
+                    "説明できない欠落",
+                    expectedUnexplained,
+                    reportedUnexplained,
+                    result.StdOut);
+
+                var reportedUnenumerable = ExtractReportItems(result.StdOut, "長さのせいで列挙できなかった対象: ");
+                AssertReportedSetEquals(
+                    "長さのせいで列挙できなかった対象",
+                    expectedUnenumerable,
+                    reportedUnenumerable,
+                    result.StdOut);
+
+                // スキップとして報告されるのは読み取り拒否フォルダだけであり、長さ由来の失敗を含めない。
+                var reportedSkipped = ExtractReportItems(result.StdOut, "スキップされた対象: ");
+                AssertReportedSetEquals(
+                    "スキップされた対象",
+                    new List<string> { root + "\\access_denied_folder" },
+                    reportedSkipped,
+                    result.StdOut);
+
+                SelfAssert.That(File.Exists(goldenPath), $"期待値ファイルが書き出されていません: {goldenPath}");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                ForceCleanupFixtureResidue(root);
+                AssertNoNewTempGbEntries($"実効{RootLength}文字の基準フォルダでの generate", entriesBefore);
+            }
+        });
+
+        runner.Add("ScanRunner の失敗分類が、長さ由来の判定に拡張長パス経由の実在確認を用い、実在しないパス・別の型の例外・アクセス拒否を長さ由来と取り違えない（要件2.4、タスク7.2）", () =>
+        {
+            // 実行経路（DetectSkippedPaths）だけでは、実在確認を省いた実装・プレーンなパスで確認する実装と
+            // 正しい実装を区別できない（絶対258・259文字の経路ではプレーンな実在確認も真になるため）。
+            // そこで分類規則そのものを直接呼び出して照合する。
+            var entriesBefore = SnapshotTempGbEntries();
+            string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "gb_len_" + Guid.NewGuid().ToString("N").Substring(0, 8)));
+
+            try
+            {
+                Directory.CreateDirectory(LongPath.Extend(root));
+
+                int nameLength = 261 - root.Length - 1;
+                SelfAssert.That(
+                    nameLength >= 1 && nameLength <= 255,
+                    $"基準フォルダ '{root}'（{root.Length}文字）の下に絶対パス261文字のフォルダを作れません（必要な名前の長さ: {nameLength}文字）。");
+
+                string existingLong = root + "\\" + new string('e', nameLength);
+                string missingLong = root + "\\" + new string('m', nameLength);
+                string missingShort = root + "\\missing";
+
+                Directory.CreateDirectory(LongPath.Extend(existingLong));
+
+                // 前提の確認。これらが崩れると、以下の照合が「拡張長パス経由かどうか」を見分けられなくなる。
+                SelfAssert.That(
+                    Path.GetFullPath(existingLong).Length == 261,
+                    $"検証用フォルダの絶対パスが261文字になりません（実際: {Path.GetFullPath(existingLong).Length}文字）。");
+                SelfAssert.That(
+                    Directory.Exists(LongPath.Extend(existingLong)),
+                    "検証用の絶対パス261文字のフォルダが、拡張長パス経由で実在すると判定されません。");
+                SelfAssert.That(
+                    !Directory.Exists(existingLong),
+                    "前提が崩れています: プレーンなパスで絶対261文字のフォルダが「存在する」と判定されました。" +
+                    "この前提が崩れると、実在確認が拡張長パス経由かどうかを見分ける検証になりません。");
+                SelfAssert.That(
+                    !Directory.Exists(LongPath.Extend(missingLong)) && !Directory.Exists(LongPath.Extend(missingShort)),
+                    "検証用の実在しないパスが、拡張長パス経由で実在すると判定されました。");
+
+                // (a) 実在する絶対261文字のフォルダ × 長さ由来になりうる例外 → 長さ由来。
+                //     プレーンな実在確認では偽になるため、拡張長パス経由でなければ通らない。
+                SelfAssert.That(
+                    ScanRunner.IsPathLengthFailure(new DirectoryNotFoundException(), existingLong),
+                    "実在する絶対261文字のフォルダに対する DirectoryNotFoundException が、長さ由来と判定されません。" +
+                    "実在確認が拡張長パス経由でない可能性があります。");
+                SelfAssert.That(
+                    ScanRunner.IsPathLengthFailure(new PathTooLongException(), existingLong),
+                    "実在する絶対261文字のフォルダに対する PathTooLongException が、長さ由来と判定されません。");
+
+                // (b) 同じ長さの実在しないパス → 長さ由来ではない（実在確認を省く実装を検出する）。
+                SelfAssert.That(
+                    !ScanRunner.IsPathLengthFailure(new DirectoryNotFoundException(), missingLong),
+                    "実在しない絶対261文字のパスに対する DirectoryNotFoundException が、長さ由来と判定されました。" +
+                    "実在確認を省いている可能性があります（本当に存在しない場合は例外をそのまま送出しなければならない）。");
+
+                // (c) 実在しない短いパス → 長さ由来ではない。
+                SelfAssert.That(
+                    !ScanRunner.IsPathLengthFailure(new DirectoryNotFoundException(), missingShort),
+                    "実在しない短いパスに対する DirectoryNotFoundException が、長さ由来と判定されました。");
+
+                // 型が違えば、実在していても長さ由来ではない。
+                SelfAssert.That(
+                    !ScanRunner.IsPathLengthFailure(new IOException("別の入出力エラー"), existingLong),
+                    "長さ由来になりえない型（IOException）の例外が、長さ由来と判定されました。");
+
+                // 分類の3系統。アクセス拒否はパスの長さや実在に関わらず常に「スキップ」に分類される。
+                SelfAssert.That(
+                    ScanRunner.ClassifyEnumerationFailure(new UnauthorizedAccessException(), existingLong) == EnumerationFailureKind.AccessDenied,
+                    "実在する絶対261文字のフォルダに対するアクセス拒否が、AccessDenied に分類されません（長さ由来と取り違えてはならない）。");
+                SelfAssert.That(
+                    ScanRunner.ClassifyEnumerationFailure(new UnauthorizedAccessException(), missingShort) == EnumerationFailureKind.AccessDenied,
+                    "アクセス拒否の分類がパスに依存しています（常に AccessDenied でなければならない）。");
+                SelfAssert.That(
+                    ScanRunner.ClassifyEnumerationFailure(new DirectoryNotFoundException(), existingLong) == EnumerationFailureKind.PathLength,
+                    "実在する絶対261文字のフォルダに対する DirectoryNotFoundException が、PathLength に分類されません。");
+                SelfAssert.That(
+                    ScanRunner.ClassifyEnumerationFailure(new DirectoryNotFoundException(), missingLong) == EnumerationFailureKind.Unexpected,
+                    "実在しない絶対261文字のパスに対する DirectoryNotFoundException が、Unexpected に分類されません（握りつぶしてはならない）。");
+                SelfAssert.That(
+                    ScanRunner.ClassifyEnumerationFailure(new IOException("別の入出力エラー"), existingLong) == EnumerationFailureKind.Unexpected,
+                    "想定していない型の例外が Unexpected に分類されません（握りつぶしてはならない）。");
+
+                // 実在確認そのものも、拡張長パス経由でなければ成立しない。
+                SelfAssert.That(
+                    ScanRunner.DirectoryExistsThroughExtendedPath(existingLong),
+                    "拡張長パス経由の実在確認が、実在する絶対261文字のフォルダを見つけられません。");
+                SelfAssert.That(
+                    !ScanRunner.DirectoryExistsThroughExtendedPath(missingLong),
+                    "拡張長パス経由の実在確認が、実在しないパスを「実在する」と判定しました。");
+
+                // 属性の取得が -1（INVALID_FILE_ATTRIBUTES）で失敗したときの判定も、例外経路と同じ実在確認を通す。
+                // (a) 実在する絶対261文字のフォルダ → 長さ由来として受理する（送出しない）。
+                string accepted;
+                try
+                {
+                    accepted = ScanRunner.EnsureAttributeFailureIsLengthInduced(existingLong);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"実在する絶対261文字のフォルダに対する属性取得の失敗が、長さ由来として受理されません: {ex.GetType().Name}: {ex.Message}",
+                        ex);
+                }
+
+                SelfAssert.That(
+                    accepted == existingLong,
+                    $"長さ由来として受理された値が、検査した対象と一致しません（実際: {accepted}）。");
+
+                // (b) 同じ長さの実在しないパス → 長さ由来と決めつけず DirectoryNotFoundException を送出する。
+                bool attributeGuardThrew = false;
+                try
+                {
+                    ScanRunner.EnsureAttributeFailureIsLengthInduced(missingLong);
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    attributeGuardThrew = true;
+                }
+
+                SelfAssert.That(
+                    attributeGuardThrew,
+                    "属性を取得できず、拡張長パス経由でも実在しないパスが DirectoryNotFoundException で拒否されません。" +
+                    "このガードがないと、列挙の直後に消えた対象まで「長さのせいで列挙できなかった対象」として記録される（取り違え）。");
+
+                // 振り分け: 分類に応じて記録先が分かれ、想定外は記録せずそのまま送出される。
+                var skipped = new List<string>();
+                var unenumerable = new List<string>();
+
+                ScanRunner.RecordEnumerationFailure(new UnauthorizedAccessException(), existingLong, skipped, unenumerable);
+                SelfAssert.That(
+                    skipped.Count == 1 && skipped[0] == existingLong && unenumerable.Count == 0,
+                    $"アクセス拒否が「スキップされた対象」へ記録されません（スキップ: {skipped.Count} 件、列挙できなかった対象: {unenumerable.Count} 件）。");
+
+                ScanRunner.RecordEnumerationFailure(new DirectoryNotFoundException(), existingLong, skipped, unenumerable);
+                SelfAssert.That(
+                    unenumerable.Count == 1 && unenumerable[0] == existingLong && skipped.Count == 1,
+                    $"長さ由来の失敗が「長さのせいで列挙できなかった対象」へ記録されません（スキップ: {skipped.Count} 件、列挙できなかった対象: {unenumerable.Count} 件）。");
+
+                // 目印のメソッドから実際に送出させた例外を使う。これにより「同一インスタンスか」だけでなく
+                // 「元のスタックのままか」まで照合できる（throw ex; はスタックを送出地点で切り捨てる）。
+                IOException unexpected = CaptureMarkerIoException();
+                SelfAssert.That(
+                    unexpected.StackTrace != null && unexpected.StackTrace.Contains(MarkerThrowMethodName),
+                    "前提が崩れています: 捕捉した例外のスタックトレースに送出元のメソッド名が含まれません（スタックの保持を照合できません）。");
+
+                bool rethrown = false;
+                bool stackPreserved = false;
+                try
+                {
+                    ScanRunner.RecordEnumerationFailure(unexpected, existingLong, skipped, unenumerable);
+                }
+                catch (IOException ex)
+                {
+                    rethrown = ReferenceEquals(ex, unexpected);
+                    stackPreserved = ex.StackTrace != null && ex.StackTrace.Contains(MarkerThrowMethodName);
+                }
+
+                SelfAssert.That(
+                    rethrown,
+                    "想定していない理由の失敗が、元の例外のまま送出されません（握りつぶしてはならない。design.md Error Handling）。");
+                SelfAssert.That(
+                    stackPreserved,
+                    "想定していない理由の失敗が、元のスタックを失って送出されています（送出地点で切り捨てる throw ex; ではなく、" +
+                    "ExceptionDispatchInfo.Capture(ex).Throw() で送出すること）。");
+                SelfAssert.That(
+                    skipped.Count == 1 && unenumerable.Count == 1,
+                    $"想定していない理由の失敗が、いずれかの一覧へ記録されました（スキップ: {skipped.Count} 件、列挙できなかった対象: {unenumerable.Count} 件）。");
+            }
+            finally
+            {
+                ForceCleanupFixtureResidue(root);
+                AssertNoNewTempGbEntries("失敗分類の検証", entriesBefore);
+            }
+        });
+
+        runner.Add("属性を取得できないフォルダが長さ由来でないとき、列挙が「長さのせいで列挙できなかった対象」として記録せず DirectoryNotFoundException を送出する（要件2.4、タスク7.2）", () =>
+        {
+            // -1（INVALID_FILE_ATTRIBUTES）の分岐が実在確認のガードを実際に通ることを、実行経路で確かめる。
+            // 末尾に空白を持つ名前のフォルダを使う。拡張長プレフィクス付きでは作成できるが、
+            // プレーンな表記は .NET の正規化で末尾の空白が取り除かれ、別の（存在しない）場所を指すようになる。
+            // これにより「列挙には現れるが属性を取得できず、拡張長パス経由でも実在しない」状況を
+            // 競合状態に頼らず決定的に作れる。
+            var entriesBefore = SnapshotTempGbEntries();
+            string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "gb_len_" + Guid.NewGuid().ToString("N").Substring(0, 8)));
+
+            // このフォルダだけは LongPath.Extend を使えない。Extend は正規化を通すため、
+            // 末尾の空白が取り除かれて目的の状況を作れなくなる。削除も同じ組み立て方で行う。
+            string oddName = "vanishing_name ";
+            string oddPlain = root + @"\" + oddName;
+            string oddExtended = @"\\?\" + root + @"\" + oddName;
+
+            try
+            {
+                Directory.CreateDirectory(LongPath.Extend(root));
+                Directory.CreateDirectory(oddExtended);
+
+                // 前提の確認。いずれかが崩れると、この検証は目的の分岐を通らなくなる。
+                SelfAssert.That(
+                    Directory.Exists(oddExtended),
+                    "前提が崩れています: 末尾に空白を持つ名前のフォルダを作成できませんでした。");
+                SelfAssert.That(
+                    Directory.GetDirectories(root).Any(d => string.Equals(d, oddPlain, StringComparison.Ordinal)),
+                    $"前提が崩れています: 列挙結果に末尾の空白を保った表記が現れません（実際: {string.Join(" / ", Directory.GetDirectories(root))}）。");
+                SelfAssert.That(
+                    new DirectoryInfo(oddPlain).Attributes == (FileAttributes)(-1),
+                    $"前提が崩れています: 属性の取得が -1 になりません（実際: {(int)new DirectoryInfo(oddPlain).Attributes}）。この検証は -1 の分岐を通る必要があります。");
+                SelfAssert.That(
+                    !Directory.Exists(LongPath.Extend(oddPlain)),
+                    "前提が崩れています: 正規化を通したパスが実在すると判定されました（長さ由来でないことを表現できません）。");
+
+                var skipped = new List<string>();
+                var unenumerable = new List<string>();
+                bool threw = false;
+
+                try
+                {
+                    ScanRunner.DetectSkippedPaths(root, skipped, unenumerable);
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    threw = true;
+                }
+
+                SelfAssert.That(
+                    threw,
+                    "属性を取得できず、長さ由来でもない対象に対して DirectoryNotFoundException が送出されません。" +
+                    "-1 の分岐が実在確認のガードを通っていない可能性があります。");
+                SelfAssert.That(
+                    unenumerable.Count == 0,
+                    $"長さ由来でない対象が「長さのせいで列挙できなかった対象」として記録されました（{string.Join(" / ", unenumerable)}）。");
+                SelfAssert.That(
+                    skipped.Count == 0,
+                    $"長さ由来でない対象が「スキップされた対象」として記録されました（{string.Join(" / ", skipped)}）。");
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(oddExtended))
+                    {
+                        Directory.Delete(oddExtended, recursive: true);
+                    }
+                }
+                catch
+                {
+                    // 残留の除去は ForceCleanupFixtureResidue の再帰削除に委ねる。
+                }
+
+                ForceCleanupFixtureResidue(root);
+                AssertNoNewTempGbEntries("属性を取得できないフォルダの検証", entriesBefore);
+            }
+        });
+
+        runner.Add("KnownIssueAnalyzer が、既知の不具合（LongPath）で説明できる欠落と説明できない欠落を排他に分け、説明できない欠落を境界条件とともに列挙する（要件5.2, 5.5、タスク7.2）", () =>
+        {
+            // 人工的なフィクスチャ定義で、欠落の3系統（LongPath あり / Ordinary のみ / Japanese+Empty）と、
+            // 観測されている項目（LongPath を持つが欠落していない）を同時に用意する。
+            var items = new List<FixtureItem>
+            {
+                new FixtureItem(@"observed", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary }),
+                new FixtureItem(@"observed\long_but_present.txt", GoldenEntryKind.File, 1L, new[] { FixtureTrait.LongPath }),
+                new FixtureItem(@"missing_long", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.LongPath }),
+                new FixtureItem(@"missing_ordinary", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Ordinary }),
+                new FixtureItem(@"missing_japanese", GoldenEntryKind.Folder, 0L, new[] { FixtureTrait.Japanese, FixtureTrait.Empty }),
+            };
+            var spec = new FixtureSpec("unexplained-omission-fixture", items);
+
+            var header = new GoldenHeader(2, "unexplained-omission-fixture", 80, DateTimeOffset.UtcNow, false, 0L, true, Array.Empty<string>());
+            var observed = new GoldenDocument(header, new[]
+            {
+                new GoldenEntry(@"observed", GoldenEntryKind.Folder, 0L),
+                new GoldenEntry(@"observed\long_but_present.txt", GoldenEntryKind.File, 1L),
+            });
+
+            var analyzer = new KnownIssueAnalyzer();
+
+            // 既知の欠落の判定は LongPath を根拠とする（この検証では変えない前提）。
+            var findings = analyzer.Analyze(spec, observed);
+            SelfAssert.That(
+                findings.Count == 1,
+                $"既知の欠落が1件ではありません（実際: {findings.Count} 件）。実際の内容: {string.Join(" / ", findings.Select(f => f.RelativePath + "/" + f.Trait))}");
+            SelfAssert.That(
+                findings[0].RelativePath == "missing_long" && findings[0].Trait == FixtureTrait.LongPath,
+                $"既知の欠落の内容が想定と異なります（実際: {findings[0].RelativePath} / {findings[0].Trait}）。");
+
+            // 説明できない欠落は、既知の欠落と排他に、定義にあって観測されなかった残りを列挙する。
+            var unexplained = analyzer.FindUnexplainedOmissions(spec, observed);
+            var unexplainedPaths = unexplained.Select(o => o.RelativePath).ToList();
+
+            SelfAssert.That(
+                unexplained.Count == 2,
+                $"説明できない欠落が2件ではありません（実際: {unexplained.Count} 件）。実際の内容: {string.Join(" / ", unexplainedPaths)}");
+            SelfAssert.That(
+                unexplainedPaths.Contains("missing_ordinary"),
+                $"Ordinary のみを持つ欠落が説明できない欠落として列挙されていません。実際の内容: {string.Join(" / ", unexplainedPaths)}");
+            SelfAssert.That(
+                unexplainedPaths.Contains("missing_japanese"),
+                $"Japanese/Empty のみを持つ欠落が説明できない欠落として列挙されていません。実際の内容: {string.Join(" / ", unexplainedPaths)}");
+            SelfAssert.That(
+                !unexplainedPaths.Contains("missing_long"),
+                "既知の欠落（LongPath 由来）が説明できない欠落にも含まれています。両者は排他でなければならない。");
+            SelfAssert.That(
+                !unexplainedPaths.Contains("observed") && !unexplainedPaths.Contains(@"observed\long_but_present.txt"),
+                $"観測されている項目が説明できない欠落として列挙されています。実際の内容: {string.Join(" / ", unexplainedPaths)}");
+
+            // 識別できる情報として、その項目が持っていた境界条件を添える（原因の断定ではない）。
+            var japaneseOmission = unexplained.Single(o => o.RelativePath == "missing_japanese");
+            SelfAssert.That(
+                japaneseOmission.Traits.Contains(FixtureTrait.Japanese) && japaneseOmission.Traits.Contains(FixtureTrait.Empty),
+                $"説明できない欠落に、その項目が持つ境界条件が添えられていません（実際: {string.Join("、", japaneseOmission.Traits.Select(t => t.ToString()))}）。");
+
+            // 既知の欠落と説明できない欠落を合わせると、定義にあって観測されなかった項目の全体になる。
+            var union = findings.Select(f => f.RelativePath).Concat(unexplainedPaths).OrderBy(p => p, StringComparer.Ordinal).ToList();
+            var expectedUnion = new[] { "missing_japanese", "missing_long", "missing_ordinary" };
+            SelfAssert.That(
+                union.SequenceEqual(expectedUnion, StringComparer.Ordinal),
+                $"既知の欠落と説明できない欠落の和が、定義にあって観測されなかった項目の全体と一致しません（実際: {string.Join(" / ", union)}）。");
+        });
+    }
+
+    /// <summary>スタックの保持を照合するための目印となるメソッド名。</summary>
+    private const string MarkerThrowMethodName = "ThrowMarkerIoExceptionForStackTrace";
+
+    /// <summary>
+    /// スタックトレースに名前が残る目印として、実際に例外を送出するだけのメソッド。
+    /// インライン化されると名前が消えるため、明示的に抑止する。
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void ThrowMarkerIoExceptionForStackTrace()
+    {
+        throw new IOException("想定していない入出力エラー");
+    }
+
+    /// <summary>
+    /// 目印のメソッドから実際に送出された例外を捕捉して返す。
+    /// <c>new IOException(...)</c> と違い、スタックトレースに送出元が記録された状態で得られる。
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static IOException CaptureMarkerIoException()
+    {
+        try
+        {
+            ThrowMarkerIoExceptionForStackTrace();
+        }
+        catch (IOException ex)
+        {
+            return ex;
+        }
+
+        throw new InvalidOperationException("目印の例外が送出されませんでした。");
+    }
+
+    /// <summary>
+    /// 相対パスから、その直上の親までの祖先パスを浅い順に列挙する（項目自身は含まない）。
+    /// FixtureSpec の同名の処理と同じ規則だが、本番コードの実装に依存しないよう検証側で独立に持つ。
+    /// </summary>
+    private static IEnumerable<string> EnumerateAncestorRelativePaths(string relativePath)
+    {
+        var segments = relativePath.Split('\\');
+        for (int depth = 1; depth < segments.Length; depth++)
+        {
+            yield return string.Join("\\", segments, 0, depth);
+        }
+    }
+
+    /// <summary>
+    /// 標準出力から「&lt;見出し&gt;: N 件」の行と、それに続く「  - &lt;値&gt;（…）」の明細を取り出す。
+    /// 見出しがちょうど1行あること、件数の表記と明細の件数が一致することまで確かめる。
+    /// 明細の値は、末尾の丸括弧（補足情報）を取り除いた部分とする。
+    /// </summary>
+    private static List<string> ExtractReportItems(string stdOut, string headerPrefix)
+    {
+        var lines = stdOut.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+
+        var headerIndexes = Enumerable.Range(0, lines.Count)
+            .Where(i => lines[i].StartsWith(headerPrefix, StringComparison.Ordinal))
+            .ToList();
+
+        SelfAssert.That(
+            headerIndexes.Count == 1,
+            $"標準出力に '{headerPrefix}' で始まる行がちょうど1行ありません（実際: {headerIndexes.Count} 行）。標準出力: {stdOut}");
+
+        string countText = lines[headerIndexes[0]].Substring(headerPrefix.Length).Replace(" 件", string.Empty).Trim();
+        SelfAssert.That(
+            int.TryParse(countText, System.Globalization.NumberStyles.Integer, CultureInfo.InvariantCulture, out int declaredCount),
+            $"'{headerPrefix}' の行から件数を読み取れません（実際の表記: '{countText}'）。標準出力: {stdOut}");
+
+        var items = new List<string>();
+        for (int i = headerIndexes[0] + 1; i < lines.Count; i++)
+        {
+            if (!lines[i].StartsWith("  - ", StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            string body = lines[i].Substring("  - ".Length);
+            int parenIndex = body.LastIndexOf('（');
+            items.Add(parenIndex >= 0 ? body.Substring(0, parenIndex) : body);
+        }
+
+        SelfAssert.That(
+            declaredCount == items.Count,
+            $"'{headerPrefix}' の件数の表記（{declaredCount} 件）と明細の件数（{items.Count} 件）が一致しません。標準出力: {stdOut}");
+
+        return items;
+    }
+
+    /// <summary>
+    /// 報告された一覧が、期待する一覧と過不足なく一致することを照合する。
+    /// 余分（別の分類の項目を混ぜている）と不足（黙って落としている）の双方を検出する。
+    /// </summary>
+    private static void AssertReportedSetEquals(string label, IReadOnlyList<string> expected, IReadOnlyList<string> reported, string stdOut)
+    {
+        var expectedSet = new HashSet<string>(expected, StringComparer.OrdinalIgnoreCase);
+        var reportedSet = new HashSet<string>(reported, StringComparer.OrdinalIgnoreCase);
+
+        var missing = expectedSet.Where(p => !reportedSet.Contains(p)).ToList();
+        var extra = reportedSet.Where(p => !expectedSet.Contains(p)).ToList();
+
+        SelfAssert.That(
+            missing.Count == 0,
+            $"{label}に列挙されるべき項目が報告されていません: {string.Join(" / ", missing)}。標準出力: {stdOut}");
+        SelfAssert.That(
+            extra.Count == 0,
+            $"{label}に、そこへ含めてはならない項目が報告されています: {string.Join(" / ", extra)}。標準出力: {stdOut}");
+        SelfAssert.That(
+            reported.Count == expectedSet.Count,
+            $"{label}の件数が期待と一致しません（期待: {expectedSet.Count} 件、実際: {reported.Count} 件）。標準出力: {stdOut}");
     }
 
     /// <summary>

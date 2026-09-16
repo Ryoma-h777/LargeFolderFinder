@@ -478,7 +478,8 @@ public sealed class ScanOutcome
 {
     public FolderInfo Root { get; }
     public long ClusterSizeInBytes { get; }
-    public IReadOnlyList<string> SkippedPaths { get; }
+    public IReadOnlyList<string> SkippedPaths { get; }       // アクセス拒否で読めなかった対象
+    public IReadOnlyList<string> UnenumerablePaths { get; }  // 親フォルダが長すぎて直下を一覧できなかった対象（タスク7.2で追加）
 }
 ```
 
@@ -589,6 +590,17 @@ public sealed class DiffReport
 public interface IKnownIssueAnalyzer
 {
     IReadOnlyList<KnownIssueFinding> Analyze(FixtureSpec spec, GoldenDocument observed);
+
+    // 定義にあるのに観測されず、既知の不具合では説明できない項目（タスク7.2で追加）。
+    // Analyze の結果と排他で、両者の和が「定義にあって観測されなかった項目」の全体になる。
+    // 原因は断定せず、報告するだけで判定には用いない（要件5.5）。
+    IReadOnlyList<UnexplainedOmission> FindUnexplainedOmissions(FixtureSpec spec, GoldenDocument observed);
+}
+
+public sealed class UnexplainedOmission
+{
+    public string RelativePath { get; }
+    public IReadOnlyList<FixtureTrait> Traits { get; }  // その項目が持っていた境界条件（原因の断定ではない）
 }
 
 public sealed class KnownIssueFinding

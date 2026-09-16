@@ -229,6 +229,14 @@ internal static class Program
                     Console.WriteLine($"  - {skipped}");
                 }
 
+                // 長さのせいで列挙できなかった対象は、アクセス拒否によるスキップとは別の事象として報告する
+                // （取り違えると欠落の原因を誤って解釈させるため。タスク7.2）。
+                Console.WriteLine($"長さのせいで列挙できなかった対象: {outcome.UnenumerablePaths.Count} 件");
+                foreach (var unenumerable in outcome.UnenumerablePaths)
+                {
+                    Console.WriteLine($"  - {unenumerable}");
+                }
+
                 // 既知の欠落の識別結果は期待値の生成の報告に含める。独立したサブコマンドとしては公開しない
                 // （tasks.md 5.1）。
                 var analyzer = new KnownIssueAnalyzer();
@@ -237,6 +245,15 @@ internal static class Program
                 foreach (var finding in findings)
                 {
                     Console.WriteLine($"  - {finding.RelativePath}（原因: {finding.Trait}）");
+                }
+
+                // 既知の不具合では説明できない欠落も、黙って期待値から消さずに報告する（要件5.2、タスク7.2）。
+                // 正しさの判定は行わないため、原因は断定せず終了コードにも影響させない（要件5.5）。
+                var unexplained = analyzer.FindUnexplainedOmissions(spec, document);
+                Console.WriteLine($"説明できない欠落（既知の不具合では説明できない未観測の項目）: {unexplained.Count} 件");
+                foreach (var omission in unexplained)
+                {
+                    Console.WriteLine($"  - {omission.RelativePath}（境界条件: {string.Join("、", omission.Traits.Select(t => t.ToString()))}）");
                 }
 
                 var serializer = new GoldenSerializer();

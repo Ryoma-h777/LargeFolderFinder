@@ -23,8 +23,27 @@ public interface IKnownIssueAnalyzer
     /// <paramref name="observed"/> に存在しない項目のうち、境界条件（<see cref="FixtureTrait"/>）を根拠に
     /// 説明できるものだけを含む。既知の不具合として説明できない欠落（例えば <see cref="FixtureTrait.Ordinary"/>
     /// のみを持つ項目の欠落）は含めない（design.md: 走査結果の正しさを判定しない、要件5.5）。
+    /// そうした欠落は <see cref="FindUnexplainedOmissions"/> が別に列挙する。
     /// </returns>
     IReadOnlyList<KnownIssueFinding> Analyze(FixtureSpec spec, GoldenDocument observed);
+
+    /// <summary>
+    /// <paramref name="spec"/> に定義されていて <paramref name="observed"/> に存在せず、
+    /// かつ既知の不具合（<see cref="Analyze"/> の判定）でも説明できない欠落を列挙する。
+    /// </summary>
+    /// <param name="spec">「何が存在するはずか」の真値を持つフィクスチャの宣言的定義。</param>
+    /// <param name="observed">走査結果を射影した観測済みの期待値データ。</param>
+    /// <returns>
+    /// 説明できない欠落の一覧。<see cref="Analyze"/> が返す既知の欠落とは排他であり、
+    /// 両者を合わせたものが「定義にあるのに観測されなかった項目」の全体になる。
+    /// </returns>
+    /// <remarks>
+    /// この列挙は走査結果の正しさを判定しない（要件5.5）。判定の代わりに、説明のつかない欠落が
+    /// 黙って期待値から消えないよう、識別できる情報（相対パスと境界条件）とともに記録する
+    /// （要件5.2、タスク7.2）。基準フォルダの絶対パスが長い環境では、境界条件の印が付いていない
+    /// 階層まで観測されなくなるため、この一覧が空でなくなることは実際に起こりうる。
+    /// </remarks>
+    IReadOnlyList<UnexplainedOmission> FindUnexplainedOmissions(FixtureSpec spec, GoldenDocument observed);
 }
 
 /// <summary>
@@ -56,6 +75,36 @@ public sealed class KnownIssueFinding
 }
 
 /// <summary>
+/// 1件の「説明できない欠落」を表す不変のデータ型（タスク7.2）。
+/// 原因を断定しないため、<see cref="KnownIssueFinding"/> のような単一の根拠は持たず、
+/// その項目が持つ境界条件をそのまま添えるにとどめる（要件5.5: 正しさの判定を行わない）。
+/// </summary>
+public sealed class UnexplainedOmission
+{
+    /// <summary>欠落した項目の、フィクスチャ基準フォルダからの相対パス。</summary>
+    public string RelativePath { get; }
+
+    /// <summary>その項目がフィクスチャ定義で持っていた境界条件の一覧（原因の断定ではない）。</summary>
+    public IReadOnlyList<FixtureTrait> Traits { get; }
+
+    /// <summary>
+    /// UnexplainedOmission を構築する。
+    /// </summary>
+    /// <param name="relativePath">欠落した項目の相対パス。</param>
+    /// <param name="traits">その項目が持っていた境界条件の一覧。</param>
+    public UnexplainedOmission(string relativePath, IReadOnlyList<FixtureTrait> traits)
+    {
+        if (string.IsNullOrEmpty(relativePath))
+        {
+            throw new ArgumentException("相対パスが空です。", nameof(relativePath));
+        }
+
+        RelativePath = relativePath;
+        Traits = traits ?? throw new ArgumentNullException(nameof(traits));
+    }
+}
+
+/// <summary>
 /// <see cref="IKnownIssueAnalyzer"/> の実装（design.md: Compare/KnownIssueAnalyzer）。
 /// </summary>
 /// <remarks>
@@ -73,7 +122,7 @@ public sealed class KnownIssueFinding
 /// <list type="bullet">
 /// <item>
 /// requirements.md の Project Description（現状）および要件5.1 が名指しする「既知の不具合」は
-/// 「260文字超のパスが集計から漏れる」という長いパスの不具合であり、これが本フィーチャーの
+/// 長いパスの配下が集計から漏れるという不具合であり、これが本フィーチャーの
 /// 前提となっている唯一の既知バグである。
 /// </item>
 /// <item>
@@ -88,10 +137,16 @@ public sealed class KnownIssueFinding
 /// <para>
 /// <see cref="FixtureTrait.Japanese"/>・<see cref="FixtureTrait.Empty"/>・
 /// <see cref="FixtureTrait.ZeroByte"/>・<see cref="FixtureTrait.Ordinary"/> のみを理由とする
-/// 欠落は、既知の不具合では説明できない欠落であり、この部品は沈黙する（列挙しない）。
-/// これは見落としではなく意図的な設計である。既知の不具合で説明できない欠落は、
+/// 欠落は、既知の不具合では説明できない欠落であり、<see cref="Analyze"/> は何も主張しない
+/// （列挙しない）。これは見落としではなく意図的な設計である。既知の不具合で説明できない欠落は、
 /// 走査結果の正しさを判定しないという要件5.5の制約のもとでは、この部品が代わりに
 /// 何かを主張してよい対象ではなく、むしろ開発者が別途注目すべき重要な発見である。
+/// </para>
+/// <para>
+/// ただし「主張しない」ことと「黙って消す」ことは別である（タスク7.2）。基準フォルダの絶対パスが
+/// 長い環境では、印の付いていない階層まで観測されなくなり、何の説明もないまま期待値から消える。
+/// そこで <see cref="FindUnexplainedOmissions"/> を用意し、原因を断定しないまま
+/// 「説明できない欠落」として識別できる情報とともに残す（要件5.2・5.5）。
 /// </para>
 /// </remarks>
 public sealed class KnownIssueAnalyzer : IKnownIssueAnalyzer
@@ -109,6 +164,49 @@ public sealed class KnownIssueAnalyzer : IKnownIssueAnalyzer
     /// <inheritdoc />
     public IReadOnlyList<KnownIssueFinding> Analyze(FixtureSpec spec, GoldenDocument observed)
     {
+        var findings = new List<KnownIssueFinding>();
+
+        foreach (var item in EnumerateMissingItems(spec, observed))
+        {
+            FixtureTrait? causeTrait = FindKnownIssueTrait(item);
+
+            if (causeTrait is null)
+            {
+                // 既知の不具合では説明できない欠落。この部品は判定を行わず沈黙する（要件5.5）。
+                // 黙って消さないための記録は FindUnexplainedOmissions が担う。
+                continue;
+            }
+
+            findings.Add(new KnownIssueFinding(item.RelativePath, causeTrait.Value));
+        }
+
+        return findings;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<UnexplainedOmission> FindUnexplainedOmissions(FixtureSpec spec, GoldenDocument observed)
+    {
+        var omissions = new List<UnexplainedOmission>();
+
+        foreach (var item in EnumerateMissingItems(spec, observed))
+        {
+            if (FindKnownIssueTrait(item) != null)
+            {
+                // 既知の欠落として説明できる項目は、こちらには含めない（Analyze と排他にする）。
+                continue;
+            }
+
+            omissions.Add(new UnexplainedOmission(item.RelativePath, item.Traits));
+        }
+
+        return omissions;
+    }
+
+    /// <summary>
+    /// フィクスチャ定義にあるのに観測されなかった項目を、定義の順序のまま列挙する。
+    /// </summary>
+    private static IEnumerable<FixtureItem> EnumerateMissingItems(FixtureSpec spec, GoldenDocument observed)
+    {
         if (spec is null)
         {
             throw new ArgumentNullException(nameof(spec));
@@ -123,37 +221,25 @@ public sealed class KnownIssueAnalyzer : IKnownIssueAnalyzer
             observed.Entries.Select(e => e.RelativePath),
             StringComparer.Ordinal);
 
-        var findings = new List<KnownIssueFinding>();
+        // 観測されている項目は欠落ではない。誤検出を避けるため対象外とする。
+        return spec.Items.Where(item => !observedPaths.Contains(item.RelativePath)).ToList();
+    }
 
-        foreach (var item in spec.Items)
+    /// <summary>
+    /// 欠落した項目が持つ境界条件のうち、既知の不具合の原因として認められるものを返す。
+    /// 該当がなければ null を返す。FixtureSpec 側のデータ（Traits）だけを根拠にしており、
+    /// 相対パスのハードコードは行わない。
+    /// </summary>
+    private static FixtureTrait? FindKnownIssueTrait(FixtureItem item)
+    {
+        foreach (var knownIssueTrait in KnownIssueTraits)
         {
-            if (observedPaths.Contains(item.RelativePath))
+            if (item.Traits.Contains(knownIssueTrait))
             {
-                // 観測されている項目は欠落ではない。誤検出を避けるため対象外とする。
-                continue;
+                return knownIssueTrait;
             }
-
-            // 欠落している項目が持つ境界条件のうち、既知の不具合の原因として認められるものを探す。
-            // FixtureSpec 側のデータ（Traits）だけを根拠にしており、相対パスのハードコードは行わない。
-            FixtureTrait? causeTrait = null;
-            foreach (var knownIssueTrait in KnownIssueTraits)
-            {
-                if (item.Traits.Contains(knownIssueTrait))
-                {
-                    causeTrait = knownIssueTrait;
-                    break;
-                }
-            }
-
-            if (causeTrait is null)
-            {
-                // 既知の不具合では説明できない欠落。この部品は判定を行わず沈黙する（要件5.5）。
-                continue;
-            }
-
-            findings.Add(new KnownIssueFinding(item.RelativePath, causeTrait.Value));
         }
 
-        return findings;
+        return null;
     }
 }
