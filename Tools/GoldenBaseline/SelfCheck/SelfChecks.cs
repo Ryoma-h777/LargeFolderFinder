@@ -33,17 +33,20 @@ internal static class SelfChecks
         RegisterModelInvariantEdgeCaseChecks(runner);
         RegisterLongPathChecks(runner);
         RegisterGoldenSerializerChecks(runner);
+        RegisterGoldenSerializerHeaderNewlineChecks(runner);
         RegisterHandWrittenGoldenFileChecks(runner);
         RegisterGoldenSerializerDependencyBoundaryChecks(runner);
         RegisterBaselineComparerChecks(runner);
         RegisterFixtureSpecChecks(runner);
         RegisterAccessControlGateChecks(runner);
         RegisterFixtureBuilderChecks(runner);
+        RegisterFixtureOmissionTypeNameChecks(runner);
         RegisterScanRunnerChecks(runner);
         RegisterGoldenProjectorChecks(runner);
         RegisterKnownIssueAnalyzerChecks(runner);
         RegisterKnownIssueBoundaryChecks(runner);
         RegisterProgramChecks(runner);
+        RegisterIncompleteFixtureRecordChecks(runner);
     }
 
     /// <summary>
@@ -660,6 +663,143 @@ internal static class SelfChecks
                 DeleteIfExists(pathGerman);
             }
         });
+    }
+
+    /// <summary>
+    /// ヘッダの値の改行検査（design.md: GoldenSerializer の Risks、タスク6.4）の検証項目を登録する。
+    /// ヘッダの値に CR または LF が含まれると行指向の形式が壊れ、書き出しは成功しても読み戻せなくなる
+    /// （CR が行末にあると読み取り側の CR 除去で黙って値が変わる）。書き込み前に検出して
+    /// GoldenFormatException で失敗させ、ファイルを書き出さないことを確認する。
+    /// </summary>
+    private static void RegisterGoldenSerializerHeaderNewlineChecks(SelfCheckRunner runner)
+    {
+        runner.Add("GoldenSerializer がヘッダの値（FixtureOmission・BaseFolderLabel のそれぞれ）に LF を含む文書の書き出しを GoldenFormatException で拒否し、ファイルを作らない（design.md GoldenSerializer Risks、タスク6.4）", () =>
+        {
+            AssertHeaderNewlineRejectedWithoutFile("\n", "LF");
+        });
+
+        runner.Add("GoldenSerializer がヘッダの値（FixtureOmission・BaseFolderLabel のそれぞれ）に CR を含む文書の書き出しを GoldenFormatException で拒否し、ファイルを作らない（design.md GoldenSerializer Risks、タスク6.4）", () =>
+        {
+            AssertHeaderNewlineRejectedWithoutFile("\r", "CR");
+        });
+
+        runner.Add("GoldenSerializer がヘッダの値に改行（LF・CR）を含む文書の書き出しに失敗したとき、既存の期待値ファイルの内容を変えない（タスク6.4）", () =>
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                var serializer = new GoldenSerializer();
+                serializer.Write(BuildHeaderValueDocument("fixture-v1", new[] { "normal: IOException" }), path);
+                byte[] before = File.ReadAllBytes(path);
+
+                var cases = BuildNewlineHeaderDocuments("\n", "LF").Concat(BuildNewlineHeaderDocuments("\r", "CR"));
+                foreach (var (label, document) in cases)
+                {
+                    Exception? caught = CaptureConstructionException(() => serializer.Write(document, path));
+                    SelfAssert.That(
+                        caught is GoldenFormatException,
+                        $"{label}: 既存ファイルへの書き出しが GoldenFormatException で失敗しませんでした（実際: {DescribeCaughtException(caught)}）。");
+                    SelfAssert.That(
+                        File.ReadAllBytes(path).SequenceEqual(before),
+                        $"{label}: 書き出しに失敗したにもかかわらず、既存の期待値ファイルの内容が変化しています。");
+                }
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+
+        runner.Add("GoldenSerializer が改行を含まないヘッダの値（「相対パス: 例外の型名」の形の FixtureOmission を含む）を従来どおり書き出し、読み戻すと一致する（タスク6.4）", () =>
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                var omissions = new[] { "normal: IOException", @"日本語フォルダ\日本語ファイル.txt: DirectoryNotFoundException" };
+                var document = BuildHeaderValueDocument("fixture-v1", omissions);
+                var serializer = new GoldenSerializer();
+
+                Exception? caught = CaptureConstructionException(() => serializer.Write(document, path));
+                SelfAssert.That(
+                    caught is null,
+                    $"改行を含まないヘッダの値の書き出しが失敗しました（実際: {DescribeCaughtException(caught)}: {caught?.Message}）。");
+                SelfAssert.That(File.Exists(path), "改行を含まないヘッダの値なのに期待値ファイルが書き出されていません。");
+
+                string[] lines = new UTF8Encoding(false).GetString(File.ReadAllBytes(path)).Split('\n');
+                foreach (var omission in omissions)
+                {
+                    string expectedLine = "# FixtureOmission: " + omission;
+                    SelfAssert.That(
+                        lines.Count(line => line == expectedLine) == 1,
+                        $"期待値ファイルに行 '{expectedLine}' がちょうど1行ありません。");
+                }
+
+                var roundTripped = serializer.Read(path);
+                SelfAssert.That(roundTripped.Header.BaseFolderLabel == "fixture-v1", $"読み戻した BaseFolderLabel が一致しません（実際: '{roundTripped.Header.BaseFolderLabel}'）。");
+                SelfAssert.That(
+                    roundTripped.Header.FixtureOmissions.SequenceEqual(omissions, StringComparer.Ordinal),
+                    $"読み戻した FixtureOmissions が一致しません（実際: [{string.Join(" | ", roundTripped.Header.FixtureOmissions)}]）。");
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 指定した改行文字を含むヘッダの値を持つ文書を、値の種類（FixtureOmission / BaseFolderLabel）ごとに1件ずつ組み立てる。
+    /// どちらか一方の値だけを検査する実装を見逃さないよう、改行はそれぞれの文書で1つの値にだけ含める。
+    /// </summary>
+    private static List<(string Label, GoldenDocument Document)> BuildNewlineHeaderDocuments(string newline, string newlineName)
+    {
+        return new List<(string Label, GoldenDocument Document)>
+        {
+            ($"FixtureOmission の値の末尾に {newlineName}", BuildHeaderValueDocument("fixture-v1", new[] { "empty_folder: IOException", "normal: IOException" + newline })),
+            ($"BaseFolderLabel の値の途中に {newlineName}", BuildHeaderValueDocument("fixture" + newline + "v1", new[] { "normal: IOException" })),
+        };
+    }
+
+    /// <summary>
+    /// ヘッダの値の検証に用いる、エントリ1件の最小限の文書を組み立てる。
+    /// </summary>
+    private static GoldenDocument BuildHeaderValueDocument(string baseFolderLabel, IReadOnlyList<string> fixtureOmissions)
+    {
+        var header = new GoldenHeader(
+            formatVersion: 1,
+            baseFolderLabel: baseFolderLabel,
+            generatedAt: new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero),
+            usePhysicalSize: false,
+            clusterSizeInBytes: 0L,
+            fixtureComplete: fixtureOmissions.Count == 0,
+            fixtureOmissions: fixtureOmissions);
+
+        return new GoldenDocument(header, new List<GoldenEntry> { new GoldenEntry("normal", GoldenEntryKind.File, 8L) });
+    }
+
+    /// <summary>
+    /// 改行を含むヘッダの値の書き出しが GoldenFormatException で失敗し、出力先にファイルが作られないことを、
+    /// 値の種類ごとに新しい出力先で確認する。
+    /// </summary>
+    private static void AssertHeaderNewlineRejectedWithoutFile(string newline, string newlineName)
+    {
+        var serializer = new GoldenSerializer();
+        foreach (var (label, document) in BuildNewlineHeaderDocuments(newline, newlineName))
+        {
+            string path = CreateTempGoldenFilePath();
+            try
+            {
+                Exception? caught = CaptureConstructionException(() => serializer.Write(document, path));
+                SelfAssert.That(
+                    caught is GoldenFormatException,
+                    $"{label}: 書き出しが GoldenFormatException で失敗しませんでした（実際: {DescribeCaughtException(caught)}）。");
+                SelfAssert.That(!File.Exists(path), $"{label}: 書き出しが失敗したにもかかわらずファイルが作成されています。");
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        }
     }
 
     /// <summary>
@@ -2382,6 +2522,233 @@ internal static class SelfChecks
     }
 
     /// <summary>
+    /// FixtureOmission の例外の型名（ExceptionTypeName）の検証項目を登録する（タスク6.4）。
+    /// 期待値への記録に用いる型名と、標準出力への報告に用いる詳細な理由（Reason）を分けて持つことを、
+    /// FixtureBuilder.Build の3つの生成箇所（各項目の生成失敗・基準フォルダの生成失敗・読み取り拒否設定の付与失敗）で確認する。
+    /// </summary>
+    private static void RegisterFixtureOmissionTypeNameChecks(SelfCheckRunner runner)
+    {
+        runner.Add("FixtureBuilder が項目の生成に失敗したとき、FixtureOmission.ExceptionTypeName に実際の例外の型名（名前空間なし）を、Reason に例外メッセージを含む詳細な理由を記録する（design.md FixtureBuilder、要件3.6, 3.7、タスク6.4）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+
+            try
+            {
+                var observed = BlockFixtureFolderAndObserveFailures(root);
+                var result = builder.Build(FixtureSpec.Standard, root);
+
+                // 型名は文字列リテラルで照合する（名前空間付きの FullName や、別の項目の型名の流用を見逃さないため）。
+                // 同名のファイルがある位置へのフォルダ生成は IOException、親がファイルのため存在しないパスへの
+                // ファイル生成は DirectoryNotFoundException になる（変更前の実測で確認）。
+                var expectedTypeNames = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [BlockedFixtureFolderRelativePath] = "IOException",
+                    [BlockedFixtureFolderRelativePath + @"\file_small.txt"] = "DirectoryNotFoundException",
+                };
+
+                foreach (var kv in expectedTypeNames)
+                {
+                    var omission = result.Omissions.FirstOrDefault(o => o.RelativePath == kv.Key);
+                    SelfAssert.That(omission != null, $"妨げた項目 '{kv.Key}' が Omissions に含まれていません。");
+                    SelfAssert.That(
+                        omission!.ExceptionTypeName == kv.Value,
+                        $"'{kv.Key}' の ExceptionTypeName が '{kv.Value}' ではありません（実際: '{omission.ExceptionTypeName}'）。");
+                }
+
+                // 妨げの影響を受けるすべての項目について、独立に観測した例外と照合する。
+                SelfAssert.That(
+                    result.Omissions.Count == observed.Count,
+                    $"Omissions の件数が妨げた項目の件数と一致しません（想定: {observed.Count} 件、実際: {result.Omissions.Count} 件）。");
+
+                foreach (var o in observed)
+                {
+                    var omission = result.Omissions.FirstOrDefault(x => x.RelativePath == o.RelativePath);
+                    SelfAssert.That(omission != null, $"妨げた項目 '{o.RelativePath}' が Omissions に含まれていません。");
+                    SelfAssert.That(
+                        omission!.ExceptionTypeName == o.TypeName,
+                        $"'{o.RelativePath}' の ExceptionTypeName が観測した例外の型名 '{o.TypeName}' と一致しません（実際: '{omission.ExceptionTypeName}'）。");
+                    SelfAssert.That(
+                        omission.Reason.Contains(o.Message),
+                        $"'{o.RelativePath}' の Reason に例外メッセージを含む詳細な理由が記録されていません（実際: '{omission.Reason}'）。");
+                }
+            }
+            finally
+            {
+                try
+                {
+                    builder.TearDown(FixtureSpec.Standard, root);
+                }
+                catch
+                {
+                    // 後始末自体が失敗しても、以下の強制除去へフォールバックする。
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("FixtureBuilder が基準フォルダの生成に失敗したとき、全項目の FixtureOmission.ExceptionTypeName に実際の例外の型名を、Reason に例外メッセージを含む詳細な理由を記録する（タスク6.4）", () =>
+        {
+            string conflictingRoot = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+
+            try
+            {
+                // 基準フォルダが作られるべき位置にファイルを置き、基準フォルダの生成を失敗させる。
+                File.WriteAllText(conflictingRoot, "this is a file, not a directory");
+
+                Exception? observed = CaptureConstructionException(() => Directory.CreateDirectory(LongPath.Extend(conflictingRoot)));
+                SelfAssert.That(observed != null, "前提: ファイルと衝突する基準フォルダの生成が、独立した試行で成功してしまいました。");
+
+                var result = builder.Build(FixtureSpec.Standard, conflictingRoot);
+
+                SelfAssert.That(
+                    result.Omissions.Count == FixtureSpec.Standard.Items.Count,
+                    $"基準フォルダの生成に失敗したのに、全項目が Omissions に含まれていません（想定: {FixtureSpec.Standard.Items.Count} 件、実際: {result.Omissions.Count} 件）。");
+
+                foreach (var omission in result.Omissions)
+                {
+                    // 型名はリテラルで固定せず、独立した試行で観測した例外の型名と突き合わせる。
+                    // リテラルで固定すると、本番コードが同じ文字列を直接書いてしまう変異を検出できない（タスク6.4のレビュー指摘）。
+                    SelfAssert.That(
+                        omission.ExceptionTypeName == observed!.GetType().Name,
+                        $"'{omission.RelativePath}' の ExceptionTypeName が、独立に観測した例外の型名 '{observed!.GetType().Name}' と一致しません（実際: '{omission.ExceptionTypeName}'）。");
+                    SelfAssert.That(
+                        omission.Reason.Contains(observed!.Message),
+                        $"'{omission.RelativePath}' の Reason に例外メッセージを含む詳細な理由が記録されていません（実際: '{omission.Reason}'）。");
+                }
+            }
+            finally
+            {
+                DeleteIfExists(conflictingRoot);
+            }
+        });
+
+        runner.Add("FixtureBuilder が基準フォルダの生成に失敗したとき、IOException 以外の例外でもその型名を記録する（タスク6.4）", () =>
+        {
+            // ファイルとの衝突で失敗する経路だけでは、型名を実際の例外から採っているのか、
+            // 'IOException' という文字列を直接書いているのかを区別できない（タスク6.4のレビューで実証）。
+            // 存在しないドライブを基準フォルダにすると別の型名になるため、その区別が付く。
+            const char NoFreeDriveLetter = char.MinValue;
+            var usedDriveLetters = new HashSet<char>(DriveInfo.GetDrives().Select(d => char.ToUpperInvariant(d.Name[0])));
+            char freeDriveLetter = NoFreeDriveLetter;
+            for (char candidate = 'Z'; candidate >= 'D'; candidate--)
+            {
+                if (!usedDriveLetters.Contains(candidate))
+                {
+                    freeDriveLetter = candidate;
+                    break;
+                }
+            }
+
+            SelfAssert.That(freeDriveLetter != NoFreeDriveLetter, "未使用のドライブ文字が見つからないため、この検証を実行できません。");
+
+            string missingDriveRoot = freeDriveLetter + ":" + Path.DirectorySeparatorChar + "gb_fix_missing_drive";
+
+            Exception? observed = CaptureConstructionException(() => Directory.CreateDirectory(LongPath.Extend(missingDriveRoot)));
+            SelfAssert.That(observed != null, $"前提: 存在しないドライブ '{freeDriveLetter}:' 上の基準フォルダの生成が、独立した試行で成功してしまいました。");
+            SelfAssert.That(
+                observed!.GetType().Name != "IOException",
+                $"前提: 観測した例外の型名が 'IOException' では、リテラルで直接書いた実装と区別できません（実際: '{observed.GetType().Name}'）。");
+
+            var result = new FixtureBuilder().Build(FixtureSpec.Standard, missingDriveRoot);
+
+            SelfAssert.That(
+                result.Omissions.Count == FixtureSpec.Standard.Items.Count,
+                $"基準フォルダの生成に失敗したのに、全項目が Omissions に含まれていません（想定: {FixtureSpec.Standard.Items.Count} 件、実際: {result.Omissions.Count} 件）。");
+
+            foreach (var omission in result.Omissions)
+            {
+                SelfAssert.That(
+                    omission.ExceptionTypeName == observed.GetType().Name,
+                    $"'{omission.RelativePath}' の ExceptionTypeName が、独立に観測した例外の型名 '{observed.GetType().Name}' と一致しません（実際: '{omission.ExceptionTypeName}'）。型名をリテラルで直接書いている可能性があります。");
+            }
+        });
+
+        runner.Add("FixtureBuilder が読み取り拒否設定の付与に失敗したとき、その項目の FixtureOmission.ExceptionTypeName に例外の型名を、Reason に例外メッセージを含む詳細な理由を記録する（タスク6.4）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+
+            // 実際の ACL には触れない（付与は常に失敗し、解除は何もしない）ため、削除できない拒否設定は残らない。
+            var builder = new FixtureBuilder(new FailingDenyAccessControlGate());
+
+            try
+            {
+                var result = builder.Build(FixtureSpec.Standard, root);
+
+                var deniedItems = FixtureSpec.Standard.Items
+                    .Where(i => i.Kind == GoldenEntryKind.Folder && i.Traits.Contains(FixtureTrait.AccessDenied))
+                    .ToList();
+                SelfAssert.That(deniedItems.Count > 0, "FixtureSpec.Standard に AccessDenied トレイトのフォルダが見つかりません。");
+                SelfAssert.That(
+                    result.Omissions.Count == deniedItems.Count,
+                    $"Omissions の件数が拒否設定の付与に失敗した項目の件数と一致しません（想定: {deniedItems.Count} 件、実際: {result.Omissions.Count} 件）。");
+
+                foreach (var item in deniedItems)
+                {
+                    var omission = result.Omissions.FirstOrDefault(o => o.RelativePath == item.RelativePath);
+                    SelfAssert.That(omission != null, $"拒否設定の付与に失敗した '{item.RelativePath}' が Omissions に含まれていません。");
+                    SelfAssert.That(
+                        omission!.ExceptionTypeName == "InvalidOperationException",
+                        $"'{item.RelativePath}' の ExceptionTypeName が 'InvalidOperationException' ではありません（実際: '{omission.ExceptionTypeName}'）。");
+                    SelfAssert.That(
+                        omission.Reason.Contains(FailingDenyAccessControlGate.FailureMessage),
+                        $"'{item.RelativePath}' の Reason に例外メッセージを含む詳細な理由が記録されていません（実際: '{omission.Reason}'）。");
+                }
+            }
+            finally
+            {
+                try
+                {
+                    builder.TearDown(FixtureSpec.Standard, root);
+                }
+                catch
+                {
+                    // 後始末自体が失敗しても、以下の強制除去へフォールバックする。
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
+        runner.Add("FixtureOmission が空または null の例外の型名を ArgumentException で拒否し、指定した型名を保持する（タスク6.4）", () =>
+        {
+            foreach (var typeName in new string?[] { string.Empty, null })
+            {
+                Exception? caught = CaptureConstructionException(() => { _ = new FixtureOmission("normal", "生成に失敗しました", typeName!); });
+                SelfAssert.That(
+                    caught is ArgumentException,
+                    $"例外の型名に{(typeName is null ? " null " : "空文字")}を与えても ArgumentException が発生しませんでした（実際: {DescribeCaughtException(caught)}）。");
+            }
+
+            var omission = new FixtureOmission("normal", "生成に失敗しました: 詳細", "IOException");
+            SelfAssert.That(omission.RelativePath == "normal", $"RelativePath が指定した値と一致しません（実際: '{omission.RelativePath}'）。");
+            SelfAssert.That(omission.Reason == "生成に失敗しました: 詳細", $"Reason が指定した値と一致しません（実際: '{omission.Reason}'）。");
+            SelfAssert.That(omission.ExceptionTypeName == "IOException", $"ExceptionTypeName が指定した値と一致しません（実際: '{omission.ExceptionTypeName}'）。");
+        });
+    }
+
+    /// <summary>
+    /// 読み取り拒否設定の付与を常に失敗させる、検証用のアクセス制御ゲート。解除は何もしない。
+    /// </summary>
+    private sealed class FailingDenyAccessControlGate : IAccessControlGate
+    {
+        /// <summary>付与の失敗として送出する例外のメッセージ。</summary>
+        public const string FailureMessage = "検証のために読み取り拒否設定の付与を失敗させました。";
+
+        public void DenyRead(string directoryPath)
+        {
+            throw new InvalidOperationException(FailureMessage);
+        }
+
+        public void RestoreRead(string directoryPath)
+        {
+            // 付与していないため、解除することはない。
+        }
+    }
+
+    /// <summary>
     /// Scan 層（ScanRunner）の検証項目を登録する（タスク4.1）。
     /// 被テストアプリの Scanner を実際に呼び出す、初めての検証項目である。
     /// FixtureBuilder で生成した FixtureSpec.Standard を走査対象として用いる。
@@ -3867,6 +4234,275 @@ internal static class SelfChecks
                 ForceCleanupFixtureResidue(root);
             }
         });
+    }
+
+    /// <summary>
+    /// 生成を妨げる対象として用いるフォルダの相対パス。既存の FixtureBuilder の部分失敗の検証と同じ手法
+    /// （同名のファイルを先に置くと Directory.CreateDirectory が失敗する）を CLI の結合検証でも用いる。
+    /// </summary>
+    private const string BlockedFixtureFolderRelativePath = "normal";
+
+    /// <summary>
+    /// 不完全なフィクスチャの記録と、読み取り拒否を含むフィクスチャの生成から後始末までの完走を、
+    /// CLI（generate）を実際に起動して確認する検証項目を登録する（タスク6.4）。
+    /// </summary>
+    private static void RegisterIncompleteFixtureRecordChecks(SelfCheckRunner runner)
+    {
+        runner.Add("生成を妨げたフィクスチャで基準フォルダを変えて generate を2回実行すると、どちらも終了コード0で、期待値に FixtureComplete: false と「相対パス: 例外の型名」の FixtureOmission が妨げた項目ぶん記録され、生成日時の行を除いてバイト単位で一致し、絶対パス・ユーザー名・例外メッセージを含まず、詳細な理由は標準出力に出て、実行後に残留物がない（要件2.3, 3.6, 3.7、タスク6.4）", () =>
+        {
+            string root1 = CreateTempFixtureRoot();
+            string root2 = CreateTempFixtureRoot();
+            string outPath1 = CreateTempCliGoldenFilePath();
+            string outPath2 = CreateTempCliGoldenFilePath();
+            var gbEntriesBefore = SnapshotTempGbEntries();
+
+            try
+            {
+                // 長いパスの欠落は基準フォルダを含む絶対パスの長さで変わる（tasks.md Implementation Notes）。
+                // 2回の生成の違いを基準フォルダの「名前」だけに絞るため、長さは揃え、名前は変える。
+                SelfAssert.That(root1.Length == root2.Length, $"2回の基準フォルダの長さが揃っていません（{root1.Length}文字 / {root2.Length}文字）。");
+                SelfAssert.That(!string.Equals(root1, root2, StringComparison.OrdinalIgnoreCase), $"2回の基準フォルダが同じ名前です: {root1}");
+
+                var observed1 = BlockFixtureFolderAndObserveFailures(root1);
+                var result1 = RunGoldenBaselineProcess("generate", "--out", outPath1, "--root", root1);
+                var observed2 = BlockFixtureFolderAndObserveFailures(root2);
+                var result2 = RunGoldenBaselineProcess("generate", "--out", outPath2, "--root", root2);
+
+                // (a) 一部が生成できなくても生成は継続し、完走する（要件3.6）。
+                SelfAssert.That(result1.ExitCode == 0, $"1回目の generate の終了コードが0ではありません（実際: {result1.ExitCode}）。標準出力: {result1.StdOut} 標準エラー: {result1.StdErr}");
+                SelfAssert.That(result2.ExitCode == 0, $"2回目の generate の終了コードが0ではありません（実際: {result2.ExitCode}）。標準出力: {result2.StdOut} 標準エラー: {result2.StdErr}");
+                SelfAssert.That(File.Exists(outPath1) && File.Exists(outPath2), "generate が期待値ファイルを書き出していません。");
+
+                byte[] bytes1 = File.ReadAllBytes(outPath1);
+                byte[] bytes2 = File.ReadAllBytes(outPath2);
+                var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+                string text1 = utf8.GetString(bytes1);
+                string text2 = utf8.GetString(bytes2);
+
+                // (b) 不完全である旨と、妨げた項目ぶんの「相対パス: 例外の型名」が記録される（要件3.7）。
+                AssertIncompleteFixtureHeader(text1, observed1, "1回目");
+                AssertIncompleteFixtureHeader(text2, observed2, "2回目");
+
+                // (c) 基準フォルダを変えても、生成日時の行を除いてバイト単位で一致する（要件2.3）。
+                var excluded1 = ExcludeGeneratedAtLine(bytes1);
+                var excluded2 = ExcludeGeneratedAtLine(bytes2);
+                SelfAssert.That(excluded1.GeneratedAtLineCount == 1 && excluded2.GeneratedAtLineCount == 1, "'# GeneratedAt:' の行がそれぞれちょうど1行ではありません。");
+                int expectedOtherHeaderLineCount = 5 + observed1.Count;
+                SelfAssert.That(
+                    excluded1.OtherHeaderLineCount == expectedOtherHeaderLineCount && excluded2.OtherHeaderLineCount == expectedOtherHeaderLineCount,
+                    $"生成日時の行を除いたヘッダ行数が想定（{expectedOtherHeaderLineCount}行）と異なります（実際: {excluded1.OtherHeaderLineCount}行 / {excluded2.OtherHeaderLineCount}行）。");
+                // エントリ部が空に退行しても「一致」してしまわないよう、エントリ行が残っていることも見る。
+                SelfAssert.That(
+                    excluded1.EntryLineCount >= 1 && excluded2.EntryLineCount >= 1,
+                    $"生成日時の行を除いた出力にエントリ行が残っていません（実際: {excluded1.EntryLineCount}行 / {excluded2.EntryLineCount}行）。");
+                SelfAssert.That(
+                    excluded1.FilteredBytes.SequenceEqual(excluded2.FilteredBytes),
+                    $"基準フォルダを変えて生成した2つの期待値が、生成日時の行を除いてバイト単位で一致しません。\n1回目:\n{text1}\n2回目:\n{text2}");
+
+                // (d) 期待値に環境に依存する情報（絶対パス・ユーザー名・例外メッセージ）が含まれない。
+                string userName = Environment.UserName;
+                SelfAssert.That(!string.IsNullOrWhiteSpace(userName), "照合に用いるユーザー名を取得できませんでした。");
+                var forbiddenTokens = new List<(string What, string Token)>
+                {
+                    ("1回目の基準フォルダの絶対パス", root1),
+                    ("2回目の基準フォルダの絶対パス", root2),
+                    ("1回目の基準フォルダ名", Path.GetFileName(root1)),
+                    ("2回目の基準フォルダ名", Path.GetFileName(root2)),
+                    ("ユーザー名", userName),
+                };
+                forbiddenTokens.AddRange(observed1.Concat(observed2).Select(o => ($"'{o.RelativePath}' の例外メッセージ", o.Message)));
+
+                foreach (var (label, text) in new[] { ("1回目", text1), ("2回目", text2) })
+                {
+                    foreach (var (what, token) in forbiddenTokens)
+                    {
+                        SelfAssert.That(
+                            text.IndexOf(token, StringComparison.OrdinalIgnoreCase) < 0,
+                            $"{label}の期待値に{what}が含まれています: '{token}'");
+                    }
+                }
+
+                // (e) 詳細な理由（例外メッセージ）は標準出力への報告には出る（要件3.6）。
+                foreach (var (label, stdOut, observed) in new[] { ("1回目", result1.StdOut, observed1), ("2回目", result2.StdOut, observed2) })
+                {
+                    foreach (var o in observed)
+                    {
+                        SelfAssert.That(
+                            stdOut.Contains(o.RelativePath) && stdOut.Contains(o.Message),
+                            $"{label}の標準出力に '{o.RelativePath}' の詳細な理由（例外メッセージ '{o.Message}'）が報告されていません。標準出力: {stdOut}");
+                    }
+                }
+
+                // (f) 実行後に基準フォルダも gb_* の残留物もない。
+                foreach (var root in new[] { root1, root2 })
+                {
+                    SelfAssert.That(!Directory.Exists(root) && !Directory.Exists(LongPath.Extend(root)), $"generate の実行後に基準フォルダが残留しています: {root}");
+                }
+
+                AssertNoNewTempGbEntries("生成を妨げたフィクスチャでの generate", gbEntriesBefore, outPath1, outPath2);
+            }
+            finally
+            {
+                DeleteIfExists(outPath1);
+                DeleteIfExists(outPath2);
+                ForceCleanupFixtureResidue(root1);
+                ForceCleanupFixtureResidue(root2);
+            }
+        });
+
+        runner.Add("読み取り拒否フォルダを含むフィクスチャで generate が終了コード0で完走し、拒否フォルダがスキップされた対象として標準出力に報告され、期待値は完全で拒否フォルダ自身も記録され、実行後に基準フォルダも gb_* の残留物もない（要件2.4, 3.4、タスク6.4）", () =>
+        {
+            string root = CreateTempFixtureRoot();
+            string outPath = CreateTempCliGoldenFilePath();
+            var gbEntriesBefore = SnapshotTempGbEntries();
+
+            try
+            {
+                var deniedItems = FixtureSpec.Standard.Items.Where(i => i.Traits.Contains(FixtureTrait.AccessDenied)).ToList();
+                SelfAssert.That(deniedItems.Count > 0, "FixtureSpec.Standard に AccessDenied トレイトの項目が見つかりません。");
+
+                var result = RunGoldenBaselineProcess("generate", "--out", outPath, "--root", root);
+                SelfAssert.That(result.ExitCode == 0, $"generate の終了コードが0ではありません（実際: {result.ExitCode}）。標準出力: {result.StdOut} 標準エラー: {result.StdErr}");
+
+                var document = new GoldenSerializer().Read(outPath);
+
+                // 拒否設定の付与に失敗すると未生成として記録されるため、期待値が完全であることは、
+                // 拒否設定が実際に付与された状態で走査されたことの前提になる。
+                SelfAssert.That(
+                    document.Header.FixtureComplete,
+                    $"期待値が不完全として記録されています（未生成: {string.Join(" | ", document.Header.FixtureOmissions)}）。");
+
+                foreach (var item in deniedItems)
+                {
+                    string deniedFullPath = Path.Combine(root, item.RelativePath);
+                    SelfAssert.That(
+                        result.StdOut.IndexOf(deniedFullPath, StringComparison.OrdinalIgnoreCase) >= 0,
+                        $"スキップされた対象として拒否フォルダ '{deniedFullPath}' が標準出力に報告されていません: {result.StdOut}");
+                    SelfAssert.That(
+                        document.Entries.Any(e => e.RelativePath == item.RelativePath && e.Kind == GoldenEntryKind.Folder),
+                        $"拒否フォルダ '{item.RelativePath}' 自身がフォルダとして期待値に記録されていません（走査が完了していない可能性があります）。");
+                }
+
+                // 拒否フォルダと無関係な項目も記録されており、走査が拒否フォルダで中断していないこと。
+                var emptyItems = FixtureSpec.Standard.Items.Where(i => i.Traits.Contains(FixtureTrait.Empty)).ToList();
+                SelfAssert.That(emptyItems.Count > 0, "FixtureSpec.Standard に Empty トレイトの項目が見つかりません。");
+                foreach (var item in emptyItems)
+                {
+                    SelfAssert.That(
+                        document.Entries.Any(e => e.RelativePath == item.RelativePath),
+                        $"拒否フォルダと無関係な '{item.RelativePath}' が期待値に記録されていません（走査が中断している可能性があります）。");
+                }
+
+                SelfAssert.That(!Directory.Exists(root) && !Directory.Exists(LongPath.Extend(root)), $"generate の実行後に基準フォルダが残留しています: {root}");
+                AssertNoNewTempGbEntries("読み取り拒否を含むフィクスチャでの generate", gbEntriesBefore, outPath);
+            }
+            finally
+            {
+                DeleteIfExists(outPath);
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 基準フォルダを作り、<see cref="BlockedFixtureFolderRelativePath"/> の位置に同名のファイルを置いて生成を妨げる。
+    /// 妨げの影響を受ける項目（そのフォルダ自身と配下）を FixtureSpec.Standard から導出し、
+    /// FixtureBuilder を介さずに同じ生成操作を拡張長パスで独立に試みて、実際に起きる例外の型名とメッセージを観測する。
+    /// 例外の型名やメッセージを文字列リテラルで固定しないため、OS の表示言語やパスによらず照合できる。
+    /// </summary>
+    private static List<(string RelativePath, string TypeName, string Message)> BlockFixtureFolderAndObserveFailures(string root)
+    {
+        var affectedItems = FixtureSpec.Standard.Items
+            .Where(i => i.RelativePath == BlockedFixtureFolderRelativePath
+                     || i.RelativePath.StartsWith(BlockedFixtureFolderRelativePath + "\\", StringComparison.Ordinal))
+            .ToList();
+        SelfAssert.That(
+            affectedItems.Any(i => i.RelativePath == BlockedFixtureFolderRelativePath && i.Kind == GoldenEntryKind.Folder),
+            $"FixtureSpec.Standard に妨げる対象のフォルダ '{BlockedFixtureFolderRelativePath}' が見つかりません。");
+
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, BlockedFixtureFolderRelativePath), "blocker");
+
+        var observed = new List<(string RelativePath, string TypeName, string Message)>();
+        foreach (var item in affectedItems)
+        {
+            string extendedPath = LongPath.Extend(Path.Combine(root, item.RelativePath));
+            Exception? caught = CaptureConstructionException(() =>
+            {
+                if (item.Kind == GoldenEntryKind.Folder)
+                {
+                    Directory.CreateDirectory(extendedPath);
+                }
+                else
+                {
+                    using (new FileStream(extendedPath, FileMode.Create, FileAccess.Write))
+                    {
+                    }
+                }
+            });
+
+            SelfAssert.That(caught != null, $"生成を妨げたはずの '{item.RelativePath}' が、独立した試行で生成できてしまいました。");
+            SelfAssert.That(
+                !string.IsNullOrWhiteSpace(caught!.Message) && caught.Message.Trim().Length >= 5,
+                $"'{item.RelativePath}' の生成失敗で観測した例外メッセージが短すぎて照合に使えません（実際: '{caught.Message}'）。");
+            observed.Add((item.RelativePath, caught.GetType().Name, caught.Message));
+        }
+
+        return observed;
+    }
+
+    /// <summary>
+    /// 期待値ファイルのテキストのヘッダが、不完全である旨（FixtureComplete: false）と、
+    /// 観測した未生成項目ぶんの「# FixtureOmission: 相対パス: 例外の型名」の行を過不足なく持つことを照合する。
+    /// 未生成項目の並び順は仕様に定められていないため、順序は問わない。
+    /// </summary>
+    private static void AssertIncompleteFixtureHeader(string text, IReadOnlyList<(string RelativePath, string TypeName, string Message)> observed, string context)
+    {
+        string[] lines = text.Split('\n');
+
+        var completeLines = lines.Where(line => line.StartsWith("# FixtureComplete: ", StringComparison.Ordinal)).ToList();
+        SelfAssert.That(
+            completeLines.Count == 1 && completeLines[0] == "# FixtureComplete: false",
+            $"{context}: ヘッダに 'FixtureComplete: false' がちょうど1行記録されていません（実際: [{string.Join(" | ", completeLines)}]）。");
+
+        var actualOmissionLines = lines
+            .Where(line => line.StartsWith("# FixtureOmission: ", StringComparison.Ordinal))
+            .OrderBy(line => line, StringComparer.Ordinal)
+            .ToList();
+        var expectedOmissionLines = observed
+            .Select(o => $"# FixtureOmission: {o.RelativePath}: {o.TypeName}")
+            .OrderBy(line => line, StringComparer.Ordinal)
+            .ToList();
+
+        SelfAssert.That(
+            actualOmissionLines.Count == expectedOmissionLines.Count,
+            $"{context}: FixtureOmission の行数が妨げた項目の件数と一致しません（想定: {expectedOmissionLines.Count} 件、実際: {actualOmissionLines.Count} 件）。実際の行: [{string.Join(" | ", actualOmissionLines)}]");
+        SelfAssert.That(
+            actualOmissionLines.SequenceEqual(expectedOmissionLines, StringComparer.Ordinal),
+            $"{context}: FixtureOmission の行が「相対パス: 例外の型名」の形で妨げた項目と一致しません。想定: [{string.Join(" | ", expectedOmissionLines)}] 実際: [{string.Join(" | ", actualOmissionLines)}]");
+    }
+
+    /// <summary>
+    /// %TEMP% 直下の gb_* の項目（検証用の一時フォルダ・ファイルの規約上の接頭辞）を列挙する。
+    /// </summary>
+    private static List<string> SnapshotTempGbEntries()
+    {
+        return Directory.GetFileSystemEntries(Path.GetTempPath(), "gb_*").ToList();
+    }
+
+    /// <summary>
+    /// 事前に取った gb_* の一覧と比べて、許可した出力先以外に新たな gb_* の項目が残っていないことを照合する。
+    /// 他の検証が残した既存の残留物で誤って失敗しないよう、差分だけを見る。
+    /// </summary>
+    private static void AssertNoNewTempGbEntries(string context, IReadOnlyCollection<string> entriesBefore, params string[] allowedPaths)
+    {
+        var before = new HashSet<string>(entriesBefore, StringComparer.OrdinalIgnoreCase);
+        var allowed = new HashSet<string>(allowedPaths, StringComparer.OrdinalIgnoreCase);
+        var leftovers = SnapshotTempGbEntries()
+            .Where(p => !before.Contains(p) && !allowed.Contains(p))
+            .ToList();
+
+        SelfAssert.That(leftovers.Count == 0, $"{context}: 実行後に %TEMP% に gb_* の残留物があります: {string.Join(", ", leftovers)}");
     }
 
     /// <summary>

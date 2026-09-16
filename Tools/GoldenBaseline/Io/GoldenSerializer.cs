@@ -88,6 +88,8 @@ public sealed class GoldenSerializer : IGoldenSerializer
             throw new ArgumentException("出力先のファイルパスが空です。", nameof(filePath));
         }
 
+        // 検査はすべて書き込みより前に行い、失敗したときはファイルを作らず既存のファイルも変えない。
+        ValidateHeaderValues(document.Header);
         ValidateEntryPaths(document.Entries);
 
         // 序数比較で昇順に並べる。カルチャ依存の比較は用いない（要件1.3）。
@@ -177,6 +179,31 @@ public sealed class GoldenSerializer : IGoldenSerializer
                 throw new GoldenFormatException(
                     $"相対パス '{entry.RelativePath}' にタブ文字が含まれています。エントリ行の区切り文字と衝突するため書き込めません。");
             }
+        }
+    }
+
+    /// <summary>
+    /// ヘッダの文字列の値（基準の論理名と各未生成項目）に改行（CR または LF）が含まれていないことを検証する。
+    /// 含まれていると行指向の形式が壊れ、書き出しは成功しても読み戻せなくなるため、書き込み時に検出して失敗させる
+    /// （design.md: GoldenSerializer の Risks）。数値・真偽値・日時の値は書式上改行を含みえないため対象にしない。
+    /// </summary>
+    private static void ValidateHeaderValues(GoldenHeader header)
+    {
+        ValidateHeaderValueHasNoNewline(HeaderKeyBaseFolderLabel, header.BaseFolderLabel);
+
+        foreach (var omission in header.FixtureOmissions)
+        {
+            ValidateHeaderValueHasNoNewline(HeaderKeyFixtureOmission, omission);
+        }
+    }
+
+    private static void ValidateHeaderValueHasNoNewline(string key, string value)
+    {
+        if (value.IndexOf('\r') >= 0 || value.IndexOf('\n') >= 0)
+        {
+            string visible = value.Replace("\r", "\\r").Replace("\n", "\\n");
+            throw new GoldenFormatException(
+                $"ヘッダ項目 '{key}' の値 '{visible}' に改行（CR または LF）が含まれています。行指向の形式が壊れ読み戻せなくなるため書き込めません。");
         }
     }
 

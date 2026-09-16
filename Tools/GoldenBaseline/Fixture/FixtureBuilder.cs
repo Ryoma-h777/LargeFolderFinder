@@ -34,21 +34,33 @@ public interface IFixtureBuilder
 
 /// <summary>
 /// 生成できなかった1項目とその理由（要件3.6）。
+/// 標準出力への報告に用いる詳細な理由（<see cref="Reason"/>）と、期待値への記録に用いる例外の型名
+/// （<see cref="ExceptionTypeName"/>）を分けて持つ（design.md: FixtureBuilder、要件2.3・3.7）。
 /// </summary>
 public sealed class FixtureOmission
 {
     /// <summary>生成できなかった項目の相対パス。</summary>
     public string RelativePath { get; }
 
-    /// <summary>生成できなかった理由。</summary>
+    /// <summary>
+    /// 生成できなかった詳細な理由。標準出力への報告用。
+    /// 例外メッセージを含み、基準フォルダの絶対パス・ローカルのユーザー名・OS の表示言語による文言に依存する。
+    /// </summary>
     public string Reason { get; }
+
+    /// <summary>
+    /// 生成の失敗を引き起こした例外の型名（名前空間を含まない。例: IOException）。期待値への記録用。
+    /// 実行ごと・マシンごとに変わらない情報だけを期待値に残すために、<see cref="Reason"/> とは別に持つ。
+    /// </summary>
+    public string ExceptionTypeName { get; }
 
     /// <summary>
     /// FixtureOmission を構築する。
     /// </summary>
     /// <param name="relativePath">生成できなかった項目の相対パス。</param>
-    /// <param name="reason">生成できなかった理由。</param>
-    public FixtureOmission(string relativePath, string reason)
+    /// <param name="reason">生成できなかった詳細な理由（標準出力への報告用）。</param>
+    /// <param name="exceptionTypeName">生成の失敗を引き起こした例外の型名（期待値への記録用）。</param>
+    public FixtureOmission(string relativePath, string reason, string exceptionTypeName)
     {
         if (string.IsNullOrEmpty(relativePath))
         {
@@ -60,8 +72,14 @@ public sealed class FixtureOmission
             throw new ArgumentException("理由が空です。", nameof(reason));
         }
 
+        if (string.IsNullOrEmpty(exceptionTypeName))
+        {
+            throw new ArgumentException("例外の型名が空です。", nameof(exceptionTypeName));
+        }
+
         RelativePath = relativePath;
         Reason = reason;
+        ExceptionTypeName = exceptionTypeName;
     }
 }
 
@@ -139,9 +157,10 @@ public sealed class FixtureBuilder : IFixtureBuilder
         catch (Exception ex)
         {
             string reason = DescribeFailure("基準フォルダの生成に失敗しました", ex);
+            string exceptionTypeName = ex.GetType().Name;
             foreach (var item in spec.Items)
             {
-                omissions.Add(new FixtureOmission(item.RelativePath, reason));
+                omissions.Add(new FixtureOmission(item.RelativePath, reason, exceptionTypeName));
             }
 
             return new FixtureBuildResult(omissions);
@@ -184,7 +203,7 @@ public sealed class FixtureBuilder : IFixtureBuilder
             }
             catch (Exception ex)
             {
-                omissions.Add(new FixtureOmission(item.RelativePath, DescribeFailure("生成に失敗しました", ex)));
+                omissions.Add(new FixtureOmission(item.RelativePath, DescribeFailure("生成に失敗しました", ex), ex.GetType().Name));
                 continue;
             }
 
@@ -207,7 +226,7 @@ public sealed class FixtureBuilder : IFixtureBuilder
             }
             catch (Exception ex)
             {
-                omissions.Add(new FixtureOmission(item.RelativePath, DescribeFailure("読み取り拒否設定の付与に失敗しました", ex)));
+                omissions.Add(new FixtureOmission(item.RelativePath, DescribeFailure("読み取り拒否設定の付与に失敗しました", ex), ex.GetType().Name));
             }
         }
 

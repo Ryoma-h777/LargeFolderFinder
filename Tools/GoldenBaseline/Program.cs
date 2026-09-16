@@ -435,6 +435,12 @@ internal static class Program
     // 共通ヘルパー
     // ==================================================================
 
+    /// <summary>
+    /// 期待値データのヘッダを組み立てる。未生成項目は「相対パス: 例外の型名」の形だけを記録し、
+    /// 例外メッセージ（基準フォルダの絶対パス・ユーザー名・OS の表示言語による文言を含む）は含めない。
+    /// 詳細な理由は <see cref="PrintFixtureBuildReport"/> で標準出力にのみ出す
+    /// （design.md: Program の責務、要件2.3・3.7、2026-09-15 ユーザー決定）。
+    /// </summary>
     private static GoldenHeader BuildHeader(FixtureSpec spec, bool usePhysicalSize, long clusterSizeInBytes, FixtureBuildResult buildResult)
     {
         return new GoldenHeader(
@@ -444,7 +450,7 @@ internal static class Program
             usePhysicalSize,
             clusterSizeInBytes,
             buildResult.IsComplete,
-            buildResult.Omissions.Select(o => $"{o.RelativePath}: {o.Reason}").ToList());
+            buildResult.Omissions.Select(o => $"{o.RelativePath}: {o.ExceptionTypeName}").ToList());
     }
 
     private static void PrintFixtureBuildReport(string root, FixtureBuildResult result)
