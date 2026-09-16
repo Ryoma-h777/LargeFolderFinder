@@ -92,7 +92,7 @@ graph TB
 
 - **Selected pattern**: 単方向の層構成を持つ単一プロセスのコンソールツール。被テストアプリを外部依存として読み取り専用に利用する
 - **Domain boundaries**: 「フィクスチャの生成」「走査の実行と射影」「期待値の永続化」「比較」を分離する。各層は左の層のみを参照する
-- **Dependency direction**: `Model` → `Io` → `Fixture` → `Scan` → `Compare` → `Program`。各層は自分より左の層のみを参照し、逆流を禁じる
+- **Dependency direction**: `Model` → `Io` → `Fixture` → `Scan` → `Compare` → `SelfCheck` → `Program`。各層は自分より左の層のみを参照し、逆流を禁じる。`SelfCheck` は自己検証ハーネス（tasks.md 1.1 で承認）で、`Program` からのみ参照される
 - **New components rationale**: 被テストアプリを改変しないという境界上の要請から、独立した実行ファイルが必要になる。フィクスチャ生成と走査を同一プロセスに置くのは、生成直後の状態をそのまま走査でき、外部の手順書に頼らず再現性を担保できるため
 - **Steering compliance**: 本体の構成には手を触れず、structure.md の「Services は UI に依存しない」という既存の性質に依拠する。本体側の変更はビルド設定1点のみ
 
@@ -128,10 +128,15 @@ Tools/
     ├── Scan/
     │   ├── ScanRunner.cs            # 本体の Scanner を固定条件で呼び出す
     │   └── GoldenProjector.cs       # FolderInfo ツリーを GoldenDocument へ射影する
-    └── Compare/
-        ├── BaselineComparer.cs      # 期待値と実測の突き合わせ
-        ├── DiffReport.cs            # 差分の集約と判定結果
-        └── KnownIssueAnalyzer.cs    # フィクスチャ定義と観測結果の差から既知の欠落を識別する
+    ├── Compare/
+    │   ├── BaselineComparer.cs      # 期待値と実測の突き合わせ
+    │   ├── DiffReport.cs            # 差分の集約と判定結果
+    │   └── KnownIssueAnalyzer.cs    # フィクスチャ定義と観測結果の差から既知の欠落を識別する
+    └── SelfCheck/                   # 外部依存を持たない自己検証ハーネス（tasks.md 1.1 で承認）
+        ├── SelfCheckRunner.cs       # 検証項目の登録と実行、失敗の集計
+        ├── CheckOutcome.cs          # 1項目の結果
+        ├── SelfAssert.cs            # 条件の判定
+        └── SelfChecks.cs            # 検証項目の本体
 
 baselines/
 └── fixture-v1.golden.txt            # 生成された期待値データ。Git 管理下に置く
@@ -143,7 +148,7 @@ baselines/
 
 - `LargeFolderFinder.csproj` — `DefaultItemExcludes` に `Tools\**` を追加する。SDK 形式の glob により `Tools/` 配下の `.cs` が本体のビルドへ取り込まれるのを防ぐ。既存の `TestPerf\**` と同じ形式で追記する
 - `LargeFolderFinder.sln` — `GoldenBaseline` プロジェクトを追加する
-- `.gitignore` — 生成されるフィクスチャの実体を除外する。`baselines/` 配下の期待値データは追跡対象として残す
+- `.gitignore` — 生成されるフィクスチャの実体を除外する。`baselines/` 配下の期待値データは追跡対象として残す（実際の既定の置き場は `%TEMP%` 配下であり、リポジトリ直下の `fixtures/` は現在使われていない）
 
 ## System Flows
 
@@ -390,7 +395,7 @@ public sealed class FixtureSpec
 **Responsibilities & Constraints**
 
 - 生成は `LongPath.Extend` を通した経路でのみ行う。プレーンなパスでの生成は 260 文字を超えた時点で失敗するため用いない
-- ディレクトリは 248 文字、ファイルは 260 文字と境界が異なる。**両方の境界をまたぐ構造を含める**
+- フィクスチャの**生成**では、プレーンなパスの上限としてディレクトリ 248 文字・ファイル 260 文字が効く。**両方の長さをまたぐ構造を含める**（生成は `LongPath.Extend` を通すため実際には作成できる）。**走査の境界はこれとは別物で、「親フォルダの絶対パスが258文字以上だと直下を一覧できない」の1つだけ**（2026-09-16 実測。フォルダとファイルに差はない）
 - 日本語を含むパスの長さは文字数で数える。バイト数ではない
 - 生成できなかった項目があっても中断せず、項目と理由を結果に含めて継続する（要件 3.6）
 - 未生成の項目には、標準出力への報告に用いる詳細な理由（例外メッセージを含む）と、期待値への記録に用いる例外の型名の双方を持たせる。例外メッセージには基準フォルダの絶対パス、ローカルのユーザー名、OS の表示言語による文言が含まれ、実行ごと・マシンごとに変わるため（要件 2.3、3.7）
@@ -621,7 +626,7 @@ public sealed class KnownIssueFinding
 
 **Responsibilities & Constraints**
 
-- `build-fixture` / `generate` / `compare` / `update` の4つを提供する
+- `build-fixture` / `generate` / `compare` / `update` の4つを提供する。あわせて自己検証を実行する `selfcheck` を持つ（tasks.md 1.1 で承認した自己検証ハーネスの実行入口。終了コードは失敗0件で 0、1件以上で 1 とし、下記の判定用の体系とは別系統）
 - `update` は期待値を再生成する前に、現行の期待値との差分を提示する（要件 5.3、5.4）
 - 未生成項目は、標準出力には詳細な理由を、期待値には `相対パス: 例外の型名` だけを出す（要件 2.3、3.6、3.7）
 - 判定結果を終了コードで示す（要件 4.7）。一致は 0、差分ありは 1、設定不一致および実行時エラーは 2 とする
@@ -684,7 +689,7 @@ public sealed class KnownIssueFinding
 ### Integration Tests
 
 - フィクスチャを生成し、走査し、期待値を書き出し、再読み込みして一致することを確認する（要件 2.1、7.1）
-- 248 文字を超えるフォルダと 260 文字を超えるファイルが**現行版では欠落する**ことを確認し、それが既知の不具合として識別される（要件 3.1、5.1、5.2）
+- 親フォルダの絶対パスが258文字以上になる階層の項目が**現行版では欠落する**ことを確認し、それが既知の不具合として識別される（要件 3.1、5.1、5.2）
 - Deny ACE を付けたフォルダが走査でスキップされ、走査自体は完了する（要件 3.4、2.4）
 - フィクスチャの一部が生成できなかった場合に、期待値へ不完全である旨が記録される（要件 3.6、3.7）
 - 後始末が、Deny ACE を含むフィクスチャを残留なく削除する

@@ -49,6 +49,7 @@ internal static class SelfChecks
         RegisterIncompleteFixtureRecordChecks(runner);
         RegisterBaseFolderPathLengthChecks(runner);
         RegisterPathLengthBoundaryChecks(runner);
+        RegisterScanReportParityChecks(runner);
     }
 
     /// <summary>
@@ -3725,6 +3726,501 @@ internal static class SelfChecks
         return map;
     }
 
+    // ==================================================================
+    // タスク7.4: generate / compare / update が同じ走査の報告を出すことの検証
+    // ==================================================================
+
+    /// <summary>
+    /// 走査の報告を構成する4区画の件数行の接頭辞（タスク7.4）。
+    /// generate だけでなく compare / update も、走査で観測した事実をこの4区画で報告する。
+    /// </summary>
+    private static readonly string[] ScanReportSectionPrefixes = new[]
+    {
+        "スキップされた対象: ",
+        "長さのせいで列挙できなかった対象: ",
+        "既知の欠落（境界条件に由来）: ",
+        "説明できない欠落（既知の不具合では説明できない未観測の項目）: ",
+    };
+
+    /// <summary>
+    /// <see cref="ScanReportSectionPrefixes"/> の並びにおける、スキップされた対象の区画の位置。
+    /// </summary>
+    private const int SkippedSectionIndex = 0;
+
+    /// <summary>長さのせいで列挙できなかった対象の区画の位置。</summary>
+    private const int UnenumerableSectionIndex = 1;
+
+    /// <summary>既知の欠落の区画の位置。</summary>
+    private const int KnownIssueSectionIndex = 2;
+
+    /// <summary>説明できない欠落の区画の位置。</summary>
+    private const int UnexplainedSectionIndex = 3;
+
+    /// <summary>走査の報告の1区画（件数行と、その直後に続く明細行）。</summary>
+    private sealed class ScanReportSection
+    {
+        public ScanReportSection(string prefix, string countLine, int countLineIndex, int count, List<string> details)
+        {
+            Prefix = prefix;
+            CountLine = countLine;
+            CountLineIndex = countLineIndex;
+            Count = count;
+            Details = details;
+        }
+
+        /// <summary>この区画を見分ける件数行の接頭辞。</summary>
+        public string Prefix { get; }
+
+        /// <summary>件数行そのもの（3経路の内容の一致は、この行の文字列で照合する）。</summary>
+        public string CountLine { get; }
+
+        /// <summary>標準出力（空行を除いた行の並び）における件数行の位置。順序の照合に用いる。</summary>
+        public int CountLineIndex { get; }
+
+        /// <summary>件数行が示す件数。</summary>
+        public int Count { get; }
+
+        /// <summary>件数行に続く明細（先頭の "  - " を除いた本体）。</summary>
+        public List<string> Details { get; }
+    }
+
+    /// <summary>
+    /// 標準出力から走査の報告の4区画を取り出す。区画が欠けていれば失敗し、
+    /// 件数行の件数と明細の行数が食い違っていても失敗する
+    /// （件数だけを固定値へ潰す変異と、明細だけを落とす変異の双方を落とすため）。
+    /// </summary>
+    private static List<ScanReportSection> ParseScanReport(string context, string stdOut)
+    {
+        string[] lines = SplitStdOutLines(stdOut);
+        var sections = new List<ScanReportSection>();
+
+        foreach (var prefix in ScanReportSectionPrefixes)
+        {
+            var indices = new List<int>();
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    indices.Add(i);
+                }
+            }
+
+            SelfAssert.That(
+                indices.Count == 1,
+                $"{context}: 走査の報告の区画「{prefix}」の件数行がちょうど1行ではありません（実際: {indices.Count} 行）。標準出力:\n{stdOut}");
+
+            int countLineIndex = indices[0];
+            string countLine = lines[countLineIndex];
+            string countText = countLine.Substring(prefix.Length);
+
+            const string CountSuffix = " 件";
+            SelfAssert.That(
+                countText.EndsWith(CountSuffix, StringComparison.Ordinal),
+                $"{context}: 区画「{prefix}」の件数行が「N 件」の形ではありません: '{countLine}'");
+
+            int count;
+            bool parsed = int.TryParse(
+                countText.Substring(0, countText.Length - CountSuffix.Length),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out count);
+            SelfAssert.That(parsed, $"{context}: 区画「{prefix}」の件数を数値として読み取れません: '{countLine}'");
+
+            const string DetailPrefix = "  - ";
+            var details = new List<string>();
+            for (int i = countLineIndex + 1; i < lines.Length && lines[i].StartsWith(DetailPrefix, StringComparison.Ordinal); i++)
+            {
+                details.Add(lines[i].Substring(DetailPrefix.Length));
+            }
+
+            SelfAssert.That(
+                details.Count == count,
+                $"{context}: 区画「{prefix}」の件数（{count} 件）と明細の行数（{details.Count} 行）が一致しません。標準出力:\n{stdOut}");
+
+            sections.Add(new ScanReportSection(prefix, countLine, countLineIndex, count, details));
+        }
+
+        return sections;
+    }
+
+    /// <summary>標準出力を、空行を除いた行の並びへ分解する（報告の順序を行番号で照合するために共通化する）。</summary>
+    private static string[] SplitStdOutLines(string stdOut)
+    {
+        return stdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    /// <summary>
+    /// 既知の欠落として報告されるべき明細を、フィクスチャ定義から導く
+    /// （相対パスを文字列リテラルで固定せず、定義の変更に追随させる）。
+    /// </summary>
+    private static List<string> ExpectedKnownIssueDetails()
+    {
+        return FixtureSpec.Standard.Items
+            .Where(item => item.Traits.Contains(FixtureTrait.LongPath))
+            .Select(item => $"{item.RelativePath}（原因: LongPath）")
+            .ToList();
+    }
+
+    /// <summary>説明できない欠落として報告されるべき明細の形を、フィクスチャ定義の項目から組み立てる。</summary>
+    private static string FormatExpectedUnexplainedDetail(FixtureItem item)
+    {
+        return $"{item.RelativePath}（境界条件: {string.Join("、", item.Traits.Select(t => t.ToString()))}）";
+    }
+
+    /// <summary>
+    /// 2つの明細の集合が（順序を問わず）過不足なく一致することを照合する。
+    /// </summary>
+    private static void AssertDetailsMatch(string context, IReadOnlyList<string> expected, IReadOnlyList<string> actual)
+    {
+        SelfAssert.That(
+            actual.OrderBy(d => d, StringComparer.Ordinal)
+                .SequenceEqual(expected.OrderBy(d => d, StringComparer.Ordinal), StringComparer.Ordinal),
+            $"{context}: 明細が想定と一致しません。想定（{expected.Count} 件）: [{string.Join(" | ", expected)}] 実際（{actual.Count} 件）: [{string.Join(" | ", actual)}]");
+    }
+
+    /// <summary>
+    /// 走査の報告の4区画が、generate の報告と同じ件数行になっていることを照合する。
+    /// </summary>
+    private static void AssertScanReportCountLinesMatch(string context, List<ScanReportSection> expected, List<ScanReportSection> actual)
+    {
+        for (int i = 0; i < expected.Count; i++)
+        {
+            SelfAssert.That(
+                actual[i].CountLine == expected[i].CountLine,
+                $"{context}: 区画「{expected[i].Prefix}」の件数行が generate と一致しません（generate: '{expected[i].CountLine}' / {context}: '{actual[i].CountLine}'）。");
+        }
+    }
+
+    /// <summary>
+    /// 走査の報告が「この実行の走査から得た事実」であることを、基準フォルダ由来の明細で照合する。
+    /// generate の出力をそのまま写すような実装では成立しない。
+    /// </summary>
+    private static void AssertScanReportReflectsThisRun(string context, List<ScanReportSection> sections, string root)
+    {
+        var deniedItems = FixtureSpec.Standard.Items
+            .Where(item => item.Traits.Contains(FixtureTrait.AccessDenied))
+            .ToList();
+        SelfAssert.That(deniedItems.Count > 0, "FixtureSpec.Standard に AccessDenied トレイトの項目が見つかりません。");
+
+        var skipped = sections[SkippedSectionIndex];
+        SelfAssert.That(
+            skipped.Count == deniedItems.Count,
+            $"{context}: スキップされた対象の件数（{skipped.Count} 件）が FixtureSpec.Standard の AccessDenied 項目数（{deniedItems.Count} 件）と一致しません。");
+
+        foreach (var item in deniedItems)
+        {
+            string deniedFullPath = Path.Combine(root, item.RelativePath);
+            SelfAssert.That(
+                skipped.Details.Any(d => string.Equals(d, deniedFullPath, StringComparison.OrdinalIgnoreCase)),
+                $"{context}: スキップされた対象に、この実行の基準フォルダ配下の拒否フォルダ '{deniedFullPath}' が報告されていません: [{string.Join(" | ", skipped.Details)}]");
+        }
+
+        var unenumerable = sections[UnenumerableSectionIndex];
+        SelfAssert.That(
+            unenumerable.Count > 0,
+            $"{context}: 長さのせいで列挙できなかった対象が0件です（このフィクスチャは境界を超える階層を含むため、報告されるはずです）。");
+        foreach (var detail in unenumerable.Details)
+        {
+            SelfAssert.That(
+                detail.StartsWith(root, StringComparison.OrdinalIgnoreCase),
+                $"{context}: 長さのせいで列挙できなかった対象に、この実行の基準フォルダ（{root}）配下ではないパスが含まれます: '{detail}'");
+        }
+
+        AssertDetailsMatch(
+            $"{context}: 既知の欠落",
+            ExpectedKnownIssueDetails(),
+            sections[KnownIssueSectionIndex].Details);
+    }
+
+    /// <summary>
+    /// 走査の報告の4区画が、指定した文言の行より前に出力されていることを照合する
+    /// （update は期待値ファイルを書き換える経路であり、書き換える前に開発者が気づける順序でなければならない）。
+    /// </summary>
+    private static void AssertScanReportPrecedesLine(string context, List<ScanReportSection> sections, string stdOut, string laterLineToken)
+    {
+        string[] lines = SplitStdOutLines(stdOut);
+        int laterIndex = Array.FindIndex(lines, line => line.Contains(laterLineToken));
+        SelfAssert.That(laterIndex >= 0, $"{context}: 標準出力に '{laterLineToken}' を含む行がありません: {stdOut}");
+
+        foreach (var section in sections)
+        {
+            SelfAssert.That(
+                section.CountLineIndex < laterIndex,
+                $"{context}: 区画「{section.Prefix}」の件数行（{section.CountLineIndex}行目）が '{laterLineToken}' の行（{laterIndex}行目）より後に現れています。" +
+                $"書き換えの前に報告するという責務に反します: {stdOut}");
+        }
+    }
+
+    /// <summary>
+    /// compare / update も、generate と同じ走査の報告（4区画）を出すことを検証する項目を登録する（タスク7.4）。
+    /// </summary>
+    /// <remarks>
+    /// 報告の内容は判定にも終了コードにも影響しない（要件5.5）。とくに update は期待値ファイルを
+    /// 書き換える経路であり、説明のつかない欠落が生じたまま更新すると、その区別が失われたまま
+    /// 新しい期待値が書かれる。書き換えの前に報告が出ることまで照合する。
+    /// </remarks>
+    private static void RegisterScanReportParityChecks(SelfCheckRunner runner)
+    {
+        runner.Add("compare が、走査で得た4区画（スキップされた対象・長さのせいで列挙できなかった対象・既知の欠落・説明できない欠落）を generate と同じ件数行で報告し、明細はこの実行の走査に由来する（要件2.4, 5.2、タスク7.4）", () =>
+        {
+            string genRoot = CreateTempFixtureRoot();
+            string cmpRoot = CreateTempFixtureRoot();
+            string goldenPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", genRoot);
+                SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
+
+                var cmpResult = RunGoldenBaselineProcess("compare", "--golden", goldenPath, "--root", cmpRoot);
+                SelfAssert.That(cmpResult.ExitCode == 0, $"compare（一致想定）の終了コードが0ではありません（実際: {cmpResult.ExitCode}）。標準出力: {cmpResult.StdOut} 標準エラー: {cmpResult.StdErr}");
+                SelfAssert.That(cmpResult.StdOut.Contains("判定: 一致"), $"compare の標準出力に一致の判定が含まれません: {cmpResult.StdOut}");
+
+                var genSections = ParseScanReport("generate", genResult.StdOut);
+                var cmpSections = ParseScanReport("compare", cmpResult.StdOut);
+
+                AssertScanReportCountLinesMatch("compare", genSections, cmpSections);
+                AssertScanReportReflectsThisRun("compare", cmpSections, cmpRoot);
+
+                // 既知の欠落として報告された項目が、実際に「観測されていない」ことまで見る。
+                // 明細の集合を FixtureSpec の LongPath 項目と突き合わせるだけでは、
+                // 「欠落しているもの」ではなく「LongPath なもの全部」を返すよう壊れた場合に気付けないため、
+                // 走査結果（この期待値ファイルのエントリ）に現れていないことを別の角度から確かめる。
+                var goldenDocument = new GoldenSerializer().Read(goldenPath);
+                foreach (var item in FixtureSpec.Standard.Items.Where(i => i.Traits.Contains(FixtureTrait.LongPath)))
+                {
+                    SelfAssert.That(
+                        !goldenDocument.Entries.Any(e => e.RelativePath == item.RelativePath),
+                        $"既知の欠落として報告された '{item.RelativePath}' が走査結果のエントリに存在します。" +
+                        $"欠落していない項目を欠落として報告しています。");
+                }
+
+                SelfAssert.That(
+                    !Directory.Exists(cmpRoot) && !Directory.Exists(LongPath.Extend(cmpRoot)),
+                    $"compare の実行後にフィクスチャが残留しています: {cmpRoot}");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                ForceCleanupFixtureResidue(genRoot);
+                ForceCleanupFixtureResidue(cmpRoot);
+            }
+        });
+
+        runner.Add("update が、走査で得た4区画を generate と同じ件数行で報告し、その報告が期待値ファイルの書き換え（「更新しました」）より前に出る（要件2.4, 5.2, 5.3, 5.4、タスク7.4）", () =>
+        {
+            string genRoot = CreateTempFixtureRoot();
+            string updRoot = CreateTempFixtureRoot();
+            string goldenPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", genRoot);
+                SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
+
+                byte[] before = File.ReadAllBytes(goldenPath);
+
+                var updResult = RunGoldenBaselineProcess("update", "--golden", goldenPath, "--root", updRoot);
+                SelfAssert.That(updResult.ExitCode == 0, $"update（一致想定）の終了コードが0ではありません（実際: {updResult.ExitCode}）。標準出力: {updResult.StdOut} 標準エラー: {updResult.StdErr}");
+
+                var genSections = ParseScanReport("generate", genResult.StdOut);
+                var updSections = ParseScanReport("update", updResult.StdOut);
+
+                AssertScanReportCountLinesMatch("update", genSections, updSections);
+                AssertScanReportReflectsThisRun("update", updSections, updRoot);
+
+                // 書き換えの前に報告が出ること（差分の提示と同じく、書き換える前に開発者が気づける順序であること）。
+                AssertScanReportPrecedesUpdateLine(updSections, updResult.StdOut);
+
+                // 「更新しました」の行が実際の書き換えを伴っていること（順序の照合が空振りしないための裏取り）。
+                byte[] after = File.ReadAllBytes(goldenPath);
+                SelfAssert.That(!before.SequenceEqual(after), "update を実行しても期待値ファイルの内容が変化していません（順序の照合の前提が崩れています）。");
+
+                SelfAssert.That(
+                    !Directory.Exists(updRoot) && !Directory.Exists(LongPath.Extend(updRoot)),
+                    $"update の実行後にフィクスチャが残留しています: {updRoot}");
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                ForceCleanupFixtureResidue(genRoot);
+                ForceCleanupFixtureResidue(updRoot);
+            }
+        });
+
+        runner.Add("走査でだけ生じた（期待値ファイルには記録されていない）説明できない欠落を、compare と update が自分の走査から報告し、終了コードは突き合わせの判定だけで決まる（要件5.2, 5.5、タスク7.4）", () =>
+        {
+            // 報告が「期待値ファイルの中身」ではなく「この実行の走査」に由来することを確かめる。
+            // 期待値の側と走査の側を同じ状態にすると両者が一致してしまい、観測値と期待値の取り違え
+            // （報告へ Actual ではなく Expected を渡す誤り）を検出できない。そこで期待値は妨げのない
+            // フィクスチャから作り、compare / update の側だけを妨げて、期待値には無い説明できない欠落を作る。
+            // これはタスク7.4 が存在する理由そのもの（説明のつかない欠落が生じたまま期待値を書き換える事故）を
+            // 直接の対象にした検証である。
+            string genRoot = CreateTempFixtureRoot();
+            string cmpRoot = CreateTempFixtureRoot();
+            string updRoot = CreateTempFixtureRoot();
+            string verifyRoot = CreateTempFixtureRoot();
+            string goldenPath = CreateTempCliGoldenFilePath();
+
+            try
+            {
+                // 基準フォルダの実効絶対パス長が違うと、エントリの突き合わせの前に設定不一致で打ち切られ、
+                // 判定も報告も別の経路になってしまう（要件6.2、タスク7.1）。長さが揃っていることを前提として明示する。
+                int genLength = Program.MeasureEffectivePathLength(genRoot);
+                foreach (var root in new[] { cmpRoot, updRoot, verifyRoot })
+                {
+                    int rootLength = Program.MeasureEffectivePathLength(root);
+                    SelfAssert.That(
+                        rootLength == genLength,
+                        $"基準フォルダの実効絶対パス長が揃っていません（期待値の生成側: {genLength} 文字、{root}: {rootLength} 文字）。" +
+                        $"設定不一致になり、この検証の前提が崩れます。");
+                }
+
+                var blockedItems = FixtureSpec.Standard.Items
+                    .Where(i => i.RelativePath.StartsWith(BlockedFixtureFolderRelativePath + "\\", StringComparison.Ordinal))
+                    .ToList();
+                SelfAssert.That(
+                    blockedItems.Count > 0,
+                    $"FixtureSpec.Standard に '{BlockedFixtureFolderRelativePath}' の配下の項目が見つかりません。");
+                SelfAssert.That(
+                    blockedItems.All(i => !i.Traits.Contains(FixtureTrait.LongPath)),
+                    $"'{BlockedFixtureFolderRelativePath}' の配下に LongPath トレイトの項目があります。" +
+                    $"既知の欠落として説明されてしまうため、この検証の前提が崩れます。");
+
+                var expectedUnexplainedDetails = blockedItems.Select(FormatExpectedUnexplainedDetail).ToList();
+
+                // 期待値は妨げのないフィクスチャから作る。この期待値には説明できない欠落が記録されていない。
+                var genResult = RunGoldenBaselineProcess("generate", "--out", goldenPath, "--root", genRoot);
+                SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準出力: {genResult.StdOut} 標準エラー: {genResult.StdErr}");
+
+                var genSections = ParseScanReport("generate（妨げなし）", genResult.StdOut);
+                SelfAssert.That(
+                    genSections[UnexplainedSectionIndex].Count == 0,
+                    $"前提が崩れています: 妨げのないフィクスチャの generate が説明できない欠落を {genSections[UnexplainedSectionIndex].Count} 件報告しました。" +
+                    $"期待値の側と走査の側で説明できない欠落が食い違う状況を作れません。");
+
+                // compare: 走査の側だけを妨げる。期待値ファイルには無い説明できない欠落を、自分の走査から報告すること。
+                BlockFixtureFolderAndObserveFailures(cmpRoot);
+                var cmpResult = RunGoldenBaselineProcess("compare", "--golden", goldenPath, "--root", cmpRoot);
+
+                var cmpSections = ParseScanReport("compare（走査の側だけ妨げた）", cmpResult.StdOut);
+                AssertDetailsMatch(
+                    "compare（走査の側だけ妨げた）: 説明できない欠落",
+                    expectedUnexplainedDetails,
+                    cmpSections[UnexplainedSectionIndex].Details);
+
+                // 突き合わせが打ち切られていないこと（設定不一致だと報告も判定も別の経路になる）。
+                SelfAssert.That(
+                    cmpResult.StdOut.Contains("判定: 差分あり"),
+                    $"compare の判定が差分ありではありません（妨げた項目が欠落するため差分ありになるはずです）: {cmpResult.StdOut}");
+
+                // 終了コードは判定から決まる値と一致すること。報告の件数では動かない（要件5.5）。
+                AssertExitCodeMatchesVerdict("compare（走査の側だけ妨げた）", cmpResult.ExitCode, cmpResult.StdOut);
+
+                // update: 同じ状況で、報告が書き換えより前に出て、終了コードも判定どおりであること。
+                byte[] before = File.ReadAllBytes(goldenPath);
+
+                BlockFixtureFolderAndObserveFailures(updRoot);
+                var updResult = RunGoldenBaselineProcess("update", "--golden", goldenPath, "--root", updRoot);
+
+                var updSections = ParseScanReport("update（走査の側だけ妨げた）", updResult.StdOut);
+                AssertDetailsMatch(
+                    "update（走査の側だけ妨げた）: 説明できない欠落",
+                    expectedUnexplainedDetails,
+                    updSections[UnexplainedSectionIndex].Details);
+                AssertScanReportPrecedesUpdateLine(updSections, updResult.StdOut);
+                SelfAssert.That(
+                    updResult.StdOut.Contains("判定: 差分あり"),
+                    $"update の判定が差分ありではありません: {updResult.StdOut}");
+                AssertExitCodeMatchesVerdict("update（走査の側だけ妨げた）", updResult.ExitCode, updResult.StdOut);
+
+                byte[] after = File.ReadAllBytes(goldenPath);
+                SelfAssert.That(!before.SequenceEqual(after), "update を実行しても期待値ファイルの内容が変化していません（順序の照合の前提が崩れています）。");
+
+                // 報告だけが正しくても、書き換えの中身が走査結果でなければ意味がない。
+                // 妨げによって観測されなかった項目が、新しい期待値から実際に消えていることを確かめる。
+                var updatedDocument = new GoldenSerializer().Read(goldenPath);
+                foreach (var item in blockedItems)
+                {
+                    SelfAssert.That(
+                        !updatedDocument.Entries.Any(e => e.RelativePath == item.RelativePath),
+                        $"update 後の期待値に、走査で観測されなかったはずの '{item.RelativePath}' が残っています。");
+                }
+
+                // 仕上げ: 「判定: 一致」かつ「説明できない欠落が0件でない」局面を作る。
+                // ここまでの compare / update はいずれも判定が差分あり（終了コード1）であり、
+                // 「説明できない欠落の件数で終了コードを 1 に倒す」変異は、変異が強制する値と
+                // 判定から決まる値が偶然一致してしまうため捕まえられない（要件5.5 の守りが空く）。
+                // update 後の goldenPath は「妨げた状態の期待値」になっているので、もう1つ妨げた
+                // 基準フォルダで compare すれば、判定は一致のまま説明できない欠落が4件報告される。
+                // ここに終了コードの照合を当てることで、リテラルを書かずに 0 が固定される。
+                BlockFixtureFolderAndObserveFailures(verifyRoot);
+                var verifyResult = RunGoldenBaselineProcess("compare", "--golden", goldenPath, "--root", verifyRoot);
+
+                var verifySections = ParseScanReport("compare（妨げた期待値との一致）", verifyResult.StdOut);
+                AssertDetailsMatch(
+                    "compare（妨げた期待値との一致）: 説明できない欠落",
+                    expectedUnexplainedDetails,
+                    verifySections[UnexplainedSectionIndex].Details);
+                SelfAssert.That(
+                    verifySections[UnexplainedSectionIndex].Count > 0,
+                    $"前提が崩れています: 説明できない欠落が0件のため、終了コードとの独立性を確かめられません: {verifyResult.StdOut}");
+                SelfAssert.That(
+                    verifyResult.StdOut.Contains("判定: 一致"),
+                    $"妨げた状態の期待値との compare の判定が一致ではありません（説明できない欠落があっても判定には影響しないはずです）: {verifyResult.StdOut}");
+                AssertExitCodeMatchesVerdict("compare（妨げた期待値との一致）", verifyResult.ExitCode, verifyResult.StdOut);
+
+                foreach (var root in new[] { genRoot, cmpRoot, updRoot, verifyRoot })
+                {
+                    SelfAssert.That(
+                        !Directory.Exists(root) && !Directory.Exists(LongPath.Extend(root)),
+                        $"実行後にフィクスチャが残留しています: {root}");
+                }
+            }
+            finally
+            {
+                DeleteIfExists(goldenPath);
+                ForceCleanupFixtureResidue(genRoot);
+                ForceCleanupFixtureResidue(cmpRoot);
+                ForceCleanupFixtureResidue(updRoot);
+                ForceCleanupFixtureResidue(verifyRoot);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 終了コードが、標準出力に現れた判定から決まる値と一致することを照合する。
+    /// 期待する終了コードをリテラルで固定しないため、「報告の内容で終了コードを動かす」変異
+    /// （要件5.5 に反する方向）を、判定がどの値であっても落とせる。
+    /// </summary>
+    private static void AssertExitCodeMatchesVerdict(string context, int exitCode, string stdOut)
+    {
+        // design.md / Program: 一致は0、差分ありは1、設定不一致は2。
+        var verdicts = new[]
+        {
+            ("判定: 一致", 0),
+            ("判定: 差分あり", 1),
+            ("判定: 設定不一致", 2),
+        };
+
+        var matched = verdicts.Where(v => stdOut.Contains(v.Item1)).ToList();
+        SelfAssert.That(
+            matched.Count == 1,
+            $"{context}: 判定の行がちょうど1種類ではありません（実際: {matched.Count} 種類）。標準出力: {stdOut}");
+        SelfAssert.That(
+            exitCode == matched[0].Item2,
+            $"{context}: 終了コード（{exitCode}）が判定「{matched[0].Item1}」から決まる値（{matched[0].Item2}）と一致しません。" +
+            $"報告の内容は判定にも終了コードにも影響してはなりません（要件5.5）。標準出力: {stdOut}");
+    }
+
+    /// <summary>
+    /// update の走査の報告が、書き換えの報告（「更新しました」）より前に出ていることを照合する。
+    /// </summary>
+    private static void AssertScanReportPrecedesUpdateLine(List<ScanReportSection> sections, string stdOut)
+    {
+        AssertScanReportPrecedesLine("update", sections, stdOut, "更新しました");
+    }
+
     /// <summary>
     /// FixtureBuilder の検証で使う、一時領域の基準フォルダパスを組み立てる。
     /// フォルダ自体はまだ作成しない。既存規約に合わせ "gb_fix_" 接頭辞を用いる。
@@ -3854,6 +4350,100 @@ internal static class SelfChecks
             }
         });
 
+        runner.Add("generate --physical-size が、期待値のヘッダに UsePhysicalSize: true と ScanRunner が実測したクラスタサイズそのものを記録し、エントリのサイズが論理サイズではなく物理サイズへ切り上がる（要件6.1, 6.4）", () =>
+        {
+            // 既存の --physical-size を使う項目は「換算の有無の食い違い＝設定不一致」しか見ておらず、
+            // Program が outcome.ClusterSizeInBytes をヘッダへ渡す配線（要件6.4 の記録）を守る項目がなかった。
+            // ここでは CLI 経由で実際に期待値ファイルを書き出させ、その本文に実測値が載ることまで照合する。
+            string root = CreateTempFixtureRoot();
+            string outPath = CreateTempCliGoldenFilePath();
+            var entriesBefore = SnapshotTempGbEntries();
+
+            try
+            {
+                // 検証側が独立にクラスタサイズを実測する。リテラル（4096）で決め打ちすると、
+                // 環境によってクラスタサイズが異なる場合に壊れるうえ、「配線が実測値を運んでいるか」も
+                // 確かめられない（定数を埋め込む実装と区別がつかない）。
+                long measuredClusterSize = MeasureClusterSizeThroughScanRunner();
+                SelfAssert.That(
+                    measuredClusterSize > 0L,
+                    $"検証側でクラスタサイズを実測できませんでした（実際: {measuredClusterSize}）。この検証は実測値との突き合わせを前提とする。");
+
+                var result = RunGoldenBaselineProcess("generate", "--out", outPath, "--root", root, "--physical-size");
+
+                SelfAssert.That(result.ExitCode == 0, $"generate --physical-size の終了コードが0ではありません（実際: {result.ExitCode}）。標準出力: {result.StdOut} 標準エラー: {result.StdErr}");
+                SelfAssert.That(File.Exists(outPath), $"generate --physical-size が期待値ファイルを書き出していません: {outPath}");
+
+                // ヘッダは期待値ファイルの本文そのものを行単位で照合する（形式は design.md のとおり
+                // 「# キー: 値」。読み取り経路を通すだけでは、書き出しの形が崩れても気付けない）。
+                string[] goldenLines = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                    .GetString(File.ReadAllBytes(outPath))
+                    .Split('\n')
+                    .Select(line => line.TrimEnd('\r'))
+                    .ToArray();
+
+                SelfAssert.That(
+                    goldenLines.Count(line => line == "# UsePhysicalSize: true") == 1,
+                    $"期待値ファイルに '# UsePhysicalSize: true' の行がちょうど1行ありません: {string.Join(" | ", goldenLines.Take(10))}");
+
+                const string ClusterSizeLinePrefix = "# ClusterSizeInBytes: ";
+                var clusterSizeLines = goldenLines.Where(line => line.StartsWith(ClusterSizeLinePrefix, StringComparison.Ordinal)).ToList();
+                SelfAssert.That(
+                    clusterSizeLines.Count == 1,
+                    $"期待値ファイルに '{ClusterSizeLinePrefix}' で始まる行がちょうど1行ありません（実際: {clusterSizeLines.Count}行）。");
+
+                string recordedClusterSizeText = clusterSizeLines[0].Substring(ClusterSizeLinePrefix.Length);
+
+                // 配線を 0L に潰す変異を落とすための明示的な照合（「0ではない」）。
+                SelfAssert.That(
+                    recordedClusterSizeText != "0",
+                    $"物理サイズ換算を有効にしたにもかかわらず、記録されたクラスタサイズが0です（実測値がヘッダへ渡っていません）: {clusterSizeLines[0]}");
+
+                // 配線を実測値以外（定数など）へ差し替える変異を落とすための照合。
+                SelfAssert.That(
+                    recordedClusterSizeText == measuredClusterSize.ToString(CultureInfo.InvariantCulture),
+                    $"記録されたクラスタサイズが実測値と一致しません（記録: {recordedClusterSizeText}、実測: {measuredClusterSize}）。");
+
+                var document = new GoldenSerializer().Read(outPath);
+                SelfAssert.That(document.Header.UsePhysicalSize, "読み取り経由でも UsePhysicalSize が true ではありません。");
+                SelfAssert.That(
+                    document.Header.ClusterSizeInBytes == measuredClusterSize,
+                    $"読み取り経由のクラスタサイズが実測値と一致しません（記録: {document.Header.ClusterSizeInBytes}、実測: {measuredClusterSize}）。");
+
+                // 記録した値だけでなく、物理サイズ換算が実際にエントリへ効いていることまで確かめる。
+                // クラスタ未満の論理サイズを持つ項目は、フィクスチャ定義から導く（リテラルで決め打ちしない）。
+                var smallFileItem = FixtureSpec.Standard.Items
+                    .FirstOrDefault(i => i.Kind == GoldenEntryKind.File
+                        && i.ContentSizeInBytes > 0L
+                        && i.ContentSizeInBytes < measuredClusterSize);
+                SelfAssert.That(
+                    smallFileItem != null,
+                    $"前提が崩れています: クラスタサイズ（{measuredClusterSize} バイト）未満の論理サイズを持つファイル項目が FixtureSpec.Standard にありません。");
+
+                var smallEntry = document.Entries
+                    .FirstOrDefault(e => e.RelativePath == smallFileItem!.RelativePath && e.Kind == GoldenEntryKind.File);
+                SelfAssert.That(smallEntry != null, $"期待値に '{smallFileItem!.RelativePath}' がファイルとして記録されていません。");
+
+                long expectedPhysicalSize = ((smallFileItem!.ContentSizeInBytes + measuredClusterSize - 1L) / measuredClusterSize) * measuredClusterSize;
+                SelfAssert.That(
+                    smallEntry!.SizeInBytes != smallFileItem.ContentSizeInBytes,
+                    $"'{smallFileItem.RelativePath}' のサイズが論理サイズ（{smallFileItem.ContentSizeInBytes} バイト）のままです。物理サイズ換算が効いていません。");
+                SelfAssert.That(
+                    smallEntry.SizeInBytes == expectedPhysicalSize,
+                    $"'{smallFileItem.RelativePath}' の物理サイズが想定（クラスタサイズ {measuredClusterSize} バイトへの切り上げ = {expectedPhysicalSize} バイト）と一致しません（実際: {smallEntry.SizeInBytes}）。");
+
+                SelfAssert.That(
+                    !Directory.Exists(root) && !Directory.Exists(LongPath.Extend(root)),
+                    $"generate --physical-size の実行後にフィクスチャが残留しています: {root}");
+                AssertNoNewTempGbEntries("generate --physical-size", entriesBefore, outPath);
+            }
+            finally
+            {
+                DeleteIfExists(outPath);
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+
         runner.Add("compare が一致判定で終了コード0を返す（要件4.1, 4.6, 4.7）", () =>
         {
             string genRoot = CreateTempFixtureRoot();
@@ -3880,7 +4470,7 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("compare が差分ありで終了コード1を返す（要件4.2, 4.7）", () =>
+        runner.Add("compare が差分ありで終了コード1を返し、差分明細が期待値と実際を正しい向きで同一行に示す（要件4.2, 4.7）", () =>
         {
             string genRoot = CreateTempFixtureRoot();
             string cmpRoot = CreateTempFixtureRoot();
@@ -3893,12 +4483,17 @@ internal static class SelfChecks
                 SelfAssert.That(genResult.ExitCode == 0, $"前提となる generate が失敗しました（終了コード: {genResult.ExitCode}）。標準エラー: {genResult.StdErr}");
 
                 // 生成された期待値データの1件を意図的に改ざんし、確実にサイズ不一致を発生させる。
+                // 差分の幅は、期待値と実際を取り違えたときに必ず値が食い違うよう、他の項目と紛れない大きさにする
+                // （+1 のままでは向きの取り違えが「偶然どちらでも通る」形にはならないものの、
+                // 出力中の別の数値と紛れて誤って一致する余地が残る）。
                 var serializer = new GoldenSerializer();
                 var original = serializer.Read(goldenPath);
                 var targetEntry = original.Entries.First(e => e.Kind == GoldenEntryKind.File);
+                long realSize = targetEntry.SizeInBytes;
+                long tamperedSize = realSize + 54321L;
                 var tamperedEntries = original.Entries
                     .Select(e => ReferenceEquals(e, targetEntry)
-                        ? new GoldenEntry(e.RelativePath, e.Kind, e.SizeInBytes + 1L)
+                        ? new GoldenEntry(e.RelativePath, e.Kind, tamperedSize)
                         : e)
                     .ToList();
                 var tamperedDocument = new GoldenDocument(original.Header, tamperedEntries);
@@ -3910,6 +4505,37 @@ internal static class SelfChecks
                 SelfAssert.That(cmpResult.StdOut.Contains("判定: 差分あり"), $"compare の標準出力に差分ありの判定が含まれません: {cmpResult.StdOut}");
                 SelfAssert.That(cmpResult.StdOut.Contains(targetEntry.RelativePath), $"compare の標準出力に改ざんした相対パスが含まれません: {cmpResult.StdOut}");
                 SelfAssert.That(cmpResult.StdOut.Contains("SizeMismatch"), $"compare の標準出力にサイズ不一致の種別が含まれません: {cmpResult.StdOut}");
+
+                // 要件4.2（期待されたサイズと実際のサイズの双方を報告する）の「向き」を守る。
+                // 件数と種別だけを見ていると、期待値と実際を入れ替える変異も、片方を落とす変異も素通りする。
+                // 期待値は改ざん後の値、実際は走査で得られる本来の値であり、両者は入れ替えられない。
+                string expectedValueToken = "期待値=" + tamperedSize.ToString(CultureInfo.InvariantCulture);
+                string actualValueToken = "実際=" + realSize.ToString(CultureInfo.InvariantCulture);
+
+                // トークンが別々の行に偶然現れて通過する形骸化を防ぐため、種別・相対パス・両方の値が
+                // すべて同一行に現れることを行単位で照合する。
+                string[] stdOutLines = cmpResult.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                bool hasCorrectlyOrientedDetail = stdOutLines.Any(line =>
+                    line.Contains("[SizeMismatch]") &&
+                    line.Contains(targetEntry.RelativePath) &&
+                    line.Contains(expectedValueToken) &&
+                    line.Contains(actualValueToken));
+                SelfAssert.That(
+                    hasCorrectlyOrientedDetail,
+                    $"改ざんした相対パス（{targetEntry.RelativePath}）・改ざん後の期待値（{expectedValueToken}）・本来の実際値（{actualValueToken}）を" +
+                    $"すべて含む [SizeMismatch] の明細行が見つかりません（期待値と実際が入れ替わっているか、片方が欠けています）: {cmpResult.StdOut}");
+
+                // 向きが逆の明細行が出力に現れていないこと（正しい行を出したうえで逆向きの行も併記する実装を排除する）。
+                string reversedExpectedToken = "期待値=" + realSize.ToString(CultureInfo.InvariantCulture);
+                string reversedActualToken = "実際=" + tamperedSize.ToString(CultureInfo.InvariantCulture);
+                bool hasReversedDetail = stdOutLines.Any(line =>
+                    line.Contains("[SizeMismatch]") &&
+                    line.Contains(targetEntry.RelativePath) &&
+                    line.Contains(reversedExpectedToken) &&
+                    line.Contains(reversedActualToken));
+                SelfAssert.That(
+                    !hasReversedDetail,
+                    $"期待値と実際を取り違えた明細行（{reversedExpectedToken} / {reversedActualToken}）が compare の標準出力に含まれます: {cmpResult.StdOut}");
             }
             finally
             {
@@ -5929,6 +6555,43 @@ internal static class SelfChecks
             SelfAssert.That(exited, "GoldenBaseline のサブプロセスが60秒以内に終了しませんでした。");
 
             return (process.ExitCode, stdOut, stdErr);
+        }
+    }
+
+    /// <summary>
+    /// 期待値ファイルに記録されるべきクラスタサイズを、検証側が独立に実測する。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 空の一時フォルダを %TEMP% 直下に作り（期待値生成で使う基準フォルダと同一ボリュームになる）、
+    /// <see cref="ScanRunner"/> に物理サイズ換算ありで走査させて、その実測値を取り出す。
+    /// リテラル（4096）で決め打ちすると、クラスタサイズの異なるボリュームでは壊れるうえ、
+    /// 「Program が実測値をヘッダへ渡しているか」という配線そのものを確かめられない。
+    /// </para>
+    /// <para>
+    /// 測定用のフォルダは呼び出しの内側で必ず削除するため、残留物の照合（<see cref="AssertNoNewTempGbEntries"/>）
+    /// には影響しない。
+    /// </para>
+    /// </remarks>
+    private static long MeasureClusterSizeThroughScanRunner()
+    {
+        string probeRoot = Path.Combine(Path.GetTempPath(), "gb_clu_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        Directory.CreateDirectory(probeRoot);
+
+        try
+        {
+            return new ScanRunner().Run(probeRoot, usePhysicalSize: true).ClusterSizeInBytes;
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(probeRoot, recursive: true);
+            }
+            catch
+            {
+                // 削除に失敗した場合は、呼び出し側の残留物の照合が検出する。
+            }
         }
     }
 

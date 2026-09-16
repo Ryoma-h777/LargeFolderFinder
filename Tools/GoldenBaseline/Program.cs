@@ -220,41 +220,7 @@ internal static class Program
                 var projector = new GoldenProjector();
                 var document = projector.Project(outcome, header);
 
-                Console.WriteLine();
-                Console.WriteLine("[期待値の生成]");
-                Console.WriteLine($"物理サイズ換算: {(usePhysicalSize ? "有効" : "無効")}（クラスタサイズ: {outcome.ClusterSizeInBytes} バイト）");
-                Console.WriteLine($"スキップされた対象: {outcome.SkippedPaths.Count} 件");
-                foreach (var skipped in outcome.SkippedPaths)
-                {
-                    Console.WriteLine($"  - {skipped}");
-                }
-
-                // 長さのせいで列挙できなかった対象は、アクセス拒否によるスキップとは別の事象として報告する
-                // （取り違えると欠落の原因を誤って解釈させるため。タスク7.2）。
-                Console.WriteLine($"長さのせいで列挙できなかった対象: {outcome.UnenumerablePaths.Count} 件");
-                foreach (var unenumerable in outcome.UnenumerablePaths)
-                {
-                    Console.WriteLine($"  - {unenumerable}");
-                }
-
-                // 既知の欠落の識別結果は期待値の生成の報告に含める。独立したサブコマンドとしては公開しない
-                // （tasks.md 5.1）。
-                var analyzer = new KnownIssueAnalyzer();
-                var findings = analyzer.Analyze(spec, document);
-                Console.WriteLine($"既知の欠落（境界条件に由来）: {findings.Count} 件");
-                foreach (var finding in findings)
-                {
-                    Console.WriteLine($"  - {finding.RelativePath}（原因: {finding.Trait}）");
-                }
-
-                // 既知の不具合では説明できない欠落も、黙って期待値から消さずに報告する（要件5.2、タスク7.2）。
-                // 正しさの判定は行わないため、原因は断定せず終了コードにも影響させない（要件5.5）。
-                var unexplained = analyzer.FindUnexplainedOmissions(spec, document);
-                Console.WriteLine($"説明できない欠落（既知の不具合では説明できない未観測の項目）: {unexplained.Count} 件");
-                foreach (var omission in unexplained)
-                {
-                    Console.WriteLine($"  - {omission.RelativePath}（境界条件: {string.Join("、", omission.Traits.Select(t => t.ToString()))}）");
-                }
+                PrintScanReport(GenerateScanReportTitle, spec, outcome, document, usePhysicalSize);
 
                 var serializer = new GoldenSerializer();
                 serializer.Write(document, outPath);
@@ -298,6 +264,9 @@ internal static class Program
 
             var run = BuildComparisonRun(goldenPath, root, usePhysicalSize);
 
+            // 走査で観測した事実は、判定より先に報告する（generate と同じ4区画。タスク7.4）。
+            PrintScanReport(ComparisonScanReportTitle, run.Spec, run.Outcome, run.Actual, usePhysicalSize);
+
             Console.WriteLine();
             PrintDiffReport("[比較]", run.Report);
 
@@ -334,6 +303,12 @@ internal static class Program
             bool usePhysicalSize = flags.Contains("--physical-size");
 
             var run = BuildComparisonRun(goldenPath, root, usePhysicalSize);
+
+            // 期待値ファイルを書き換える前に、走査で観測した事実を報告する（generate と同じ4区画。タスク7.4）。
+            // 説明のつかない欠落が生じたまま更新すると、その事実は差分の欠落としてしか現れず、
+            // 「長さのせいで列挙できなかった」のか「説明できない欠落」なのかの区別が失われたまま
+            // 新しい期待値が書かれてしまう（要件5.2）。差分の提示と同様に、書き換えの前に出す。
+            PrintScanReport(ComparisonScanReportTitle, run.Spec, run.Outcome, run.Actual, usePhysicalSize);
 
             Console.WriteLine();
             PrintDiffReport("[更新前の差分]", run.Report);
@@ -381,13 +356,14 @@ internal static class Program
         var builder = new FixtureBuilder();
 
         GoldenDocument actual;
+        ScanOutcome outcome;
         try
         {
             var buildResult = builder.Build(spec, root);
             PrintFixtureBuildReport(root, buildResult);
 
             var scanRunner = new ScanRunner();
-            var outcome = scanRunner.Run(root, usePhysicalSize);
+            outcome = scanRunner.Run(root, usePhysicalSize);
 
             var header = BuildHeader(spec, root, usePhysicalSize, outcome.ClusterSizeInBytes, buildResult);
 
@@ -403,20 +379,42 @@ internal static class Program
         var comparer = new BaselineComparer();
         var report = comparer.Compare(expected, actual);
 
-        return new ComparisonRun(expected, actual, report);
+        return new ComparisonRun(spec, expected, actual, outcome, report);
     }
 
     /// <summary>compare / update の突き合わせ結果一式。</summary>
     private sealed class ComparisonRun
     {
+        /// <summary>
+        /// この実行で実際にフィクスチャを組み立て、走査し、突き合わせた定義（真値）。
+        /// 報告もこの定義から計算しなければ、報告だけが別の真値で組み立てられてしまう
+        /// （呼び出し側が <see cref="FixtureSpec.Standard"/> を独立に書くと、真値の解決が二重になる）。
+        /// </summary>
+        public FixtureSpec Spec { get; }
+
         public GoldenDocument Expected { get; }
+
+        /// <summary>
+        /// この実行の走査結果を射影した期待値データ。既知の欠落・説明できない欠落は、
+        /// 期待値ファイルの内容（<see cref="Expected"/>）ではなくこちらから計算する
+        /// （取り違えると「期待値ファイルに書いてある事実」を走査の観測として報告してしまう）。
+        /// </summary>
         public GoldenDocument Actual { get; }
+
+        /// <summary>
+        /// 走査そのものが観測した事実（スキップされた対象、長さのせいで列挙できなかった対象）。
+        /// 期待値データへの射影では失われるため、報告のために保持する（タスク7.4）。
+        /// </summary>
+        public ScanOutcome Outcome { get; }
+
         public DiffReport Report { get; }
 
-        public ComparisonRun(GoldenDocument expected, GoldenDocument actual, DiffReport report)
+        public ComparisonRun(FixtureSpec spec, GoldenDocument expected, GoldenDocument actual, ScanOutcome outcome, DiffReport report)
         {
+            Spec = spec;
             Expected = expected;
             Actual = actual;
+            Outcome = outcome;
             Report = report;
         }
     }
@@ -484,6 +482,73 @@ internal static class Program
             clusterSizeInBytes,
             buildResult.IsComplete,
             buildResult.Omissions.Select(o => $"{o.RelativePath}: {o.ExceptionTypeName}").ToList());
+    }
+
+    /// <summary>generate の走査の報告に付ける見出し（既存の書式を変えないため、この文言のまま用いる）。</summary>
+    private const string GenerateScanReportTitle = "[期待値の生成]";
+
+    /// <summary>compare / update の走査の報告に付ける見出し。</summary>
+    private const string ComparisonScanReportTitle = "[走査の報告]";
+
+    /// <summary>
+    /// 走査で観測した事実を報告する。generate / compare / update の3経路が同じ内容を出すよう、
+    /// 報告の組み立てはこの1箇所に集約する（タスク7.4）。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 4区画を出す。いずれも走査結果に対する事実の記録であり、正しさの判定は行わない（要件5.5）。
+    /// </para>
+    /// <list type="number">
+    /// <item>スキップされた対象（アクセス拒否。要件2.4）</item>
+    /// <item>長さのせいで列挙できなかった対象（アクセス拒否とは別事象。タスク7.2）</item>
+    /// <item>既知の欠落（境界条件に由来。要件5.2。独立したサブコマンドとしては公開しない。tasks.md 5.1）</item>
+    /// <item>説明できない欠落（既知の不具合では説明できない未観測の項目。要件5.2、タスク7.2）</item>
+    /// </list>
+    /// <para>
+    /// 報告は標準出力のみに出し、判定にも終了コードにも影響させない（要件5.5）。
+    /// </para>
+    /// </remarks>
+    /// <param name="title">報告の見出し。呼び出し元の経路によって文言が異なる。</param>
+    /// <param name="spec">既知の欠落・説明できない欠落の判定に用いる、フィクスチャの宣言的定義（真値）。</param>
+    /// <param name="outcome">走査そのものが観測した事実。</param>
+    /// <param name="document">走査結果を射影した期待値データ（欠落の判定に用いる観測結果）。</param>
+    /// <param name="usePhysicalSize">物理サイズ換算の有無。</param>
+    private static void PrintScanReport(string title, FixtureSpec spec, ScanOutcome outcome, GoldenDocument document, bool usePhysicalSize)
+    {
+        Console.WriteLine();
+        Console.WriteLine(title);
+        Console.WriteLine($"物理サイズ換算: {(usePhysicalSize ? "有効" : "無効")}（クラスタサイズ: {outcome.ClusterSizeInBytes} バイト）");
+        Console.WriteLine($"スキップされた対象: {outcome.SkippedPaths.Count} 件");
+        foreach (var skipped in outcome.SkippedPaths)
+        {
+            Console.WriteLine($"  - {skipped}");
+        }
+
+        // 長さのせいで列挙できなかった対象は、アクセス拒否によるスキップとは別の事象として報告する
+        // （取り違えると欠落の原因を誤って解釈させるため。タスク7.2）。
+        Console.WriteLine($"長さのせいで列挙できなかった対象: {outcome.UnenumerablePaths.Count} 件");
+        foreach (var unenumerable in outcome.UnenumerablePaths)
+        {
+            Console.WriteLine($"  - {unenumerable}");
+        }
+
+        var analyzer = new KnownIssueAnalyzer();
+
+        var findings = analyzer.Analyze(spec, document);
+        Console.WriteLine($"既知の欠落（境界条件に由来）: {findings.Count} 件");
+        foreach (var finding in findings)
+        {
+            Console.WriteLine($"  - {finding.RelativePath}（原因: {finding.Trait}）");
+        }
+
+        // 既知の不具合では説明できない欠落も、黙って期待値から消さずに報告する（要件5.2、タスク7.2）。
+        // 正しさの判定は行わないため、原因は断定せず終了コードにも影響させない（要件5.5）。
+        var unexplained = analyzer.FindUnexplainedOmissions(spec, document);
+        Console.WriteLine($"説明できない欠落（既知の不具合では説明できない未観測の項目）: {unexplained.Count} 件");
+        foreach (var omission in unexplained)
+        {
+            Console.WriteLine($"  - {omission.RelativePath}（境界条件: {string.Join("、", omission.Traits.Select(t => t.ToString()))}）");
+        }
     }
 
     private static void PrintFixtureBuildReport(string root, FixtureBuildResult result)
