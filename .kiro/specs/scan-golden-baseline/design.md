@@ -187,7 +187,7 @@ graph TB
     Verdict -->|なし| ReportMatch[一致を報告]
 ```
 
-走査条件が一致しない場合、エントリの突き合わせを行わずに打ち切る。物理サイズ換算の有無が異なると全エントリが不一致になり、報告が無意味になるためである。
+走査条件が一致しない場合、エントリの突き合わせを行わずに打ち切る。物理サイズ換算の有無が異なると全エントリが不一致になり、報告が無意味になるためである。基準フォルダの実効絶対パス長も同じ扱いとする。長さが違うと、走査で一覧できる階層の深さが変わり、エントリの数そのものが変わるためである（2026-09-16 実測）。
 
 ## Requirements Traceability
 
@@ -262,6 +262,7 @@ public sealed class GoldenHeader
 {
     public int FormatVersion { get; }
     public string BaseFolderLabel { get; }      // 実パスではなく論理名。環境差を持ち込まない
+    public int BaseFolderPathLength { get; }    // 基準フォルダの実効絶対パス長（文字数）。パスそのものは記録しない
     public DateTimeOffset GeneratedAt { get; }
     public bool UsePhysicalSize { get; }
     public long ClusterSizeInBytes { get; }     // UsePhysicalSize が false のときは 0
