@@ -44,6 +44,7 @@
 - コピーボタンのアイコンを絵文字で済ませる案: 簡易な方法として挙げたうえで、モダンなアプリらしいシャープな見た目のため XAML の図形で描く方を推奨し、採った（`clipboard_copy_feature/implementation_plan.md`, `clipboard_copy_feature/walkthrough.md`）
 - スキャン時に利用者の意図によって新規タブで実行する案: 可能性として挙げたが、「今回は」アクティブなタブの結果を更新する挙動を基本とした。パスが変わっている場合の扱いは検討事項として残されている（`TabbedInterface/task.md`）
 - いずれも、再提案の条件は記録に書かれていない。単位の文字列変換関数は利用者のレビューへの対応として取りやめたこと、新規タブでの実行は「今回は」とらなかったことだけが書かれ、その理由は記録に書かれていない
+- 出典: `Unit_Switching/walkthrough.md`, `clipboard_copy_feature/implementation_plan.md`, `clipboard_copy_feature/walkthrough.md`, `TabbedInterface/task.md`
 
 ## 明示的な非目標（やらないと決めたこと・求めないこと）
 
@@ -58,6 +59,7 @@
 - 理由: 一般の利用者が不用意に触れないようにし、画面を簡潔で安全に保つため（`advanced_config_and_speed/implementation_plan.md`, `advanced_config_and_speed/walkthrough.md`）
 - 範囲: 記録が画面から外したのは並列スキャンのチェックボックスである。同じ記録で設定ファイルへ移した他の項目は、コード内の定数から移したもので、画面から外したものではない
 - 同じ形の例: 「ディスク上のサイズ」の計算オプションも、画面のチェックボックスから設定ファイルへ移す計画だった。ただしこのフォルダの記録は画面から外す理由を書いておらず、正確な値を取るとファイルごとの呼び出しで遅くなることを、既定で速度を優先する理由として書くに留まる。計画と実施記録で設定の名前と既定値が食い違う（`Physical_Size/implementation_plan.md`, `Physical_Size/walkthrough.md`）。コードで確認した現行の名前と既定値は計画の側と一致し、画面にこのチェックボックスはない
+- 出典: `advanced_config_and_speed/implementation_plan.md`, `advanced_config_and_speed/walkthrough.md`, `Physical_Size/implementation_plan.md`, `Physical_Size/walkthrough.md`
 
 ### 単位の名前を翻訳すること ［確認済み］
 - やらないこと: KB・MB・GB・TB などの単位名を言語ごとに訳すこと。英語表記のまま使う
@@ -141,6 +143,7 @@
 - 性質: 決定ではない。記録にあるのは、YAML への移行と統一に付随して JSON への依存が外れたことだけで、評価して JSON を避けると決めた記録はない
 - 記録の内容: 設定ファイルを YAML に移した際、設定と保存データの部分で JSON への依存を排除したと記録する（`yaml_config_migration/walkthrough.md`）。実行基盤の移行のやり直しでは、設定・言語ファイルとも YAML に統一したのに伴い、JSON への依存も完全に排除したと記録する（`Runtime_Downgrade_v2/walkthrough.md`）
 - 食い違い: `Runtime_Downgrade_v2/walkthrough.md` は同じ文書の中で「System.Text.Json などの不足パッケージを追加」とも書く。1回目の移行も、JSON 処理を続けるためにこのパッケージを追加したと記録する（`Runtime_Downgrade/walkthrough.md`）。どれが最終の状態かは記録から判断できない。現行コードは JSON のパッケージに依存しておらず、「排除した」とする記録と一致する
+- 出典: `yaml_config_migration/walkthrough.md`, `Runtime_Downgrade/walkthrough.md`, `Runtime_Downgrade_v2/walkthrough.md`
 
 ## 要望に由来する仕様
 

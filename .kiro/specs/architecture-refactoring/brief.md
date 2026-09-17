@@ -43,7 +43,7 @@
 ## Scope
 
 - **In**:
-  - 死んだコードの除去（`PruneTree`、`CacheFileName`、コメントアウトされた処理塊）
+  - 死んだコードの除去（`PruneTree`、`CacheFileName`、コメントアウトされた処理塊）。ただし、タブごとの描画の取り消しの欄は未使用に見えても消さない（`scan-correctness` が使う形に直す。`.kiro/steering/decisions.md` の「描画の取り消しを、タブ間で干渉させない」）
   - 定数の二重管理の解消（`LogFilesMax`、`MemoryOptimizeIntervalMinutes`）
   - `FolderRowItem` の `Models/` への移設
   - `MainWindow.xaml.cs` の分割
