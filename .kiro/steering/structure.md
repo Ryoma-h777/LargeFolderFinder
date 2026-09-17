@@ -50,6 +50,8 @@ LayoutViewBase        … UserControl 基底。FindName で XAML 要素を解決
 VerticalLayoutView / HorizontalLayoutView   … XAML + 薄いコードビハインド
 ```
 
+`LayoutViewBase` は、2 つのビューで重複していた処理をなくし、保守性を上げるために設けた基底クラスです。
+
 - 新しいコントロールを足す場合: `IMainLayoutView` にプロパティを追加 → `LayoutViewBase` で `FindName("要素名")` を実装 → **両方の XAML に同名の要素を配置**
 - 片方のレイアウトにしか無い要素は、インターフェース側を **null 許容**（`TextBox?` など）で宣言する
 - ローカライズ対象のラベル・カラムもインターフェース経由で公開し、`ApplyLocalization` でまとめて適用する
