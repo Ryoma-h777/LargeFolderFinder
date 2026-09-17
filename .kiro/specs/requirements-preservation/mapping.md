@@ -68,8 +68,8 @@
 | `Cache_Optimization/walkthrough.md` | `decisions.md`／要望に由来する仕様／再起動後も、再スキャンせずに前回の検索結果を使う | 1つのファイル内のセッションの一覧という保存の構造が、後にタブごとのファイルへの分割に置き換わったという補足 |
 | `TabbedInterface/implementation_plan.md` | `decisions.md`／要望に由来する仕様／タブバーは、パス選択とスキャンの行より下に置く | タブバーをパス選択とスキャンの行より下に置く要望と、現行では上にあり利用者の判断で現行を正としたこと |
 | `UI_Improvements_20260123/implementation_plan.md`, `UI_Improvements_20260123/task.md` | `decisions.md`／要望に由来する仕様／タブと結果一覧の見た目 | タブの追加ボタンの位置・最小幅・ツールチップ、結果一覧のフォントサイズ・交互の背景色・行の高さについての要望 |
-| `ui_layout_adjustment/implementation_plan.md`, `ui_layout_adjustment/walkthrough.md` | `decisions.md`／要望に由来する仕様／スキャンの行と表示設定の行を分ける | スキャンの行と表示設定の行を境界線で分け、表示設定の行を低く詰める要望 |
-| `TabbedInterface/implementation_plan.md`, `TabbedInterface/task.md` | `decisions.md`／要望に由来する仕様／スキャンの行と表示設定の行を分ける | 後のタブ化で操作の置き場所が移る計画になり、行の構成は現在と異なる可能性があるという補足 |
+| `ui_layout_adjustment/implementation_plan.md`, `ui_layout_adjustment/walkthrough.md` | `decisions.md`／要望に由来する仕様／スキャンの行と表示設定の行を分ける | スキャンの行と表示設定の行を境界線で分け、表示設定の行を低く詰める要望と、一度実装された線と縮小が現行コードで失われている食い違い |
+| `TabbedInterface/implementation_plan.md`, `TabbedInterface/task.md` | `decisions.md`／要望に由来する仕様／スキャンの行と表示設定の行を分ける | 後のタブ化で操作の置き場所が移る計画になったという補足 |
 | `Unit_Switching/implementation_plan.md`, `Unit_Switching/walkthrough.md` | `decisions.md`／要望に由来する仕様／単位を切り替えたら閾値を換算し、ラベルから単位を外す（レビューでの指摘） | レビューでの指摘による閾値の自動換算とラベルからの単位の除去、および閾値を換算しない現行を利用者の判断で正としたこと |
 | `Unit_Localization/implementation_plan.md`, `Unit_Localization/task.md`, `Unit_Localization/walkthrough.md` | `decisions.md`／要望に由来する仕様／単位を切り替えたら閾値を換算し、ラベルから単位を外す（レビューでの指摘） | ラベルに選択中の単位を出す形に直した記録が、ラベルから単位を外す指摘と逆で、前後関係が記録から読み取れないこと |
 | `unit_redefinition/implementation_plan.md`, `unit_redefinition/walkthrough.md` | `decisions.md`／要望に由来する仕様／1000進と1024進の単位を使い分ける | 1000進と1024進の単位を使い分ける要望と、実装されず利用者の判断で取り下げたこと |
