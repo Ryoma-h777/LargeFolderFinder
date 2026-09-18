@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using LargeFolderFinder.LocalizationCheck.Check;
 
 namespace LargeFolderFinder.LocalizationCheck.SelfCheck;
 
@@ -31,6 +33,18 @@ public sealed class CheckOutcome
 }
 
 /// <summary>
+/// 検証項目が宣言した条件が満たされなかったことを表す例外。
+/// 検証項目の中で起きた「想定どおりの失敗」と「予期しない例外」を
+/// <see cref="SelfCheckRunner"/> が区別できるようにするために用意している。
+/// </summary>
+internal sealed class SelfCheckFailedException : Exception
+{
+    public SelfCheckFailedException(string message) : base(message)
+    {
+    }
+}
+
+/// <summary>
 /// 検証項目の中で条件の成否を宣言するための最小限のアサーションヘルパー。
 /// 外部のテストフレームワークには依存しない。
 /// </summary>
@@ -44,7 +58,7 @@ internal static class SelfAssert
     {
         if (!condition)
         {
-            throw new InvalidOperationException(message);
+            throw new SelfCheckFailedException(message);
         }
     }
 }
@@ -80,9 +94,15 @@ public sealed class SelfCheckRunner
                 assertion();
                 outcomes.Add(new CheckOutcome(name, true, null));
             }
+            catch (SelfCheckFailedException ex)
+            {
+                // 検証項目が宣言した条件を満たさなかった場合。理由はそのまま読める文になっている。
+                outcomes.Add(new CheckOutcome(name, false, ex.Message));
+            }
             catch (Exception ex)
             {
-                outcomes.Add(new CheckOutcome(name, false, ex.Message));
+                // 予期しない例外。原因を追えるよう、理由に例外の型名を添える。
+                outcomes.Add(new CheckOutcome(name, false, $"予期しない例外 {ex.GetType().Name}: {ex.Message}"));
             }
         }
 
@@ -96,7 +116,6 @@ public sealed class SelfCheckRunner
 /// <remarks>
 /// 判定と報告の部品（PlaceholderParser、LanguageFileReader、CoverageChecker、ReportWriter）が
 /// 実装され次第、対応する検証項目をここに追加していく（tasks.md: 2.1〜2.4）。
-/// 部品が1つも無い現時点では登録する項目は0件であり、selfcheck は0件成功として終了コード 0 を返す。
 /// </remarks>
 internal static class SelfChecks
 {
@@ -106,5 +125,85 @@ internal static class SelfChecks
         {
             throw new ArgumentNullException(nameof(runner));
         }
+
+        RegisterPlaceholderParserChecks(runner);
+    }
+
+    /// <summary>
+    /// PlaceholderParser の検証項目を登録する
+    /// （design.md: Testing Strategy / Unit Tests 1、requirements.md: 2.2、3.4）。
+    /// </summary>
+    private static void RegisterPlaceholderParserChecks(SelfCheckRunner runner)
+    {
+        runner.Add(
+            "PlaceholderParser: 番号だけの差し込み位置を認識する",
+            () => AssertIndexes("{0}", 0));
+
+        runner.Add(
+            "PlaceholderParser: 書式付きの差し込み位置を認識する",
+            () => AssertIndexes("{1:F0}", 1));
+
+        runner.Add(
+            "PlaceholderParser: 幅付きの差し込み位置を認識する",
+            () =>
+            {
+                AssertIndexes("{2,10}", 2);
+                // 左寄せを表す負の幅も幅として扱う。
+                AssertIndexes("{2,-10}", 2);
+            });
+
+        runner.Add(
+            "PlaceholderParser: 幅と書式付きの差し込み位置を認識する",
+            () => AssertIndexes("{3,-10:F1}", 3));
+
+        runner.Add(
+            "PlaceholderParser: 二重の波括弧はエスケープとして無視する",
+            () =>
+            {
+                AssertIndexes("{{0}}");
+                AssertIndexes("{{}}");
+                // エスケープの内側に本物の差し込み位置がある場合は、その番号だけを取り出す。
+                AssertIndexes("{{{0}}}", 0);
+            });
+
+        runner.Add(
+            "PlaceholderParser: 同じ番号が複数回現れても重複を除く",
+            () => AssertIndexes("{0} / {0} / {1}", 0, 1));
+
+        runner.Add(
+            "PlaceholderParser: 差し込み位置が無ければ空を返す",
+            () =>
+            {
+                AssertIndexes("スキャン中……");
+                AssertIndexes(string.Empty);
+            });
+
+        runner.Add(
+            "PlaceholderParser: 出現順によらず番号を昇順で返す",
+            () => AssertIndexes("{2} {0} {1}", 0, 1, 2));
+
+        runner.Add(
+            "PlaceholderParser: 設計の例（書式付きを含む状態表示）の番号の組を返す",
+            () => AssertIndexes("{0} {1:F0}%  [{2}]  [{3}]", 0, 1, 2, 3));
+
+        runner.Add(
+            "PlaceholderParser: 設計の例（区切りの無い連続した差し込み位置）の番号の組を返す",
+            () => AssertIndexes("Noch etwa {0}{1} {2}{3}", 0, 1, 2, 3));
+    }
+
+    /// <summary>
+    /// <see cref="PlaceholderParser.ParseIndexes"/> の結果が、期待する番号の並びと
+    /// 順序も含めて一致することを確かめる。
+    /// </summary>
+    /// <param name="text">検証する訳文。</param>
+    /// <param name="expected">期待する差し込み位置の番号（重複なし・昇順）。</param>
+    private static void AssertIndexes(string text, params int[] expected)
+    {
+        var actual = PlaceholderParser.ParseIndexes(text);
+
+        SelfAssert.That(
+            actual.SequenceEqual(expected),
+            $"訳文「{text}」の差し込み位置は [{string.Join(",", expected)}] を期待しましたが、" +
+            $"[{string.Join(",", actual)}] でした。");
     }
 }
