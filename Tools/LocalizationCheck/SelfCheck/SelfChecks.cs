@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using LargeFolderFinder.LocalizationCheck.Check;
@@ -280,10 +280,10 @@ internal static class SelfChecks
             "LanguageFileReader: 入れ子の構造を読み込み不能として理由に型名を残す",
             () =>
             {
-                var content = LanguageFileReader.Parse("nested.yaml", "A:\n  B: \"1\"\n");
+                var content = LanguageFileReader.Parse("nested.yaml", "Outer:\n  Inner: \"1\"\n");
 
                 AssertUnreadable(content, "YamlException");
-                // 入れ子でも最上位のキーは A の1回だけなので、重複としては数えない。
+                // 入れ子でも最上位のキーは Outer の1回だけなので、重複としては数えない。
                 AssertNoDuplicates(content);
             });
 
@@ -350,8 +350,8 @@ internal static class SelfChecks
             "LanguageFileReader: 入れ子の中の重複は数えない（最上位のキーだけを数える）",
             () =>
             {
-                // 入れ子の中で B が2回現れるが、数える対象は最上位のキー（A の1回だけ）なので重複は無い。
-                var content = LanguageFileReader.Parse("nested-dup.yaml", "A:\n  B: 1\n  B: 2\n");
+                // 入れ子の中で Inner が2回現れるが、数える対象は最上位のキー（Outer の1回だけ）なので重複は無い。
+                var content = LanguageFileReader.Parse("nested-dup.yaml", "Outer:\n  Inner: 1\n  Inner: 2\n");
 
                 AssertUnreadable(content, "YamlException");
                 AssertNoDuplicates(content);
