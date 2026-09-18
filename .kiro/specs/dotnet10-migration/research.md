@@ -323,3 +323,33 @@
   - `compare` の走査の報告: スキップ 1 件（`access_denied_folder`）、長さのせいで列挙できなかった対象 0 件、既知の欠落 0 件、説明できない欠落 0 件（移行前は既知の欠落 4 件）
   - `compare` の差12件の内訳: `[Unexpected]` 4件（移行前の既知の欠落4件: ASCII の長い連鎖の5階層目のフォルダ `…\eeee…` とその下の `boundary_file.bin`、日本語の長い連鎖の5階層目のフォルダ `…\おおお…` とその下の `境界ファイル.bin`）と、それらを含む親フォルダ8件（各連鎖の1〜4階層目）の `[SizeMismatch]` 期待値=0 実際=8。設計段階の実測（差分12件、既知の4件が Unexpected、親8件のサイズが 0→8）と同じ。期待値データの更新は 2.6 で行う（このタスクでは更新していない）
   - 実行後、`%TEMP%` に `gb_*` の一時フォルダ・ファイルは残っていない
+
+### 2.5 翻訳の網羅の検証ツールの移行（2026-09-19、コミット 3917ed3 の上で実施）
+- **対象の変更**: `Tools/LocalizationCheck/LocalizationCheck.csproj` の `TargetFramework` を `net48` から `net10.0-windows` に変えた。それ以外（`OutputType`、`Nullable`、`LangVersion`、`AssemblyName`、`RootNamespace`、アプリへの `ProjectReference`）は変えていない。GoldenBaseline（2.4）と同じく、ツール自身には `RuntimeIdentifier` を指定していない。ソースコード（`Program.cs`、`Check/`、`Io/`、`Model/`、`SelfCheck/`）は変えていない（入口・終了コード・判定規則は移行前のまま、要件7.5）
+  - 変更前（アプリだけ net10、ツールは net48）のツールのビルド: エラー2件（`NU1201` プロジェクト LargeFolderFinder は net48 と互換性がない。net48 と net48/win-x86 の各1件）。これが 2.1〜2.4 の間ソリューション全体のビルドが通らなかった原因で、対象を変えるだけで解消した。コードの修正は要らなかった（設計どおり）
+  - ツールの出力先は `Tools/LocalizationCheck/bin/<構成>/net10.0-windows/`（移行前は `bin/<構成>/net48/`）
+- **期待するキーの一覧の取得元**: ツールは `Enum.GetNames(typeof(LanguageKey))` で、`ProjectReference` によりツールの出力先へコピーされたアプリの `LargeFolderFinder.dll` から一覧を得る。移行後の解決は次のとおりで、アプリの新しい出力先（RID 付き）でも成り立つことを確かめた
+  - コンパイル時の参照: `obj/<構成>/net10.0-windows/win-x64/ref/LargeFolderFinder.dll`（アプリの参照アセンブリ）
+  - 実行時にコピーされる実体: `bin/<構成>/net10.0-windows/win-x64/LargeFolderFinder.dll`。ツールの出力先の `LargeFolderFinder.dll` とバイト単位で一致した（`cmp`）
+  - steering の従来の手順（`-p:BuildProjectReferences=false`、アプリを先に Debug でビルド）でも同じ場所に解決され、警告0・エラー0でビルドでき、`check` はキー 81 を報告した。steering のコマンドのパス（`net48`）の書き換えは 5.2 で行う
+  - 言語フォルダは従来どおり、実行ファイルの位置から親へたどってソリューションファイルのあるフォルダの `Resources/Languages` を使う（出力先が1階層変わっても、祖先にリポジトリのルートがあるので影響しない）
+- **確認**（ビルドは順番に実施）
+
+| コマンド | 結果 | 警告 | 終了コード |
+|---|---|---|---|
+| `dotnet build Tools/LocalizationCheck/LocalizationCheck.csproj -c Debug --no-incremental` | 成功 | 0 | 0 |
+| `LocalizationCheck.exe selfcheck`（Debug） | 59 件中 0 件が失敗 | — | 0 |
+| `LocalizationCheck.exe check`（Debug） | 問題はありません（言語 13、キー 81） | — | 0 |
+| `dotnet build Tools/LocalizationCheck/LocalizationCheck.csproj -c Debug -p:BuildProjectReferences=false --no-incremental` | 成功 | 0 | 0 |
+| `LocalizationCheck.exe bogus`（不明なコマンド） | 未知のコマンドです: bogus | — | 2 |
+| `LocalizationCheck.exe check --dir D:/nonexistent_lc_dir` | 言語フォルダがありません | — | 2 |
+| `dotnet build LargeFolderFinder.sln -c Debug --no-incremental` | 成功（3プロジェクト） | 0 | 0 |
+| `dotnet build LargeFolderFinder.sln -c Release --no-incremental` | 成功（3プロジェクト） | 0 | 0 |
+| `LocalizationCheck.exe selfcheck`（Release） | 59 件中 0 件が失敗 | — | 0 |
+| `LocalizationCheck.exe check`（Release） | 問題はありません（言語 13、キー 81） | — | 0 |
+| `GoldenBaseline.exe selfcheck`（Debug、ソリューションのビルド後） | 128 件中 0 件が失敗 | — | 0 |
+
+  - ソリューション全体のビルドは、2.1 以降で初めて通った（Implementation Notes の「2.1〜2.4 の間はソリューション全体のビルドが通らない」の解消）
+  - 自己検証の結果は設計段階の実測（59件成功、YamlDotNet 18.1.0 でも同じ）と一致した
+  - `LocalizationCheck` は一時フォルダを使わない。GoldenBaseline の自己検証の後も `%TEMP%` に `gb_*` は残っていない
+  - 移行前の出力 `Tools/LocalizationCheck/bin/Debug/net48/` は無視対象のフォルダに残っている（リポジトリの差分には現れない）
