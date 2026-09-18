@@ -231,3 +231,18 @@
 - **出力**: 出力先は `RuntimeIdentifier` の指定により `bin/<構成>/net10.0-windows/win-x64/` になった（移行前は `bin/<構成>/net48/`）。`Config.txt` と `Resources/`（言語13、Readme 13、ライセンス2）が隣に出る。Release の `LargeFolderFinder.dll` の `ProductVersion` は `1.0.3`（移行前の exe は `1.0.3+48d8a5d…`）、`FileVersion` は `1.0.3.0`
   - 依存の DLL として `MessagePack.dll`、`MessagePack.Annotations.dll`、`Microsoft.NET.StringTools.dll`（MessagePack の推移的依存）、`YamlDotNet.dll`、`Ookii.Dialogs.Wpf.dll` が出る。著作権表示の見直し（5.1）で扱う
 - ソリューション全体のビルドは、検証ツールが net48 のままのため 2.5 まで通らない（実施していない）
+
+### 2.2 移行で増えた警告の解消（2026-09-19、コミット 6f1b8c5 の上で実施）
+- **変更前の観測**: `dotnet build LargeFolderFinder.csproj -c Debug --no-incremental` で警告10件（重複を除いて5件）。2.1 の表の5件と同じ
+- **コマンドの共通部品**（`Helpers/RelayCommand.cs`、CS8767 ×2、CS8612 ×1）: `CanExecute(object?)`、`Execute(object?)`、`event EventHandler? CanExecuteChanged` に変えた。保持する処理の型も `Action<object?>`、`Predicate<object?>?` に合わせた（コンストラクタの引数の型も同じ）。処理の中身は変えていない。`RelayCommand` の利用箇所はリポジトリ内に0件（XAML を含めて確認）
+- **所有者の取得**（`Views/MainWindow.xaml.cs` の `ShowOwner`、CS8602 ×2）: `GetOwner(...)` の戻り値に `?.ToString() ?? "(Unknown)"` を使い、所有者が得られない（null）ときの表示を明示した
+  - 従来（net48）の経路: `GetOwner(...)` が null → `.ToString()` で `NullReferenceException` → 内側の `catch` が受けて `owner = "(Unknown)"` → 画面の所有者の欄に `(Unknown)`。修正後も同じ文字列が同じ欄に出る。ログは従来も出ていなかった（内側の `catch` はログを書かない）ので、差はない
+- **警告の抑制**（`#pragma`、`!`、`NoWarn`）は使っていない
+- **アプリのプロジェクト単体のビルド**（`--no-incremental`、順番に実施）
+
+| 構成 | 結果 | エラー | 警告 | 終了コード |
+|---|---|---|---|---|
+| Debug | 成功 | 0 | 0 | 0 |
+| Release | 成功 | 0 | 0 | 0 |
+
+  - 移行前の基準（0件、1.1）と同じになった

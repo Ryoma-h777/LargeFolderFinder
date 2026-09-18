@@ -776,11 +776,13 @@ namespace LargeFolderFinder
                     {
                         if (node.IsFile)
                         {
-                            owner = new FileInfo(path).GetAccessControl().GetOwner(typeof(System.Security.Principal.NTAccount)).ToString();
+                            // 所有者が得られない（null）ときは、従来（ToString() の例外を下の catch が受けた場合）と同じ "(Unknown)" を表示する
+                            owner = new FileInfo(path).GetAccessControl().GetOwner(typeof(System.Security.Principal.NTAccount))?.ToString() ?? "(Unknown)";
                         }
                         else
                         {
-                            owner = new DirectoryInfo(path).GetAccessControl().GetOwner(typeof(System.Security.Principal.NTAccount)).ToString();
+                            // 所有者が得られない（null）ときは、従来（ToString() の例外を下の catch が受けた場合）と同じ "(Unknown)" を表示する
+                            owner = new DirectoryInfo(path).GetAccessControl().GetOwner(typeof(System.Security.Principal.NTAccount))?.ToString() ?? "(Unknown)";
                         }
                     }
                     catch
