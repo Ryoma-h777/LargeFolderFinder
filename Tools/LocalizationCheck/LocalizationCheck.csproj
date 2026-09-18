@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <AssemblyName>LocalizationCheck</AssemblyName>
+    <RootNamespace>LargeFolderFinder.LocalizationCheck</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- アプリ本体を読み取り専用の依存として参照する（design.md: Allowed Dependencies）。
+         LanguageKey の列挙値の名前を得るためだけに使い、アプリの他の型は使わない。
+         YamlDotNet もこの参照を通じて利用し、新しいパッケージは加えない。 -->
+    <ProjectReference Include="..\..\LargeFolderFinder.csproj" />
+  </ItemGroup>
+
+</Project>

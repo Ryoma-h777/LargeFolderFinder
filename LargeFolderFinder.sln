@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LargeFolderFinder", "LargeF
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GoldenBaseline", "Tools\GoldenBaseline\GoldenBaseline.csproj", "{4A538AD8-CFB1-4DD8-BE9B-47C65740F946}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LocalizationCheck", "Tools\LocalizationCheck\LocalizationCheck.csproj", "{A85131BC-33C7-47ED-B624-DEFD6CD523A9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{4A538AD8-CFB1-4DD8-BE9B-47C65740F946}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4A538AD8-CFB1-4DD8-BE9B-47C65740F946}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4A538AD8-CFB1-4DD8-BE9B-47C65740F946}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A85131BC-33C7-47ED-B624-DEFD6CD523A9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A85131BC-33C7-47ED-B624-DEFD6CD523A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A85131BC-33C7-47ED-B624-DEFD6CD523A9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A85131BC-33C7-47ED-B624-DEFD6CD523A9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
