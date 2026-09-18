@@ -3585,7 +3585,7 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("コミット済みの期待値 baselines/fixture-v1.golden.txt が形式バージョン2・基準フォルダの実効絶対パス長80文字で記録されており、そこに文字数境界を超える項目（日本語を含む長いパスのフォルダ・ファイルを含む）が現行版の挙動どおり記録されておらず、その記録から KnownIssueAnalyzer が根拠 LongPath とともに列挙する（要件2.3, 5.1, 5.2, 7.1、タスク6.3, 7.3）", () =>
+        runner.Add("コミット済みの期待値 baselines/fixture-v1.golden.txt が形式バージョン2・基準フォルダの実効絶対パス長80文字で記録されており、そこに文字数境界を超える項目（日本語を含む長いパスのフォルダ・ファイルを含む）が移行後の挙動どおり定義の種別とサイズで記録され、それらを含む祖先フォルダのサイズにも算入されており、その記録から KnownIssueAnalyzer が根拠 LongPath の既知の欠落を列挙しない（要件2.3, 5.1, 5.2, 7.1、タスク6.3, 7.3）", () =>
         {
             // 期待値の内容は基準フォルダの長さに左右されるため、コミット済みの期待値が「固定した長さ」で
             // 生成されていることまで照合する。ここが固定値でなければ、以下の欠落の照合は環境によって結論が変わる。
@@ -3644,45 +3644,80 @@ internal static class SelfChecks
             SelfAssert.That(japaneseOverBoundaryItems.Any(i => i.Kind == GoldenEntryKind.Folder), "日本語を含み相対パス248文字を超えるフォルダ（Japanese と LongPath）が定義に1件もありません。");
             SelfAssert.That(japaneseOverBoundaryItems.Any(i => i.Kind == GoldenEntryKind.File), "日本語を含み相対パス260文字を超えるファイル（Japanese と LongPath）が定義に1件もありません。");
 
-            foreach (var item in overBoundaryItems)
+            // 以下のサイズの照合は論理サイズを前提にする（物理サイズ換算ありで記録されていれば、定義のサイズとは一致しない）。
+            SelfAssert.That(!document.Header.UsePhysicalSize, "コミット済みの期待値が物理サイズ換算ありで記録されています（定義の論理サイズと照合できません）。");
+
+            var entriesByPath = document.Entries.ToDictionary(e => e.RelativePath, StringComparer.Ordinal);
+
+            // 定義から導く、期待値に記録されるべきサイズ。ファイルは定義の内容サイズ、フォルダは配下のファイルの内容サイズの合計。
+            long ExpectedRecordedSize(FixtureItem target)
+            {
+                if (target.Kind == GoldenEntryKind.File)
+                {
+                    return target.ContentSizeInBytes;
+                }
+
+                string prefix = target.RelativePath + "\\";
+                return spec.Items
+                    .Where(i => i.Kind == GoldenEntryKind.File && i.RelativePath.StartsWith(prefix, StringComparison.Ordinal))
+                    .Sum(i => i.ContentSizeInBytes);
+            }
+
+            // 記録されていること、種別とサイズが定義から導いた値と一致することを照合する。
+            void AssertRecordedAsDefined(FixtureItem target, string label)
             {
                 SelfAssert.That(
-                    !recordedPaths.Contains(item.RelativePath),
-                    $"文字数境界を超える項目 '{item.RelativePath}'（{item.RelativePath.Length}文字）がコミット済みの期待値に記録されています（現行版の挙動と異なります）。");
+                    entriesByPath.TryGetValue(target.RelativePath, out var entry),
+                    $"{label} '{target.RelativePath}'（{target.RelativePath.Length}文字）がコミット済みの期待値に記録されていません（移行後の挙動と異なります）。");
+                SelfAssert.That(
+                    entry!.Kind == target.Kind,
+                    $"{label} '{target.RelativePath}' の種別が定義と一致しません（期待値: {entry.Kind}、定義: {target.Kind}）。");
+                long expectedSize = ExpectedRecordedSize(target);
+                SelfAssert.That(
+                    entry.SizeInBytes == expectedSize,
+                    $"{label} '{target.RelativePath}' のサイズが定義から導いた値と一致しません（期待値: {entry.SizeInBytes}バイト、定義: {expectedSize}バイト）。");
+            }
 
-                // 対比: 境界を超えない最も近い祖先フォルダは記録されている。連鎖そのものが記録から抜けているのではなく、
-                // 境界の位置で欠落していることを示す。
-                string? nearestWithinBoundary = null;
+            foreach (var item in overBoundaryItems)
+            {
+                string kindLabel = japaneseOverBoundaryItems.Contains(item) ? "日本語を含む長いパスの項目" : "文字数境界を超える項目";
+                AssertRecordedAsDefined(item, kindLabel);
+
+                // 境界を超える項目のサイズが、それを含む祖先フォルダ（境界の内外を問わず連鎖のすべて）のサイズにも
+                // 算入されていることを確かめる。旧い期待値ではここが 0 で記録されていた（research.md 移行の記録 2.6）。
                 string[] segments = item.RelativePath.Split('\\');
+                bool hasAncestorWithinBoundary = false;
                 for (int depth = segments.Length - 1; depth >= 1; depth--)
                 {
                     string ancestor = string.Join("\\", segments, 0, depth);
-                    if (itemsByPath.TryGetValue(ancestor, out var ancestorItem) && !IsOverLongPathDesignLength(ancestorItem))
-                    {
-                        nearestWithinBoundary = ancestor;
-                        break;
-                    }
+                    SelfAssert.That(
+                        itemsByPath.TryGetValue(ancestor, out var ancestorItem),
+                        $"'{item.RelativePath}' の祖先フォルダ '{ancestor}' が定義にありません。");
+                    hasAncestorWithinBoundary |= !IsOverLongPathDesignLength(ancestorItem!);
+                    AssertRecordedAsDefined(ancestorItem!, $"'{item.RelativePath}' の祖先フォルダ");
+                    SelfAssert.That(
+                        entriesByPath[ancestor].SizeInBytes >= ExpectedRecordedSize(item),
+                        $"'{item.RelativePath}' のサイズが祖先フォルダ '{ancestor}' のサイズに算入されていません。");
                 }
 
-                SelfAssert.That(nearestWithinBoundary != null, $"'{item.RelativePath}' に境界を超えない祖先フォルダが定義されていません。");
-                SelfAssert.That(
-                    recordedPaths.Contains(nearestWithinBoundary!),
-                    $"'{item.RelativePath}' の境界内の祖先フォルダ '{nearestWithinBoundary}' がコミット済みの期待値に記録されていません。");
+                SelfAssert.That(hasAncestorWithinBoundary, $"'{item.RelativePath}' に境界を超えない祖先フォルダが定義されていません。");
             }
 
-            var findingsByPath = new KnownIssueAnalyzer().Analyze(spec, document)
-                .ToDictionary(f => f.RelativePath, f => f.Trait, StringComparer.Ordinal);
+            var findings = new KnownIssueAnalyzer().Analyze(spec, document);
+            var findingsByPath = findings.ToDictionary(f => f.RelativePath, f => f.Trait, StringComparer.Ordinal);
 
             foreach (var item in overBoundaryItems)
             {
                 string kindLabel = japaneseOverBoundaryItems.Contains(item) ? "日本語を含む長いパス" : "長いパス";
                 SelfAssert.That(
-                    findingsByPath.TryGetValue(item.RelativePath, out var trait),
-                    $"{kindLabel} '{item.RelativePath}' が、コミット済みの期待値に対する既知の欠落として列挙されていません。");
-                SelfAssert.That(
-                    trait == FixtureTrait.LongPath,
-                    $"{kindLabel} '{item.RelativePath}' の既知の欠落の根拠が LongPath ではありません（実際: {trait}）。");
+                    !findingsByPath.TryGetValue(item.RelativePath, out var trait),
+                    $"記録されている{kindLabel} '{item.RelativePath}' が、コミット済みの期待値に対する既知の欠落として列挙されました（根拠: {trait}）。");
             }
+
+            int longPathFindingCount = findings.Count(f => f.Trait == FixtureTrait.LongPath);
+            SelfAssert.That(
+                longPathFindingCount == 0,
+                $"コミット済みの期待値に対して根拠 LongPath の既知の欠落が列挙されました（{longPathFindingCount}件。0件のはずです）。");
         });
     }
 

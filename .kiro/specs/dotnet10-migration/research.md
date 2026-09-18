@@ -353,3 +353,66 @@
   - 自己検証の結果は設計段階の実測（59件成功、YamlDotNet 18.1.0 でも同じ）と一致した
   - `LocalizationCheck` は一時フォルダを使わない。GoldenBaseline の自己検証の後も `%TEMP%` に `gb_*` は残っていない
   - 移行前の出力 `Tools/LocalizationCheck/bin/Debug/net48/` は無視対象のフォルダに残っている（リポジトリの差分には現れない）
+
+### 2.6 走査結果の差の確認と期待値データの更新（2026-09-19、コミット ab8e01c の上で実施）
+- **更新前の比較**: `GoldenBaseline.exe compare --golden baselines/fixture-v1.golden.txt`（Debug、ソリューションのビルド後）は終了コード 1。走査の報告はスキップ 1 件（`access_denied_folder`）、長さのせいで列挙できなかった対象 0 件、既知の欠落 0 件、説明できない欠落 0 件、フィクスチャは「すべての項目を生成しました。未生成の項目はありません。」。比較の出力の差の行の全文は次のとおり（`update` が書き換えの前に出した「[更新前の差分]」も同じ12行だった）
+
+```
+[比較]
+判定: 差分あり（12 件）
+  - [SizeMismatch] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 期待値=0 実際=8
+  - [SizeMismatch] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb 期待値=0 実際=8
+  - [SizeMismatch] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\cccccccccccccccccccccccccccccccccccccccccccccccccc 期待値=0 実際=8
+  - [SizeMismatch] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\cccccccccccccccccccccccccccccccccccccccccccccccccc\dddddddddddddddddddddddddddddddddddddddddddddddddd 期待値=0 実際=8
+  - [Unexpected] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\cccccccccccccccccccccccccccccccccccccccccccccccccc\dddddddddddddddddddddddddddddddddddddddddddddddddd\eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee 期待値= 実際=
+  - [Unexpected] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\cccccccccccccccccccccccccccccccccccccccccccccccccc\dddddddddddddddddddddddddddddddddddddddddddddddddd\eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\boundary_file.bin 期待値= 実際=
+  - [SizeMismatch] ああああああああああああああああああああああああああああああああああああああああああああああああああ 期待値=0 実際=8
+  - [SizeMismatch] ああああああああああああああああああああああああああああああああああああああああああああああああああ\いいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいい 期待値=0 実際=8
+  - [SizeMismatch] ああああああああああああああああああああああああああああああああああああああああああああああああああ\いいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいい\うううううううううううううううううううううううううううううううううううううううううううううううううう 期待値=0 実際=8
+  - [SizeMismatch] ああああああああああああああああああああああああああああああああああああああああああああああああああ\いいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいい\うううううううううううううううううううううううううううううううううううううううううううううううううう\ええええええええええええええええええええええええええええええええええええええええええええええええええ 期待値=0 実際=8
+  - [Unexpected] ああああああああああああああああああああああああああああああああああああああああああああああああああ\いいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいい\うううううううううううううううううううううううううううううううううううううううううううううううううう\ええええええええええええええええええええええええええええええええええええええええええええええええええ\おおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおお 期待値= 実際=
+  - [Unexpected] ああああああああああああああああああああああああああああああああああああああああああああああああああ\いいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいいい\うううううううううううううううううううううううううううううううううううううううううううううううううう\ええええええええええええええええええええええええええええええええええええええええええええええええええ\おおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおおお\境界ファイル.bin 期待値= 実際=
+```
+
+- **各差の説明**（フィクスチャ定義 `Fixture/FixtureSpec.cs` の `FixtureSpec.Standard` との対応。2つの長い連鎖は、どちらも1階層50文字×5階層の最深フォルダの直下に 8 バイトのファイルを1件置く定義）
+
+| # | 差の種類 | 項目（相対パス） | 定義の項目 | 説明 |
+|---|---|---|---|---|
+| 1〜4 | `[SizeMismatch]` 期待値=0 実際=8 | `a…`、`a…\b…`、`a…\b…\c…`、`a…\b…\c…\d…`（相対 50・101・152・203 文字） | ASCII の長い連鎖の1〜4階層目（トレイト Ordinary） | 移行前は5階層目より下を列挙できず、配下の `boundary_file.bin`（8 バイト）がサイズに算入されなかった。移行後は算入され 8 になった |
+| 5 | `[Unexpected]` | `a…\b…\c…\d…\e…`（相対254文字） | ASCII の長い連鎖の5階層目のフォルダ（トレイト LongPath） | 移行前の既知の欠落。移行後は観測される |
+| 6 | `[Unexpected]` | `a…\e…\boundary_file.bin`（相対272文字） | ASCII の長い連鎖のファイル（トレイト LongPath、8 バイト） | 移行前の既知の欠落。移行後は観測される |
+| 7〜10 | `[SizeMismatch]` 期待値=0 実際=8 | `あ…`、`あ…\い…`、`あ…\い…\う…`、`あ…\い…\う…\え…`（相対 50・101・152・203 文字） | 日本語の長い連鎖の1〜4階層目（トレイト Japanese） | 1〜4 と同じ理由。配下の `境界ファイル.bin`（8 バイト）が算入された |
+| 11 | `[Unexpected]` | `あ…\い…\う…\え…\お…`（相対254文字） | 日本語の長い連鎖の5階層目のフォルダ（トレイト Japanese・LongPath） | 移行前の既知の欠落。移行後は観測される |
+| 12 | `[Unexpected]` | `あ…\お…\境界ファイル.bin`（相対265文字） | 日本語の長い連鎖のファイル（トレイト Japanese・LongPath、8 バイト） | 移行前の既知の欠落。移行後は観測される |
+
+  - `[Unexpected]` の4件は、定義で LongPath のトレイトを持つ項目（4件）と過不足なく一致し、移行前の期待値データで「既知の欠落（境界条件に由来）: 4 件」として扱われていたものと同じ。`[SizeMismatch]` の8件は、そのいずれかを含む祖先フォルダ（両連鎖の1〜4階層目、計8件）と過不足なく一致し、差の大きさ（8）は配下の境界ファイルの定義上のサイズと一致する
+  - これ以外の差（`[Missing]`、種別の違い、`normal`・`日本語フォルダ`・`empty_folder`・`access_denied_folder` とその配下のサイズの違い、ヘッダの設定の不一致）は無かった。要件4.1 の想定どおりで、移行に伴う不具合としての差（要件4.2）は見つからなかった。設計段階の実測、2.4 の結果とも同じ
+- **更新**（要件4.3）: 既存の `GoldenBaseline.exe update --golden baselines/fixture-v1.golden.txt` で更新した（手で編集していない）。`update` は書き換えの前に走査の報告と「[更新前の差分]」（上の12行と同じ）を出し、「期待値ファイルを更新しました: baselines/fixture-v1.golden.txt（エントリ数: 21）」で終了コード 1（差分ありの判定をそのまま返す既存の動作）
+  - 期待値データの変化: エントリ 17 → 21（上の `[Unexpected]` 4件が加わった）、両連鎖の1〜4階層目のサイズが 0 → 8、`# GeneratedAt` が生成時刻に変わった。`# FormatVersion: 2`、`# BaseFolderPathLength: 80`、`# UsePhysicalSize: false`、`# ClusterSizeInBytes: 0`、`# FixtureComplete: true` と、それ以外のエントリは変わっていない。改行は LF のまま（`.gitattributes` の指定どおり）
+  - **更新の理由**: .NET 10 では長いパスを作成・列挙できるため、移行前（.NET Framework 4.8）に「親フォルダの絶対パスが258文字以上だと直下を一覧できない」ことで欠けていた4件が走査結果に現れるようになった。差はこの既知の欠落が解消したことと、それによる親フォルダのサイズの変化だけであることを上で確かめたので、移行後の走査結果を今後の基準にする。更新後の期待値では既知の欠落は0件になる。フォルダ数の事前カウントが長いパスで数え損ねる不具合は、本スペックでは直さず `scan-correctness` に残す（要件4.5。走査の処理には触れていない）
+- **自己検証の14件目の改訂（設計との差）**: 設計（design.md GoldenBaselineTool）が書き直しの対象としたのは、net48 の制約を前提にした13件（2.4 で改訂済み）だった。これとは別に、**コミット済みの期待値データ**を読んで、長いパスの項目が記録されていないことを確かめる項目が1件あった。この項目は 2.4 の時点では期待値データが移行前のままだったので成功しており、設計の13件には含まれていなかったが、期待値データを更新すると失敗する。13件と同じく net48 の制約を前提にした期待なので、移行後の事実に合わせて改めた（2.4 の実装時に判明し、tasks.md の Implementation Notes に記載済み）
+  - RED の観測: 期待値データの更新後、改める前の `selfcheck` は「128 件中 1 件が失敗しました。」（終了コード 1）。失敗したのはこの項目だけで、理由は「文字数境界を超える項目 'a…\e…'（254文字）がコミット済みの期待値に記録されています（現行版の挙動と異なります）。」
+
+| # | 旧い名前 → 新しい名前 | 旧い期待 | 新しい期待 |
+|---|---|---|---|
+| 14 | コミット済みの期待値 baselines/fixture-v1.golden.txt が形式バージョン2・基準フォルダの実効絶対パス長80文字で記録されており、そこに文字数境界を超える項目（日本語を含む長いパスのフォルダ・ファイルを含む）が現行版の挙動どおり記録されておらず、その記録から KnownIssueAnalyzer が根拠 LongPath とともに列挙する（要件2.3, 5.1, 5.2, 7.1、タスク6.3, 7.3）<br>→ コミット済みの期待値 baselines/fixture-v1.golden.txt が形式バージョン2・基準フォルダの実効絶対パス長80文字で記録されており、そこに文字数境界を超える項目（日本語を含む長いパスのフォルダ・ファイルを含む）が移行後の挙動どおり定義の種別とサイズで記録され、それらを含む祖先フォルダのサイズにも算入されており、その記録から KnownIssueAnalyzer が根拠 LongPath の既知の欠落を列挙しない（要件2.3, 5.1, 5.2, 7.1、タスク6.3, 7.3） | 境界（フォルダ248・ファイル260文字）を超える LongPath の各項目が期待値に記録されておらず、境界内の最も近い祖先フォルダは記録されている。KnownIssueAnalyzer がそれらの各項目を根拠 LongPath の既知の欠落として列挙する | 境界を超える各項目（ASCII・日本語のフォルダとファイル、計4件）が記録され、種別が定義と一致し、サイズが定義から導いた値（ファイルは内容サイズ 8、フォルダは配下のファイルの合計 8）と一致する。各項目の祖先フォルダ（境界内の1〜4階層目を含む連鎖のすべて）も記録され、サイズが定義から導いた値と一致し、境界を超える項目のサイズがそれに算入されている。KnownIssueAnalyzer はそれらの項目を列挙せず、根拠 LongPath の既知の欠落は0件 |
+
+  - 変えていないもの: 形式バージョン2・実効絶対パス長80文字の照合（生のテキストと読み取り後の値の双方）、`generate` の固定値との一致、論理名、`FixtureComplete`、定義に境界を超えるフォルダ・ファイル（ASCII・日本語）が揃っていることの前提、境界内の祖先フォルダが定義にあることの確認。サイズの照合の前提として、期待値が物理サイズ換算なしで記録されていることの確認を加えた
+  - 検証の強さ: 旧い期待は「記録されていない」ことと「列挙される」ことを見ていたが、新しい期待は4件の具体的な項目について記録の有無・種別・サイズまで照合し、祖先フォルダ8件のサイズ（旧期待値データでは 0 だった箇所）も照合する。改めた項目が旧い期待値データを誤って通さないことを、旧い期待値データを一時的に戻して `selfcheck` を実行し、この項目だけが「文字数境界を超える項目 'a…\e…'（254文字）がコミット済みの期待値に記録されていません（移行後の挙動と異なります）。」で失敗する（128 件中 1 件が失敗、終了コード 1）ことで確かめ、更新後の期待値データに戻した（`cmp` で一致を確認）
+  - **この1件以外は変えていない**: `SelfChecks.cs` の差分はこの項目の名前と本体の範囲（3588〜3721行付近）に限られる。`Compare/`、`Io/`、`Model/`、`Scan/`、`Fixture/`、`Program.cs` は変えていない（期待値データの形式・比較の規則・既知の欠落の判定規則は変えていない、要件7.5）
+- **確認**（ビルドは順番に実施）
+
+| コマンド | 結果 | 警告 | 終了コード |
+|---|---|---|---|
+| `GoldenBaseline.exe compare --golden baselines/fixture-v1.golden.txt`（更新前、Debug） | 判定: 差分あり（12 件） | — | 1 |
+| `GoldenBaseline.exe update --golden baselines/fixture-v1.golden.txt`（Debug） | 期待値ファイルを更新しました（エントリ数: 21） | — | 1 |
+| `GoldenBaseline.exe compare --golden baselines/fixture-v1.golden.txt`（更新後、Debug） | 判定: 一致 | — | 0 |
+| `GoldenBaseline.exe selfcheck`（更新後・改訂前、Debug） | 128 件中 1 件が失敗（上記の項目） | — | 1 |
+| `dotnet build LargeFolderFinder.sln -c Debug --no-incremental` | 成功 | 0 | 0 |
+| `GoldenBaseline.exe selfcheck`（改訂後、Debug） | 128 件中 0 件が失敗 | — | 0 |
+| `dotnet build LargeFolderFinder.sln -c Release --no-incremental` | 成功 | 0 | 0 |
+| `GoldenBaseline.exe selfcheck`（Release） | 128 件中 0 件が失敗 | — | 0 |
+| `GoldenBaseline.exe compare --golden baselines/fixture-v1.golden.txt`（Release） | 判定: 一致 | — | 0 |
+| `LocalizationCheck.exe check`（Debug・Release） | 問題はありません（言語 13、キー 81） | — | 0 |
+
+  - 実行後、`%TEMP%` に `gb_*` の一時フォルダ・ファイルは残っていない
