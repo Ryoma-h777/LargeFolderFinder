@@ -558,3 +558,49 @@
   - `dotnet test --solution LargeFolderFinder.sln -c Release --no-build`: 合計 8、失敗 0、成功 8、スキップ 0、終了コード 0
   - YAML の構文: PyYAML（リポジトリの外に一時的に入れたもの）の `safe_load` で読み込め、契機・権限・環境変数・手順が意図どおりの構造になっていることを確かめた。actionlint は手元に無いため使っていない
   - GitHub 上での実行は 5.3 で確かめる
+### 4.3 タグから下書きのリリースまでを作る自動ビルド（2026-09-19、コミット b3415c5 の上で実施）
+- **作ったもの**: `.github/workflows/release.yml`（ReleaseWorkflow）。ランナー・アクションの版・`env` の利用統計の停止は `ci.yml` にそろえた（`windows-2025`、`actions/checkout@v7`、`actions/setup-dotnet@v6` の `global-json-file`、`DOTNET_CLI_TELEMETRY_OPTOUT`・`TESTINGPLATFORM_TELEMETRY_OPTOUT`）。サードパーティのアクションは使わず、下書きはランナーに入っている `gh` で作る
+  - 契機: `v*` のタグの push のみ（`workflow_dispatch` は使わない）
+  - 権限: ワークフロー全体は `permissions: {}`、ジョブにだけ `contents: write`。チェックアウトは `persist-credentials: false` にし、書き込みできるトークンを git の設定に残さない（トークンは下書きを作る手順の `GH_TOKEN` にだけ渡す）
+  - 手順（1つのジョブで順に行い、どこかで失敗すると以降は走らず下書きは作られない）
+    1. タグと版の一致: タグは `^v(\d+\.\d+\.\d+)(-test\.\d+)?$` の形だけを受け付け、`X.Y.Z`（試験用は `-` より前）と `LargeFolderFinder.csproj` の `<Version>`（1つだけで `X.Y.Z` の形であることも確かめる）を比べる。版と試験かどうかを手順の出力に渡す
+    2. `dotnet --version` → `dotnet build LargeFolderFinder.sln -c Release -warnaserror` → `dotnet test --solution LargeFolderFinder.sln -c Release --no-build`（`ci.yml` と同じ）
+    3. `build/Publish.ps1 -Form SelfContained`、`-Form FrameworkDependent`（`powershell -NoProfile -ExecutionPolicy Bypass -File`。Windows PowerShell 5.1 で動かす）。続けて発行した2つの exe の `ProductVersion` が `^\d+\.\d+\.\d+$` の形であることを確かめる（要件2.6）
+    4. `build/Test-Launch.ps1` で2つの exe の起動確認（要件5.2）
+    5. `build/Package.ps1` で zip を2つ作る
+    6. 下書きのリリース: `gh api --paginate repos/<repo>/releases` で下書きを含む既存のリリースのタグを調べ、同じタグがあれば失敗させる（上書きしない）。無ければ `gh release create <tag> <2つの zip> --draft --verify-tag --title <題> --notes-file <説明>`。公開はしない
+  - 試験用のタグ（`vX.Y.Z-test.N`）では下書きの題を `[TEST / 試験] <tag>` にする
+  - 下書きの説明（定型文）: 2つの配布物の違い（ランタイムの要否、大きさ、選び方、中身は exe 以外同じ）を表と箇条書きで書く
+- **設計に無い判断**
+  - 下書きの説明文を英語と日本語の両方で書いた（設計は「定型文」とだけ指定。案内（README）が英語・日本語の両節であることに合わせた）
+  - タグの形は `vX.Y.Z` と `vX.Y.Z-test.N` に限り、それ以外（`v1.0.3-rc.1` など）は失敗にした（契機の `v*` は広いため）
+  - exe の `ProductVersion` は形に加えて、タグの版と一致することも確かめる
+  - `gh release create` が途中で失敗したとき（zip の添付の失敗など）は、そのタグの下書きを API で消してから失敗にする（「どこかで失敗したら下書きを作らない」を満たすため。事前に同じタグのリリースが無いことを確かめているので、消すのはこの手順で作ったものだけ）
+  - 起動確認の2つの手順に `timeout-minutes: 10` を付けた。手元の実行で、終了させたアプリのプロセスがカーネル内で止まったまま残り、そのプロセスが受け継いだ出力の管を離さないため、呼び出した側の出力の取り込みが終わらなくなったことがあった（下記）。ランナーで同じことが起きても、ジョブが既定の6時間まで止まらないようにするため
+- **確かめたこと**（手元。GitHub 上での実行は 5.3 で確かめる）
+  - YAML の構文: PyYAML（リポジトリの外に一時的に入れたもの）の `safe_load` で読み込め、契機・権限・環境変数・既定のシェル・13の手順の順番が意図どおりであることを確かめた。各 `run` を PowerShell の構文解析（`Parser.ParseFile`）にかけ、構文エラー 0 件。下書きの説明文の部分を切り出して実行し、字下げの無い Markdown が生成されることを確かめた。actionlint は手元に無いため使っていない。手元に PowerShell 7（ランナーの既定の `pwsh`）が無いため、`run` の中の PowerShell は Windows PowerShell 5.1 でも動く書き方にして 5.1 で試した
+  - タグと版の一致（ワークフローの手順の `run` をそのまま切り出し、`TAG`・`GITHUB_OUTPUT` を与えて実行。ワークフローが無い状態では読み込みで失敗）
+
+| タグ | 終了コード | 出力 |
+|---|---|---|
+| `v1.0.3` | 0 | `version=1.0.3`、`is_test=false`（「本番のタグです」） |
+| `v1.0.3-test.1` | 0 | `version=1.0.3`、`is_test=true`（「試験用のタグです」） |
+| `v1.0.4` | 1 | 「タグの版 '1.0.4'（タグ 'v1.0.4'）と LargeFolderFinder.csproj の版 '1.0.3' が一致しません」 |
+| `v1.0.3-rc.1` | 1 | 「タグ 'v1.0.3-rc.1' は vX.Y.Z か vX.Y.Z-test.N の形ではありません」 |
+| `1.0.3` | 1 | 同上 |
+
+  - GitHub に依存しない手順を同じ順に手元で実行（ワークフローと同じ環境変数。アプリデータは事前に退避）
+
+| 手順 | 結果 | 終了コード |
+|---|---|---|
+| `dotnet --version` | `10.0.401` | 0 |
+| ビルド（`-warnaserror`） | 警告 0、エラー 0 | 0 |
+| テスト | 合計 8、失敗 0、成功 8、スキップ 0 | 0 |
+| 発行（自己完結・軽量版） | 両方とも成功 | 0、0 |
+| 版の文字列（切り出した `run`、期待する版 1.0.3） | 両方とも `1.0.3` | 0 |
+| 起動確認（軽量版） | 起動から約1.5秒でウィンドウ、閉じる要求で終了（終了コード 0）、12秒 | 0 |
+| 起動確認（自己完結版） | 起動から約1.6秒でウィンドウ、閉じる要求で終了（終了コード 0）、5秒 | 0 |
+| zip の作成 | `LargeFolderFinder.zip` 59,197,419 バイト・30項目、`LargeFolderFinder-FrameworkDependent.zip` 492,141 バイト・30項目 | 0 |
+
+  - **1回目の起動確認で起きたこと**: 最初の通しの実行では、自己完結版の起動確認の出力を管で受けていたところ、取り込みが終わらなくなった。起動されたアプリ（PID 58936）は、利用者のアプリデータにある8本のセッションを読み込む途中（ログの最後は `LoadCache: Loading file Scan20260804_1050_42724.msgpack`）で、設定と開いていたセッション1本を保存し直しており（閉じる要求は受けていた）、その後プロセスは「終了済み」だがスレッド1つが残って消えない状態になった（`taskkill` は「実行中のインスタンスがありません」、`Get-Process` は `HasExited=True`、1.3GB・ハンドル1,208 のまま）。起動確認のスクリプト自身は終わっていたが、そのプロセスが受け継いだ出力の管が閉じないため取り込みが止まった。スクリプトの出力は失われ、判定の結果は分からない。出力をファイルに取る形で2つの起動確認をやり直し、上の表のとおりどちらも成功した。原因（利用者のセッションのデータ、ネットワークの場所への参照、セキュリティソフトなど）は調べていない。CI は使い捨ての環境でセッションが無いため、同じ条件にはならない見込み
+  - アプリデータの退避と復元: `tasklist` で LargeFolderFinder が起動していないことを確かめ、`%LOCALAPPDATA%\Cat & Chocolate Laboratory\LargeFolderFinder` をリポジトリの外に複製し、全ファイル（17本）の相対パス・大きさ・SHA-256 を控えた。起動確認で `Settings.msgpack` とセッション1本が保存し直され、ログが入れ替わった。`robocopy /MIR` で2回（1回目の起動確認の後と、すべての手順の後）戻し、どちらも控えとの差 0 件（17本、一覧のハッシュ `A9323723…5E57A9` が一致）
