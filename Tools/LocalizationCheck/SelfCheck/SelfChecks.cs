@@ -149,7 +149,102 @@ internal static class SelfChecks
         RegisterLanguageFileReaderChecks(runner);
         RegisterCoverageCheckerChecks(runner);
         RegisterReportWriterChecks(runner);
+        RegisterCheckArgumentsChecks(runner);
         RegisterRegistrationChecks(runner);
+    }
+
+    /// <summary>
+    /// check コマンドの引数の解釈の検証項目を登録する
+    /// （design.md: Entry / Program の Batch / Job Contract「入力」、requirements.md: 4.2）。
+    /// </summary>
+    /// <remarks>
+    /// 引数の誤り（値の無い <c>--dir</c>、未知のオプション）は終了コード 2 の条件であり、
+    /// ファイルシステムに触れずに確かめられるため、自己検証の項目にしている。
+    /// </remarks>
+    private static void RegisterCheckArgumentsChecks(SelfCheckRunner runner)
+    {
+        runner.Add(
+            "CheckArguments: 引数が無いときはフォルダの指定が無く、誤りも無い",
+            () =>
+            {
+                var parsed = CheckArguments.Parse(new string[0]);
+
+                SelfAssert.That(
+                    parsed.IsValid,
+                    $"引数が無いときは誤りにならないはずですが、「{parsed.ErrorMessage}」になりました。");
+
+                SelfAssert.That(
+                    parsed.LanguageFolder == null,
+                    $"引数が無いときはフォルダの指定が無いはずですが、「{parsed.LanguageFolder}」でした。");
+            });
+
+        runner.Add(
+            "CheckArguments: --dir の値を取り出す",
+            () =>
+            {
+                var parsed = CheckArguments.Parse(new[] { "--dir", "some-folder" });
+
+                SelfAssert.That(
+                    parsed.IsValid,
+                    $"--dir に値があるときは誤りにならないはずですが、「{parsed.ErrorMessage}」になりました。");
+
+                SelfAssert.That(
+                    parsed.LanguageFolder == "some-folder",
+                    $"--dir の値は「some-folder」を期待しましたが、「{parsed.LanguageFolder}」でした。");
+            });
+
+        runner.Add(
+            "CheckArguments: --dir の値が無いと誤りになる",
+            () => AssertArgumentError(new[] { "--dir" }));
+
+        runner.Add(
+            "CheckArguments: --dir の次が別のオプションのときは値が無いものとして誤りになる",
+            () => AssertArgumentError(new[] { "--dir", "--help" }));
+
+        runner.Add(
+            "CheckArguments: --dir の値が空文字のときは誤りになる",
+            () => AssertArgumentError(new[] { "--dir", "" }));
+
+        runner.Add(
+            "CheckArguments: 未知のオプションは誤りになる",
+            () => AssertArgumentError(new[] { "--unknown" }));
+
+        runner.Add(
+            "CheckArguments: オプションでない余分な引数は誤りになる",
+            () => AssertArgumentError(new[] { "some-folder" }));
+
+        runner.Add(
+            "CheckArguments: --dir を2回指定すると誤りになる",
+            () => AssertArgumentError(new[] { "--dir", "one", "--dir", "two" }));
+
+        runner.Add(
+            "CheckArguments: 誤りのある引数ではフォルダの指定を返さない",
+            () =>
+            {
+                var parsed = CheckArguments.Parse(new[] { "--dir", "one", "--unknown" });
+
+                SelfAssert.That(
+                    parsed.LanguageFolder == null,
+                    "引数に誤りがあるときはフォルダの指定を返さないはずですが、" +
+                    $"「{parsed.LanguageFolder}」が返りました。");
+            });
+    }
+
+    /// <summary>
+    /// check コマンドの引数の解釈が誤りになり、理由の説明が空でないことを確かめる。
+    /// </summary>
+    /// <param name="args">コマンド名を除いた引数。</param>
+    private static void AssertArgumentError(string[] args)
+    {
+        var parsed = CheckArguments.Parse(args);
+
+        SelfAssert.That(
+            !parsed.IsValid,
+            $"[{string.Join(" ", args)}] は引数の誤りになるはずですが、誤りになりませんでした。");
+
+        SelfAssert.That(
+            !string.IsNullOrEmpty(parsed.ErrorMessage),
+            $"[{string.Join(" ", args)}] の誤りの説明が空です。原因が読み手に伝わりません。");
     }
 
     /// <summary>
