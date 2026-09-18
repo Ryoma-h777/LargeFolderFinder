@@ -604,3 +604,18 @@
 
   - **1回目の起動確認で起きたこと**: 最初の通しの実行では、自己完結版の起動確認の出力を管で受けていたところ、取り込みが終わらなくなった。起動されたアプリ（PID 58936）は、利用者のアプリデータにある8本のセッションを読み込む途中（ログの最後は `LoadCache: Loading file Scan20260804_1050_42724.msgpack`）で、設定と開いていたセッション1本を保存し直しており（閉じる要求は受けていた）、その後プロセスは「終了済み」だがスレッド1つが残って消えない状態になった（`taskkill` は「実行中のインスタンスがありません」、`Get-Process` は `HasExited=True`、1.3GB・ハンドル1,208 のまま）。起動確認のスクリプト自身は終わっていたが、そのプロセスが受け継いだ出力の管が閉じないため取り込みが止まった。スクリプトの出力は失われ、判定の結果は分からない。出力をファイルに取る形で2つの起動確認をやり直し、上の表のとおりどちらも成功した。原因（利用者のセッションのデータ、ネットワークの場所への参照、セキュリティソフトなど）は調べていない。CI は使い捨ての環境でセッションが無いため、同じ条件にはならない見込み
   - アプリデータの退避と復元: `tasklist` で LargeFolderFinder が起動していないことを確かめ、`%LOCALAPPDATA%\Cat & Chocolate Laboratory\LargeFolderFinder` をリポジトリの外に複製し、全ファイル（17本）の相対パス・大きさ・SHA-256 を控えた。起動確認で `Settings.msgpack` とセッション1本が保存し直され、ログが入れ替わった。`robocopy /MIR` で2回（1回目の起動確認の後と、すべての手順の後）戻し、どちらも控えとの差 0 件（17本、一覧のハッシュ `A9323723…5E57A9` が一致）
+
+### 5.1 利用者向けの案内と著作権表示（2026-09-19、コミット 31a5a1d の上で実施）
+- **案内（`README.md` の英語・日本語の両節）**: 「使い方」を、2つの zip からの選択 → 丸ごと解凍（`Config.txt` と `Resources` を exe の隣に置いたまま）→ 起動（インストール不要）の順に改めた。「配布物の選び方」（英語は「Which Download to Choose」）の節を加え、ランタイムの要否・zip と exe の大きさ（3.3 の実測: 自己完結 zip 約59MB・exe 約140MB、軽量版 zip 約0.5MB・exe 約1MB）・選び方（迷ったら自己完結版）・軽量版に要るランタイム（.NET 10 Desktop Runtime (x64)、入手先 https://dotnet.microsoft.com/download/dotnet/10.0 ）を書いた。「システム要件」は OS を Windows 10 / 11（64ビット、x64）、ランタイムを形態ごとに書き分けた。各言語の Readme の場所を実際の `Resources/Readme/` に直した。`Resources/Readme/*.txt` には実行基盤の記述が無いため変えていない
+- **配布物の中身**（`artifacts/package` の2つの zip の exe から単一ファイルの目録と埋め込みの deps.json を読んで確かめた。アプリは起動していない）
+  - 両形態: `LargeFolderFinder.dll`、`MessagePack.dll`・`MessagePack.Annotations.dll`（3.1.9）、`Microsoft.NET.StringTools.dll`（17.11.4。MessagePack が推移的に引き込む）、`YamlDotNet.dll`（18.1.0）
+  - 自己完結版だけ: ランタイムパック `Microsoft.NETCore.App.Runtime.win-x64` 10.0.12 と `Microsoft.WindowsDesktop.App.Runtime.win-x64` 10.0.12（目録387項目。WPF のネイティブ DLL 5本 `D3DCompiler_47_cor3`・`PenImc_cor3`・`PresentationNative_cor3`・`vcruntime140_cor3`・`wpfgfx_cor3` を含む）
+  - テスト専用の部品（xunit.v3、Microsoft Testing Platform）と、取り除いた Ookii.Dialogs.Wpf・Fody・Costura.Fody は入っていない
+- **著作権表示（`Resources/License/ThirdPartyNotices.txt`）**: Ookii.Dialogs.Wpf・Fody・Costura.Fody を削除。1〜3（両形態）に MessagePack、Microsoft.NET.StringTools、YamlDotNet を、4〜5（自己完結版だけ）に .NET ランタイムと Windows Desktop Runtime（WPF）を置き、冒頭に形態ごとの適用範囲を書いた。本文は出典の文面をそのまま連結した（改行だけ CRLF にそろえた。UTF-8・BOM なし。.NET ランタイムの第三者表示に ASCII 以外の文字があるため）。約92KB
+  - MessagePack: 公式リポジトリの `LICENSE`（NuGet の版 3.1.9 のコミット aa16e71）。従来の記載に無かった `BufferWriter.cs`（Apache 2.0）の節が含まれる
+  - Microsoft.NET.StringTools: dotnet/msbuild の `LICENSE`（パッケージのコミット 37eb419、MIT）と、パッケージ同梱の `notices/THIRDPARTYNOTICES.txt`
+  - YamlDotNet: 公式リポジトリの `LICENSE.txt`（18.1.0 のコミット 748334a）。文面は従来と同じ
+  - .NET ランタイム: NuGet キャッシュのランタイムパック 10.0.12 の `LICENSE.TXT` と `THIRD-PARTY-NOTICES.TXT`（dotnet/runtime の v10.0.12 と同一であることを確かめた）
+  - Windows Desktop Runtime: ランタイムパック 10.0.12 の `LICENSE` と、dotnet/wpf の v10.0.12 の `THIRD-PARTY-NOTICES.TXT`（パッケージに第三者表示が無いため）
+- **設計に無い判断**: 設計は .NET ランタイムについて「MIT を加える」とだけ指定するが、同梱するランタイムの第三者表示（zlib など、バイナリの配布で表示を求めるものを含む）も本文のまま載せた。表示の版はこの時点の配布物（10.0.12）の文面で、SDK の版を変えてランタイムの版が変わったら見直す
+- **確かめたこと**: `README.md` に「4.8」「.NET Framework」「Ookii」「Costura」が0件。著作権表示に Ookii・Fody・Costura・xunit.v3・Microsoft.Testing が0件で、8つの出典の本文がすべて一字一句含まれる。アプリ単体のビルド（`dotnet build LargeFolderFinder.csproj -c Release`）は警告0・エラー0で、出力先の著作権表示が更新後のものと同一。軽量版をスクラッチの場所に発行し直し、発行物の著作権表示が同一であることを確かめた（`artifacts/publish` はプロセスが残ってロックされているため触れていない。`artifacts/package` の zip は古い著作権表示のままで、作り直しは 5.3・5.4 の発行で行われる）

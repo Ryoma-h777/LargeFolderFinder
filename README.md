@@ -36,22 +36,40 @@ Extracts and lists only folders larger than the specified size (e.g., 10 GB) in 
 
 ## 🚀 How to Use
 
-1. **Download**: Download and unzip the latest `LargeFolderFinder.zip` from the [Releases](https://github.com/Ryoma-h777/LargeFolderFinder/releases) page.
-2. **Run**: Launch `LargeFolderFinder.exe`.
-3. **Configure**: Select the path to scan and enter the minimum size to extract (e.g., 1 GB).
-4. **Scan**: Click the ▶ button (Scan button).
-5. **Utilize**: Copy the results using the button and use them for disk space management.
+1. **Download**: Download one of the zip files from the latest release on the [Releases](https://github.com/Ryoma-h777/LargeFolderFinder/releases) page (if unsure, choose `LargeFolderFinder.zip`; see [Which Download to Choose](#-which-download-to-choose)).
+2. **Unzip**: Extract the whole zip into any folder. Keep `Config.txt` and the `Resources` folder next to `LargeFolderFinder.exe`.
+3. **Run**: Launch `LargeFolderFinder.exe`. No installation is needed.
+4. **Configure**: Select the path to scan and enter the minimum size to extract (e.g., 1 GB).
+5. **Scan**: Click the ▶ button (Scan button).
+6. **Utilize**: Copy the results using the button and use them for disk space management.
 
-※For details, please refer to the Readme/Readme_{language}.txt file for each language.
+※For details, please refer to the Resources/Readme/Readme_{language}.txt file for each language.
+
+## 📦 Which Download to Choose
+
+Each release provides two zip files. The contents (settings file, language files, Readme, licenses) and the features are the same; only whether the .NET runtime is included differs.
+
+| | `LargeFolderFinder.zip` (Standard, recommended) | `LargeFolderFinder-FrameworkDependent.zip` (Lightweight) |
+|---|---|---|
+| .NET runtime | Included in the exe (no installation needed) | Not included (.NET 10 Desktop Runtime (x64) must be installed) |
+| Download size (zip) | Approx. 59 MB | Approx. 0.5 MB |
+| Size of `LargeFolderFinder.exe` | Approx. 140 MB | Approx. 1 MB |
+
+- **If unsure, choose `LargeFolderFinder.zip`.** It runs as-is on a PC without the .NET runtime.
+- Choose `LargeFolderFinder-FrameworkDependent.zip` if the .NET 10 Desktop Runtime (x64) is already installed on your PC, or if you want a smaller download.
+  - The runtime can be downloaded from Microsoft: [Download .NET 10.0](https://dotnet.microsoft.com/download/dotnet/10.0) → ".NET Desktop Runtime 10.0.x" → Windows "x64" installer.
+  - If the runtime is not installed, the app will not start and a message asking you to install .NET is shown. Install the runtime above and start the app again.
 
 ## 💻 System Requirements
 
-- **OS**: Windows 10 / 11
-- **Runtime**: .NET Framework 4.8 (Standard on Windows, usually no installation required)
+- **OS**: Windows 10 / 11 (64-bit, x64)
+- **Runtime**:
+  - `LargeFolderFinder.zip`: None required (the .NET runtime is included)
+  - `LargeFolderFinder-FrameworkDependent.zip`: .NET 10 Desktop Runtime (x64)
 
 ## 📄 License
 
-This project is released under the [MIT License](License/LICENSE.txt). Anyone may use it freely and at no cost, including for commercial purposes.
+This project is released under the [MIT License](Resources/License/LICENSE.txt). Anyone may use it freely and at no cost, including for commercial purposes.
 
 If you are unable to display the MIT License attribution, you may use it under the following conditions:
 ※ You do not need to wait for my reply to start using it; you may begin immediately.
@@ -102,22 +120,40 @@ Win32 API (kernel32.dll) を使用しC++並に爆速で動くことを目指し�
 
 ## 🚀 使い方
 
-1. **ダウンロード**: [Releases](https://github.com/Ryoma-h777/LargeFolderFinder/releases) ページから最新の `LargeFolderFinder.zip` をダウンロード・解凍します。
-2. **実行**: `LargeFolderFinder.exe` を起動します。
-3. **設定**: スキャンしたいパスを選択し、抽出する最小サイズ（例: 1GB）を入力します。
-4. **スキャン**: ▶ボタン(スキャンボタン)をクリックします。
-5. **活用**: 結果をコピーボタンで取得し、容量整理の資料として利用できます。
+1. **ダウンロード**: [Releases](https://github.com/Ryoma-h777/LargeFolderFinder/releases) ページの最新のリリースから、zip を1つダウンロードします（迷ったら `LargeFolderFinder.zip`。[配布物の選び方](#-配布物の選び方)を参照）。
+2. **解凍**: zip を丸ごと好きなフォルダーに解凍します。`Config.txt` と `Resources` フォルダーは `LargeFolderFinder.exe` の隣に置いたままにしてください。
+3. **実行**: `LargeFolderFinder.exe` を起動します。インストールは不要です。
+4. **設定**: スキャンしたいパスを選択し、抽出する最小サイズ（例: 1GB）を入力します。
+5. **スキャン**: ▶ボタン(スキャンボタン)をクリックします。
+6. **活用**: 結果をコピーボタンで取得し、容量整理の資料として利用できます。
 
-※詳しくは各言語の Readme/Readme_{language}.txt に記載されています。
+※詳しくは各言語の Resources/Readme/Readme_{language}.txt に記載されています。
+
+## 📦 配布物の選び方
+
+リリースごとに2つの zip を用意しています。中身（設定ファイル・言語ファイル・Readme・ライセンス）と機能は同じで、.NET のランタイムを含むかどうかだけが違います。
+
+| | `LargeFolderFinder.zip`（標準・おすすめ） | `LargeFolderFinder-FrameworkDependent.zip`（軽量版） |
+|---|---|---|
+| .NET のランタイム | exe に同梱（インストール不要） | 同梱しない（.NET 10 Desktop Runtime (x64) のインストールが必要） |
+| ダウンロードの大きさ（zip） | 約59MB | 約0.5MB |
+| `LargeFolderFinder.exe` の大きさ | 約140MB | 約1MB |
+
+- **迷ったら `LargeFolderFinder.zip` を選んでください。** .NET のランタイムが入っていない PC でも、そのまま起動できます。
+- すでに .NET 10 Desktop Runtime (x64) を入れている PC や、ダウンロードを小さくしたい場合は `LargeFolderFinder-FrameworkDependent.zip` を選べます。
+  - ランタイムは Microsoft の [.NET 10.0 のダウンロード](https://dotnet.microsoft.com/download/dotnet/10.0) ページの「.NET Desktop Runtime 10.0.x」から、Windows の「x64」のインストーラーを入手できます。
+  - ランタイムが入っていないとアプリは起動せず、.NET のインストールを求めるメッセージが表示されます。上記のランタイムを入れてから、もう一度起動してください。
 
 ## 💻 システム要件
 
-- **OS**: Windows 10 / 11
-- **ランタイム**: .NET Framework 4.8 (Windowsに標準搭載されているため、通常はインストール不要です)
+- **OS**: Windows 10 / 11（64ビット、x64）
+- **ランタイム**:
+  - `LargeFolderFinder.zip`: 不要（.NET のランタイムを同梱）
+  - `LargeFolderFinder-FrameworkDependent.zip`: .NET 10 Desktop Runtime (x64)
 
 ## 📄 ライセンス
 
-このプロジェクトは [MIT ライセンス](License/LICENSE.txt) の下で公開されています。商用利用を含め、どなたでも無料で自由にご利用いただけます。
+このプロジェクトは [MIT ライセンス](Resources/License/LICENSE.txt) の下で公開されています。商用利用を含め、どなたでも無料で自由にご利用いただけます。
 
 MITライセンスの表記ができない場合、以下の対応でもご利用可能です。
 ※利用開始は、私からの返事を待つ必要はなく、すぐにご利用を開始して構いません。
