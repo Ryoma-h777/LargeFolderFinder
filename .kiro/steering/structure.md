@@ -43,7 +43,21 @@
 **入るもの**: 配布物に含めない、開発者が実行するコンソールアプリ。アプリ本体を読み取り専用で参照し、サブコマンドと終了コードで結果を返す。それぞれ外部依存の無い `selfcheck`（自己検証）を持つ
 **例**: `GoldenBaseline`（走査結果の検証。検証用のフォルダ構造を走査し、期待値（リポジトリ直下の `baselines/*.golden.txt`）と突き合わせる）、`LocalizationCheck`（言語ファイルの網羅の検証。実行方法は tech.md の「コマンド」）
 
-**追加時の注意**: 本体の csproj は `DefaultItemExcludes` で `Tools\**` を除外しています。ツール側の `.cs` が本体のビルドに取り込まれないのはこのためです。ツールは `LargeFolderFinder.sln` に登録します。名前空間は本体のフラットな規約に従わず、`LargeFolderFinder.{ツール名}` を起点にフォルダごとに切ります。
+**追加時の注意**: 本体の csproj は `DefaultItemExcludes` で `Tools\**` を除外しています。ツール側の `.cs` が本体のビルドに取り込まれないのはこのためです。ツールは `LargeFolderFinder.sln` に登録します。名前空間は本体のフラットな規約に従わず、`LargeFolderFinder.{ツール名}` を起点にフォルダごとに切ります。ツールは本体と同じ `net10.0-windows` を対象にし、RID を付けないので出力は `Tools/{ツール名}/bin/{構成}/net10.0-windows/` です（本体は RID 付きの `bin/{構成}/net10.0-windows/win-x64/`）。
+
+### Tests — 自動テスト
+**場所**: `Tests/LargeFolderFinder.Tests/`
+**入るもの**: xunit.v3 のテスト。検証ツールの実行ファイルを子プロセスで呼び、終了コードで判定する（判定の仕組みはツール側に置き、テストで作り直さない）
+**追加時の注意**: 検証ツールは `ProjectReference`（`ReferenceOutputAssembly=false`）で参照し、ビルドの順序と出力の存在だけを保証する。本体からテストを参照しない（配布物に入れない）。ソリューションの構成は既存の `Debug|Any CPU`・`Release|Any CPU` だけにそろえる
+
+### build / .github — 発行と自動ビルド
+**場所**: `build/`（`Publish.ps1`・`Package.ps1`・`Test-Launch.ps1`）、`.github/workflows/`（`ci.yml`・`release.yml`）
+**入るもの**: 発行・梱包・起動確認の PowerShell スクリプトと、それを呼ぶだけの薄いワークフロー。手元と CI が同じスクリプトを通る（手順は tech.md の「コマンド」「発行と配布」）
+**追加時の注意**: スクリプトは Windows PowerShell 5.1 でも動く書き方にし、UTF-8（BOM 付き）・CRLF で保存する。失敗は 0 以外の終了コードで返す。出力の既定はバージョン管理外の `artifacts/`
+
+### リポジトリ直下のその他
+- `global.json`: SDK の版とテストの実行方式の固定（理由は tech.md の「SDK の版」）
+- `baselines/`: 走査結果の期待値データ。`GoldenBaseline` の `update` で更新し、手で編集しない
 
 ## レイアウト切り替えのパターン
 
@@ -111,6 +125,7 @@ Views  →  ViewModels  →  Services  →  Models
 
 - `docs/` は **`.gitignore` 済み**（`/docs/`）。AI 生成の設計メモ置き場であり、リポジトリには含めない
 - `build*.txt` / `msbuild.log` / `Cache.bin` も同様に除外対象
+- `artifacts/`（発行物・zip・移行前の版の控え）も除外対象。本体の csproj は `DefaultItemExcludes` で `Tests\**`・`build\**`・`artifacts\**` もビルドから外している
 - `.kiro/` と `.claude/` は仕様・スキルの共有対象として追跡してよい
 
 ## 既知の負債（変更時に留意）

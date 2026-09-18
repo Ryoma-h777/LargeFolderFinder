@@ -619,3 +619,31 @@
   - Windows Desktop Runtime: ランタイムパック 10.0.12 の `LICENSE` と、dotnet/wpf の v10.0.12 の `THIRD-PARTY-NOTICES.TXT`（パッケージに第三者表示が無いため）
 - **設計に無い判断**: 設計は .NET ランタイムについて「MIT を加える」とだけ指定するが、同梱するランタイムの第三者表示（zlib など、バイナリの配布で表示を求めるものを含む）も本文のまま載せた。表示の版はこの時点の配布物（10.0.12）の文面で、SDK の版を変えてランタイムの版が変わったら見直す
 - **確かめたこと**: `README.md` に「4.8」「.NET Framework」「Ookii」「Costura」が0件。著作権表示に Ookii・Fody・Costura・xunit.v3・Microsoft.Testing が0件で、8つの出典の本文がすべて一字一句含まれる。アプリ単体のビルド（`dotnet build LargeFolderFinder.csproj -c Release`）は警告0・エラー0で、出力先の著作権表示が更新後のものと同一。軽量版をスクラッチの場所に発行し直し、発行物の著作権表示が同一であることを確かめた（`artifacts/publish` はプロセスが残ってロックされているため触れていない。`artifacts/package` の zip は古い著作権表示のままで、作り直しは 5.3・5.4 の発行で行われる）
+
+### 5.2 steering の移行後の事実への更新（2026-09-19、コミット 65e2e71 の上で実施）
+- **更新したもの**（事実の出典はこの「移行の記録」の 1.1〜5.1、設計段階の実測、tasks.md の Implementation Notes）
+  - `tech.md`: 対象（`net10.0-windows`、`win-x64`、`UseWindowsForms` なし）、主要ライブラリ（MessagePack 3.1.9、YamlDotNet 18.1.0、CommunityToolkit.Mvvm は未導入で下限 8.4.2、xunit.v3 はテスト専用。外部のダイアログ部品と埋め込みの仕組みの行を削除し、`OpenFolderDialog` を使うことを記載）、テストの節（「自動テストは存在しません」を、テストプロジェクトの方式・スキップの扱い・期待値データの更新済みの事実に置き換え）、SDK の版と理由・版を変えるときの手順、コマンド（ビルド・テスト・検証ツールの新しい場所・発行・起動確認・梱包）、「発行と配布」「既知の制約」の節を新設。「.NET Framework 4.8 を維持」「Costura による単一 exe 化」の判断を、移行後の判断（2026-09-17 の利用者の決定）と「単一 exe の配布」「スクリプトを単一の入口にする」に置き換えた
+  - `product.md`: 配布形態を2形態に、「ランタイム導入不要（.NET Framework 4.8 は Windows 標準搭載）」を自己完結版での事実に改め、優先順位の「導入の手軽さ」に自己完結版で守ることを添えた
+  - `structure.md`: 検証ツールの出力先（RID なし）、`Tests/`、`build/`・`.github/workflows/`、`global.json`・`baselines/`、`artifacts/` と `DefaultItemExcludes` の追加分
+  - `decisions.md`: 既存の「.NET 9 の自己完結型・単一ファイルの発行設定」の項目の末尾に2行を追記（既存の記述は変えていない）。197 → 199 行
+- **設計に無い判断**
+  - `tech.md` のアプリデータの場所を `…\Large Folder Finder\` から `…\LargeFolderFinder\` に直した。移行前からの記述の誤りで、`AppConstants.AppDataDirectory`（`AppInfo.Organization` と `AppInfo.Title`）と 3.2 の実際のフォルダに合わせた
+  - NuGet の脆弱性の警告で CI が失敗しうることは、SDK 10.0.401 の `NuGet.targets` で確かめた（`NuGetAudit` は既定で有効、`NuGetAuditLevel` は `low`、対象が `net10.0` 以上なら `NuGetAuditMode` は `all` で推移的な依存も監査する）。警告の番号 `NU1901`〜`NU1904` は NuGet の監査の警告の番号
+  - `performance.md` の「自動テストが無いため、速度に影響する変更は必ず実測で確認」は境界の外のため変えていない（速度の実測が要ることは移行後も同じ）。`roadmap.md` の経緯の記述も変えていない
+- **steering に書いたコマンドの確認**（手元、SDK 10.0.401、利用統計の送信を止める環境変数を設定、順番に実行。アプリは起動していない）
+
+| コマンド | 結果 | 終了コード |
+|---|---|---|
+| `dotnet --version` | `10.0.401` | 0 |
+| `dotnet build LargeFolderFinder.sln -c Release -warnaserror` | 警告 0、エラー 0 | 0 |
+| `dotnet test --solution LargeFolderFinder.sln -c Release --no-build` | 合計 8、失敗 0、成功 8、スキップ 0 | 0 |
+| `Tools/GoldenBaseline/bin/Release/net10.0-windows/GoldenBaseline.exe compare --golden baselines/fixture-v1.golden.txt` | 判定: 一致 | 0 |
+| `Tools/GoldenBaseline/bin/Release/net10.0-windows/GoldenBaseline.exe selfcheck` | 128 件中 0 件が失敗 | 0 |
+| `Tools/LocalizationCheck/bin/Release/net10.0-windows/LocalizationCheck.exe check` | 問題はありません（言語 13、キー 81） | 0 |
+| `Tools/LocalizationCheck/bin/Release/net10.0-windows/LocalizationCheck.exe selfcheck` | 59 件中 0 件が失敗 | 0 |
+| `build/Publish.ps1 -Form FrameworkDependent -OutputDir <スクラッチ>` | exe 1,052,929 バイト | 0 |
+| `build/Publish.ps1 -Form SelfContained -OutputDir <スクラッチ>` | exe 140,586,265 バイト | 0 |
+| `build/Package.ps1`（上の2つの発行先と出力先をスクラッチに指定） | `LargeFolderFinder.zip` 59,210,861 バイト、`LargeFolderFinder-FrameworkDependent.zip` 505,568 バイト | 0 |
+
+  - 発行は `-OutputDir` にスクラッチの空のフォルダを渡した。`artifacts/publish/SelfContained` は 4.3 で残ったプロセスが exe をロックしているため触れていない。`build/Test-Launch.ps1` はアプリを起動するため実行していない（3.2・4.3 で確認済み）
+  - zip は 3.3 より両方とも約13.4KB（13,425・13,424 バイト）大きい。exe の大きさは同じなので、5.1 で著作権表示が約92KB に増えた分とみられる
