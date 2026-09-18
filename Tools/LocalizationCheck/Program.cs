@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using LargeFolderFinder.LocalizationCheck.SelfCheck;
 
 namespace LargeFolderFinder.LocalizationCheck;
 
@@ -11,19 +12,19 @@ namespace LargeFolderFinder.LocalizationCheck;
 internal static class Program
 {
     /// <summary>判定結果: 問題なし（design.md: Batch / Job Contract の終了コード）。</summary>
-    internal const int ExitCodeNoProblem = 0;
+    private const int ExitCodeNoProblem = 0;
 
     /// <summary>
     /// 判定結果: 問題あり（欠落、孤児、差し込み位置、重複、en 以外の読み込み不能のいずれか）
     /// （design.md: Batch / Job Contract の終了コード）。
     /// </summary>
-    internal const int ExitCodeProblemFound = 1;
+    private const int ExitCodeProblemFound = 1;
 
     /// <summary>
     /// 判定結果: 検証不能（言語フォルダが無い、言語ファイルが0本、en.yaml が無いか読み込めない、
     /// 引数の誤り、予期しない例外）（design.md: Batch / Job Contract の終了コード）。
     /// </summary>
-    internal const int ExitCodeNotVerifiable = 2;
+    private const int ExitCodeNotVerifiable = 2;
 
     private static int Main(string[] args)
     {
@@ -92,15 +93,31 @@ internal static class Program
     }
 
     /// <summary>
-    /// 登録済みの自己検証項目をすべて実行する（design.md: Components and Interfaces / SelfChecks）。
+    /// 登録済みの自己検証項目をすべて実行し、結果を標準出力へ報告する
+    /// （design.md: Components and Interfaces / SelfChecks）。
+    /// 1件でも失敗があれば問題あり（1）、すべて成功であれば問題なし（0）を返す。
     /// </summary>
-    /// <remarks>
-    /// 自己検証の実行の仕組みはタスク 1.2 で実装する。
-    /// それまでは検証を行えないため、終了コードの契約に従い検証不能（2）を返す。
-    /// </remarks>
     private static int RunSelfCheck()
     {
-        Console.Error.WriteLine("selfcheck コマンドはまだ実装されていないため、検証できません。");
-        return ExitCodeNotVerifiable;
+        var runner = new SelfCheckRunner();
+        SelfChecks.Register(runner);
+        var outcomes = runner.RunAll();
+
+        int failureCount = 0;
+        foreach (var outcome in outcomes)
+        {
+            var mark = outcome.Passed ? "OK" : "NG";
+            Console.WriteLine($"[{mark}] {outcome.Name}");
+            if (!outcome.Passed)
+            {
+                Console.WriteLine($"      理由: {outcome.FailureReason}");
+                failureCount++;
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"{outcomes.Count} 件中 {failureCount} 件が失敗しました。");
+
+        return failureCount == 0 ? ExitCodeNoProblem : ExitCodeProblemFound;
     }
 }
