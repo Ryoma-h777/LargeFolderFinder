@@ -472,3 +472,46 @@
   2. `%LOCALAPPDATA%\Cat & Chocolate Laboratory\LargeFolderFinder`（`AppConstants.AppDataDirectory`）をフォルダごとリポジトリの外に複製し、全ファイルの相対パス・大きさ・SHA-256 の一覧を控える（今回は20項目: `Cache.txt`、`Settings.msgpack`、`Logs/` のログ8本、`Sessions/` のセッション8本とフォルダ2つ）
   3. 起動確認を行う。今回の試験では、アプリが `Settings.msgpack` と開いていたセッション1本を保存し直し、ログを3本書いて古いログ3本を消した（ログの上限 4 本の整理）。組織のフォルダの下に別のフォルダは増えていない
   4. `robocopy <退避先> <アプリデータ> /MIR /COPY:DAT /DCOPY:DAT` で退避の状態に戻し（増えたログは消える）、一覧を取り直して控えと突き合わせる。今回は差 0 件（前後とも20項目、一覧のハッシュ `C37A4133…3D42DF` が一致）
+
+### 3.3 配布用の zip を作るスクリプト（2026-09-19、コミット 36f94e0 の上で実施）
+- **作ったもの**: `build/Package.ps1`（`Publish.ps1`・`Test-Launch.ps1` と同じく Windows PowerShell 5.1 で動くよう UTF-8 BOM 付き・CRLF で保存）。設計（design.md PackageScript）どおり、引数は `-SelfContainedDir`、`-FrameworkDependentDir`、`-OutputDir`（省略時 `artifacts/package`）
+  - 使い方: `powershell -NoProfile -ExecutionPolicy Bypass -File build/Package.ps1`（相対パスは現在の場所が基準）
+  - 出力: `LargeFolderFinder.zip`（自己完結、既定の配布物）と `LargeFolderFinder-FrameworkDependent.zip`（軽量版）
+  - 入れるもの: `LargeFolderFinder.exe`、`Config.txt`、`Resources/Languages/*.yaml`、`Resources/Readme/*.txt`、`Resources/License/*`（直下のファイル）。それ以外（pdb、下位フォルダなど）は入れず、入れなかったファイルの名前を表示する
+- **検査**（満たさなければ終了コード 1、標準エラーに「エラー: …」）。zip を作る前（発行フォルダから選んだ一覧）と、作った後（zip を読み直した一覧）の両方で行う
+  - 必須のファイル: exe、`Config.txt`、言語ファイル13本、`Resources/License/LICENSE.txt`・`ThirdPartyNotices.txt`（設計どおり Readme は必須に含めないが、2つの一覧の一致の検査の対象には含める）
+  - 2つの一覧（zip 内のパスと大きさ）が exe の大きさを除いて一致すること。違いは「自己完結版にだけある」「軽量版にだけある」「大きさが違う」の形で全件を示す
+  - zip を読み直したとき、構成に当てはまらない項目や `\` を含む項目が無いこと、zip の中身（パスと大きさ）が発行フォルダから選んだ一覧と同じであること
+- **失敗の扱い**（すべて終了コード 1）: 発行フォルダが無い（「先に build/Publish.ps1 で発行してください」）、上記の検査の失敗、出力先がフォルダでない、途中の例外。検査に失敗したときは、そのスクリプトが作った zip を消す（発行フォルダの検査で失敗したときは zip を作らない）
+- **設計に無い判断**
+  - 発行フォルダの引数の省略時は `artifacts/publish/<形態>`（`Publish.ps1` の既定の発行先）とした
+  - 出力先の扱いは `Publish.ps1` にそろえた。`artifacts/package` 配下では前回の同じ名前の zip を消して作り直す。それ以外の場所では、同じ名前の zip があれば何も消さずに失敗にする
+  - 言語ファイルは名前ではなく本数（13本）で確かめる（`LocalizationCheck` の「言語 13」と同じ数）
+- **zip の作り方**: `Compress-Archive` は使わず、`System.IO.Compression` の `ZipFile.Open` と `CreateEntryFromFile` で、zip 内のパスを `/` 区切りで明示して作る。手元の Windows PowerShell 5.1 の `Microsoft.PowerShell.Archive` は 1.0.1.0 で、zip 内のパスの区切りに `\` を書く既知の問題がある版のため
+  - 名前のエンコーディングは指定しない（既定のまま）。既定では ASCII だけの名前はそのまま、ASCII 以外の文字を含む名前は UTF-8 で書いて UTF-8 の印（汎用フラグのビット 11）を付ける。試作で UTF-8 を明示して渡したところ、.NET Framework は印を付けずに UTF-8 で書き、Python の `zipfile` で読むと `Readme_µùÑµ£¼Φ¬₧.txt` と化けた（CP437 として解釈される）ため、明示しない形にした。現在の配布物の名前はすべて ASCII なので、印の付いた項目は無い
+- **試験**（RED→GREEN。試験の道具はリポジトリの外に置き、コミットしない。試験用の発行フォルダは軽量版の発行物を複製して作り、`artifacts/publish` には触れていない）: スクリプトを作る前は10件中10件が失敗（スクリプトが無いため）、作った後は17件中0件が失敗
+
+| 場合 | 結果 | 終了コード |
+|---|---|---|
+| 3.1 の2つの発行フォルダ | zip を2つ作成。各30項目、pdb なし、区切りは `/`、exe 以外の一覧と大きさが一致、自己完結版の exe は 140,586,265 バイト | 0 |
+| 自己完結版から `Resources/License/LICENSE.txt` を消す | 「発行フォルダの検査に失敗しました」「自己完結版に必須のファイルがありません: Resources/License/LICENSE.txt」「軽量版にだけある: …」。zip は作らない | 1 |
+| 軽量版から `Config.txt` を消す | 「軽量版に必須のファイルがありません: Config.txt」ほか。zip は作らない | 1 |
+| 両方から `tr.yaml` を消す（一覧は一致） | 「言語ファイル（Resources/Languages/*.yaml）が 12 本です（13 本が必要）」。zip は作らない | 1 |
+| 自己完結版から exe を消す | 「自己完結版に必須のファイルがありません: LargeFolderFinder.exe」ほか。zip は作らない | 1 |
+| 軽量版の `Readme_en.txt` に1行足す | 「大きさが違う: Resources/Readme/Readme_en.txt（自己完結版 5975 バイト、軽量版 5978 バイト）」。zip は作らない | 1 |
+| 自己完結版から `Readme_ja.txt` を消す | 「軽量版にだけある: Resources/Readme/Readme_ja.txt」。zip は作らない | 1 |
+| 発行フォルダが無い | 「自己完結版の発行フォルダが見つかりません: …（先に build/Publish.ps1 で発行してください）」 | 1 |
+| 自己完結版に `extra.dll` と `Resources/Languages/sub/xx.yaml` を足す | どちらも入れずに作成（30項目） | 0 |
+| `artifacts/package` の外の出力先に同じ名前のファイルがある | 「出力先に同じ名前のファイルが既にあります」。既存のファイルは変えず、もう一方の zip も作らない | 1 |
+| 両方に `Readme_日本語.txt` を足す | 作成。その項目だけに UTF-8 の印が付き（他の30項目は印なし）、読み直すと同じ名前 | 0 |
+
+- **実際の梱包**（3.1 の発行物から、既定の引数で。2回目は前回の zip を消して作り直す経路を通った）
+
+| zip | 大きさ | 項目数 | exe の大きさ |
+|---|---|---|---|
+| `artifacts/package/LargeFolderFinder.zip`（自己完結） | 59,197,436 バイト（約59.2MB） | 30 | 140,586,265 バイト |
+| `artifacts/package/LargeFolderFinder-FrameworkDependent.zip`（軽量版） | 492,144 バイト（約0.49MB） | 30 | 1,052,929 バイト |
+
+  - 中身（両方で同じ。exe を除き大きさも同じ）: `Config.txt`（234）、`LargeFolderFinder.exe`、`Resources/Languages/` の de・en・es・fr・hi・it・ja・ko・pt-BR・ru・tr・zh-CN・zh-TW の `.yaml` 13本、`Resources/License/LICENSE.txt`（1,119）・`ThirdPartyNotices.txt`（8,057）、`Resources/Readme/Readme_<言語>.txt` 13本。`LargeFolderFinder.pdb` は入れていない
+  - Python の `zipfile` で読み直し、両方とも区切りに `\` を含む項目が0件、UTF-8 の印の付いた項目が0件（名前がすべて ASCII のため）、圧縮方式は Deflate、`testzip()` で壊れた項目なしを確かめた
+  - `Expand-Archive` で展開し、30ファイルすべてが発行フォルダのファイルと SHA-256 で一致することを両方の zip で確かめた
