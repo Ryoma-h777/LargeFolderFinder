@@ -86,16 +86,24 @@ dotnet build LargeFolderFinder.csproj
 
 # リリースビルド
 dotnet build LargeFolderFinder.csproj -c Release
+
+# 言語ファイルの網羅の検証（アプリを先に Debug でビルドしておく。ツールは Debug のアプリの出力を参照する）
+dotnet build Tools/LocalizationCheck/LocalizationCheck.csproj -c Debug -p:BuildProjectReferences=false
+Tools/LocalizationCheck/bin/Debug/net48/LocalizationCheck.exe check       # --dir <path> で別の言語フォルダも検証できる
+Tools/LocalizationCheck/bin/Debug/net48/LocalizationCheck.exe selfcheck   # ツール自身の自己検証
 ```
+
+- 検証ツールは期待するキーの一覧を**アプリのビルド出力から得る**。`LanguageKey` を変えたら、アプリを再ビルドしてから（ツールもビルドし直してから）`check` を実行する。出力が古いかどうかは、報告の要約のキー数（`問題はありません（言語 13、キー 81）` など）で確かめられる
+- `check` の終了コードは 0 = 問題なし / 1 = 問題あり / 2 = 検証不能（言語フォルダや `en.yaml` が無い・読めない、引数の誤りなど）
 
 ## 主要な技術判断とその理由
 
 - **.NET Framework 4.8 を維持** — Windows に標準搭載されており、利用者にランタイム導入を要求しないため。.NET 8+ への移行は「導入の手軽さ」を損なうため、安易に行わない
 - **MessagePack + LZ4** — MessagePack は JSON や YAML より読み書きが速くコンパクトなため採用した。起動時に不要な巨大データを読まないよう、アプリ設定（`Settings.msgpack`）とタブごとの結果（`Sessions/`）を別ファイルに分けている。LZ4 圧縮によるデータ量の削減は、コード中のコメントでは 50〜70% とされるが、計測の記録はない
 - **Costura による単一 exe 化** — zip を解凍して exe をダブルクリックするだけ、という利用体験を守るため
-- **ローカライズは `enum LanguageKey` の名前を文字列キーとして YAML を辞書引き** — `GetText` は `key.ToString()` で解決し、見つからなければ `en.yaml` にフォールバックする。**順序は実際には無関係**（`LanguageKey` の宣言コメントは「YAML と順序を一致させること」と書いているが、実装は順序に依存しない）
-  - キー追加時は enum と**全 13 言語の YAML** に追加する。欠落しても例外にはならず英語表示に落ちるため、**翻訳漏れが発覚しにくい**
-  - 現に `HeaderOwner` / `ContextShowOwner` が en・ja 以外の 11 言語で欠落している
+- **ローカライズは `enum LanguageKey` の名前を文字列キーとして YAML を辞書引き** — `GetText` は `key.ToString()` で解決し、見つからなければ `en.yaml` にフォールバックする。**YAML 側の並び順は問わない**（`LanguageKey` の宣言コメントもこの実態に合わせてある）
+  - キー追加時は enum と**全 13 言語の YAML** に追加する。欠落しても例外にはならず英語表示に落ちるため、**翻訳漏れが発覚しにくい**。欠落・差し込み位置（`{0}` など）のずれ・重複は `Tools/LocalizationCheck` の `check` で確かめる（手順は「コマンド」の節）
+  - ただし **`Key:` と書いて訳文の値を省くと、英語に落ちずに `GetText` の中で例外になる**（値が null のまま `Replace` を呼ぶため）。検証ツールはこれを欠落として報告する
   - 単位名（KB・GB など）は訳さないと決めた例外がある（decisions.md の「単位の名前を翻訳すること」）
 
 ---
