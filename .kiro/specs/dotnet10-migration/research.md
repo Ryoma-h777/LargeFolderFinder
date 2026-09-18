@@ -169,3 +169,29 @@
 
 ### Decision: バージョン文字列からコミットハッシュを外す
 - 要件2.6 の「余分な付加情報のない形」に合わせ、`IncludeSourceRevisionInInformationalVersion=false` とする。現行のビルドにも付いていたことは記録に残す
+
+## 移行の記録
+
+本スペックの実装で「記録する」ものはこの節に書く。
+
+### 1.1 SDK の固定と移行前の控え（2026-09-19、コミット 48d8a5d の上で実施）
+- **SDK の固定**: リポジトリ直下に `global.json` を追加した（SDK `10.0.401`、`rollForward: latestPatch`、テストの実行方式 `Microsoft.Testing.Platform`）。手元の SDK は 6.0.423、8.0.416、9.0.318、10.0.108、10.0.303、10.0.401
+  - 追加前: `dotnet --info` の「global.json file」は `Not found`。SDK 10.0.401 の導入後だったため、固定が無くても最新の `10.0.401` が選ばれていた（導入前は `10.0.303`）
+  - 追加後: `dotnet --version` は `10.0.401`、`dotnet --info` の「global.json file」はリポジトリ直下の `global.json` を指す
+- **固定した SDK での確認（対象は net48 のまま、ビルドは順番に `--no-incremental` で実施）**
+
+| コマンド | 結果 | 警告 | 終了コード |
+|---|---|---|---|
+| `dotnet build LargeFolderFinder.csproj -c Debug` | 成功 | 0 | 0 |
+| `dotnet build LargeFolderFinder.csproj -c Release` | 成功 | 0 | 0 |
+| `dotnet build Tools/GoldenBaseline/GoldenBaseline.csproj` | 成功 | 0 | 0 |
+| `dotnet build Tools/LocalizationCheck/LocalizationCheck.csproj -c Debug -p:BuildProjectReferences=false` | 成功 | 0 | 0 |
+| `GoldenBaseline.exe selfcheck` | 128 件中 0 件が失敗 | — | 0 |
+| `GoldenBaseline.exe compare --golden baselines/fixture-v1.golden.txt` | 判定: 一致（既知の欠落 4 件、説明できない欠落 0 件、スキップ 1 件） | — | 0 |
+| `LocalizationCheck.exe check` | 問題はありません（言語 13、キー 81） | — | 0 |
+| `LocalizationCheck.exe selfcheck` | 59 件中 0 件が失敗 | — | 0 |
+
+  - 移行前の警告数の基準は、アプリ・2つの検証ツールとも **0 件**
+  - 検証ツールの実行後、`%TEMP%` に `gb_fix_*` の一時フォルダは残っていない
+- **バージョン管理から外したもの**: `.gitignore` に `artifacts/` を加えた
+- **移行前の版の控え**: `artifacts/legacy-net48/` に、上の手順でビルドした **Release 構成**の出力（`bin/Release/net48/`）一式をそのまま複製した（`LargeFolderFinder.exe`、`.exe.config`、`.pdb`、`Config.txt`、`Languages/`、`Readme/`、`License/`、`Resources/`）。exe の `FileVersion` は `1.0.3.0`、`ProductVersion` は `1.0.3+48d8a5dfddf57a4e87216a730bd78560073d8b40`。要件4.4 の確認（5.4）で使う

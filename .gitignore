@@ -72,3 +72,6 @@ Cache.bin
 
 # WPF temporary files
 *_wpftmp.csproj
+
+# dotnet10-migration: スクリプトの出力先と、移行前の版の控えの置き場所
+artifacts/
