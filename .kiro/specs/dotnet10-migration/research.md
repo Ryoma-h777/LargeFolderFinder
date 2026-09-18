@@ -61,7 +61,7 @@
 | 5.1〜5.8 自動ビルド | なし | Missing（CI を新設） |
 | 6.1〜6.5 テストの基盤 | なし。判定の仕組みは検証ツールにある | Missing（テストプロジェクトを新設し、既存の判定を呼ぶ） |
 | 7.1, 7.2 走査結果の検証ツール | `Tools/GoldenBaseline`（net48、アプリを参照、ACL API を使用） | Constraint（対象フレームワークの変更と API の置き換え） |
-| 7.3 翻訳の網羅の検証ツール | `localization-completeness` が新設予定（net48、アプリを参照） | Unknown（本スペック着手時に存在するかは実装順による） |
+| 7.3 翻訳の網羅の検証ツール | `Tools/LocalizationCheck`（net48、アプリを参照。2026-09-18 に `localization-completeness` で完成。`check` と `selfcheck`、終了コード 0/1/2） | Constraint（対象フレームワークの変更。アプリの exe から `LanguageKey` を得る。YamlDotNet を上げたら、重複キーと空のファイルの扱いを `selfcheck` で取り直す） |
 | 8.1〜8.3 記録の更新 | `.kiro/steering/tech.md`、`product.md`、README | 既存（更新） |
 
 ## 実装方針の選択肢
@@ -103,6 +103,6 @@
 - ホスト型ランナーで WPF の exe を起動して生存を確かめられるか。できない場合の代替（起動時に自己診断して終了コードを返す起動引数など）
 - 期待値データの差が、既知の欠落4件と親フォルダのサイズだけに収まるか（フィクスチャの生成が .NET 10 でも同じ構造を作れるか）
 - テストから検証ツールの判定を呼ぶ形（プロジェクト参照か、判定部分の共有か）
-- `localization-completeness` の検証ツールの実装順（本スペックの着手時点での有無）
+- ~~`localization-completeness` の検証ツールの実装順~~ → 2026-09-18 に完成済み。本スペックでは移行の対象になる
 
 ---

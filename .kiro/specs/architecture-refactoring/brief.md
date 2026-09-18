@@ -43,7 +43,8 @@
 ## Scope
 
 - **In**:
-  - 死んだコードの除去（`PruneTree`、`CacheFileName`、コメントアウトされた処理塊）。ただし、タブごとの描画の取り消しの欄は未使用に見えても消さない（`scan-correctness` が使う形に直す。`.kiro/steering/decisions.md` の「描画の取り消しを、タブ間で干渉させない」）
+  - 死んだコードの除去（`PruneTree`、`CacheFileName`、コメントアウトされた処理塊）。ただし、タブごとの描画の取り消しの欄は未使用に見えても消さない（`scan-correctness` が使う形に直す。`.kiro/steering/decisions.md` の「描画の取り消しを、タブ間で干渉させない」）。使われていない言語キー `LiveScanningMessage` も除去の候補（言語ファイル13本からも消し、`Tools/LocalizationCheck` の `check` で確かめる）
+  - `LocalizationManager.GetText` が、訳文の値を省いたキー（`Key:`）で英語に置き換えず例外になる不具合の修正（`localization-completeness` の実測。検証ツールは欠落として見つけるだけで、アプリ側は直していない）。あわせて、言語ファイルの読み込み規則や `LanguageKey` の所在を変えるときは `Tools/LocalizationCheck` の読み込み部品を追従させる
   - 定数の二重管理の解消（`LogFilesMax`、`MemoryOptimizeIntervalMinutes`）
   - `FolderRowItem` の `Models/` への移設
   - `MainWindow.xaml.cs` の分割
