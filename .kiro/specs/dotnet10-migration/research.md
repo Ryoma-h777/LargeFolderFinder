@@ -246,3 +246,31 @@
 | Release | 成功 | 0 | 0 | 0 |
 
   - 移行前の基準（0件、1.1）と同じになった
+
+### 2.3 フォルダ選択ダイアログの置き換え（2026-09-19、コミット 8fb6ea9 の上で実施）
+- **変更箇所**: `Views/MainWindow.xaml.cs` の `BrowseButton_Click` と `LargeFolderFinder.csproj`（`Ookii.Dialogs.Wpf` 5.0.1 の `PackageReference` を削除）。訳文と言語ファイルは変えていない（既存のキー `FolderLabel` をそのまま使う）
+- **プロパティの対応**
+
+| 従来（`Ookii.Dialogs.Wpf.VistaFolderBrowserDialog`） | 置き換え後（`Microsoft.Win32.OpenFolderDialog`） |
+|---|---|
+| `Description = GetText(FolderLabel)` + `UseDescriptionForTitle = true`（説明の文言をタイトルに出す） | `Title = GetText(FolderLabel)` |
+| `SelectedPath = pathTextBox.Text`（無条件に設定） | 入力欄の値が空白でなく `Directory.Exists` が true のときだけ `InitialDirectory = 入力欄の値` |
+| `ShowDialog()`（所有者の指定なし。Ookii は作動中のウィンドウを所有者に使う） | `ShowDialog(this)`（メインウィンドウを所有者に明示） |
+| 結果 `SelectedPath` | 結果 `FolderName` |
+
+- **経路の対比**
+  - 選ばれたとき: 従来も置き換え後も、戻り値が true のときだけ入力欄の `Text` とセッションの `Path` に反映し、`OnPropertyChanged(nameof(Sessions))` を呼び、ログを1行書く。ログの文言は `Folder selected via Ookii: <パス>` から `Folder selected via OpenFolderDialog: <パス>` に変えた
+  - キャンセルしたとき: 従来も置き換え後も `ShowDialog` が true 以外を返し、何も反映しない・ログも書かない
+  - 入力欄が空・存在しないパスのとき: 従来は値をそのまま `SelectedPath` に渡し、開始位置の扱いは部品に任せていた。置き換え後は `InitialDirectory` を指定せず、開始位置は OS の既定（直前に使ったフォルダなど）になる
+  - 例外: 従来と同じ `try`/`catch` の中にあり、失敗時のログと `MessageBox` は変えていない
+  - 入口のログ `Browse button clicked.`（`AppConstants.LogBrowseButtonClicked`）は変えていない
+- **ビルド**（`dotnet build LargeFolderFinder.csproj -c <構成> --no-incremental`、順番に実施）
+
+| 構成 | 結果 | エラー | 警告 | 終了コード |
+|---|---|---|---|---|
+| Debug | 成功 | 0 | 0 | 0 |
+| Release | 成功 | 0 | 0 | 0 |
+
+- **Ookii が消えたことの確認**: ソース・csproj（`bin`/`obj` を除く `*.cs`・`*.csproj`・`*.xaml`）、`obj/project.assets.json`、`bin/<構成>/net10.0-windows/win-x64/` のファイル一覧と `LargeFolderFinder.deps.json` のいずれにも `Ookii` が0件。2.1 の時点で出力にあった `Ookii.Dialogs.Wpf.dll` は、`--no-incremental`（再ビルドが前回の出力を消す）で Debug・Release とも消えた
+- **ダイアログの実機での確認**（タイトル、開始位置、選択の反映、キャンセル）は GUI 操作のためこの時点では行っていない。5.4 の手順で利用者が確認する
+- `ThirdPartyNotices.txt` の Ookii の節と steering の記述は、それぞれ 5.1・5.2 で扱う（この時点では残っている）

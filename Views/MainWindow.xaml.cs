@@ -298,19 +298,26 @@ namespace LargeFolderFinder
             try
             {
                 Logger.Log(AppConstants.LogBrowseButtonClicked);
-                var dialog = new Ookii.Dialogs.Wpf.VistaFolderBrowserDialog
+                // 実行基盤（WPF）が備えるフォルダ選択ダイアログ。タイトルには従来の説明の文言を出す
+                var dialog = new OpenFolderDialog
                 {
-                    Description = LocalizationManager.Instance.GetText(LanguageKey.FolderLabel),
-                    UseDescriptionForTitle = true,
-                    SelectedPath = pathTextBox.Text
+                    Title = LocalizationManager.Instance.GetText(LanguageKey.FolderLabel)
                 };
 
-                if (dialog.ShowDialog() == true)
+                // 入力欄の値が存在するフォルダのときだけ、そこから開始する（空・存在しないときは指定しない）
+                var currentPath = pathTextBox.Text;
+                if (!string.IsNullOrWhiteSpace(currentPath) && Directory.Exists(currentPath))
                 {
-                    pathTextBox.Text = dialog.SelectedPath;
-                    session.Path = dialog.SelectedPath;
+                    dialog.InitialDirectory = currentPath;
+                }
+
+                // 選ばれたときだけ入力欄とセッションのパスに反映する（キャンセル時は何もしない）
+                if (dialog.ShowDialog(this) == true)
+                {
+                    pathTextBox.Text = dialog.FolderName;
+                    session.Path = dialog.FolderName;
                     OnPropertyChanged(nameof(Sessions)); // Force update if needed, but path is manually synced
-                    Logger.Log($"Folder selected via Ookii: {dialog.SelectedPath}");
+                    Logger.Log($"Folder selected via OpenFolderDialog: {dialog.FolderName}");
                 }
             }
             catch (Exception ex)
