@@ -68,7 +68,7 @@ ContextShowOwner: "所有者を表示"
 ContextOpen: "開く"
 
 ####### Result #######
-LiveScanningMessage: "スキャン中…… サイズは途中結果を表示しています。"
+LiveScanningMessage: "スキャン中…… サイズ({0})は途中結果を表示しています。"
 
 ####### Footer (Status & Progress) #######
 ReadyStatus: "準備完了"

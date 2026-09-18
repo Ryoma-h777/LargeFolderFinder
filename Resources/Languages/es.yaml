@@ -97,7 +97,7 @@ ScanningProgressFormat: "{0} {1:F0}%  [{2}]  [{3}]"
 ScanningProgressIndeterminateFormat: "[{0}]  [{1}]"
 ScanningStatusWithCountFormat: "{0} ({1}{2})"
 ElapsedFormat: "{0} {1}"
-TimeStatusFormat: "{0} transcurrido"
+TimeStatusFormat: "{0} {1}"
 
 # tempolaty Notification
 CopyNotification: "¡Copiado!"
