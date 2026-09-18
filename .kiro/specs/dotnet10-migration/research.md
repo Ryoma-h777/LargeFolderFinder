@@ -515,3 +515,29 @@
   - 中身（両方で同じ。exe を除き大きさも同じ）: `Config.txt`（234）、`LargeFolderFinder.exe`、`Resources/Languages/` の de・en・es・fr・hi・it・ja・ko・pt-BR・ru・tr・zh-CN・zh-TW の `.yaml` 13本、`Resources/License/LICENSE.txt`（1,119）・`ThirdPartyNotices.txt`（8,057）、`Resources/Readme/Readme_<言語>.txt` 13本。`LargeFolderFinder.pdb` は入れていない
   - Python の `zipfile` で読み直し、両方とも区切りに `\` を含む項目が0件、UTF-8 の印の付いた項目が0件（名前がすべて ASCII のため）、圧縮方式は Deflate、`testzip()` で壊れた項目なしを確かめた
   - `Expand-Archive` で展開し、30ファイルすべてが発行フォルダのファイルと SHA-256 で一致することを両方の zip で確かめた
+
+### 4.1 テストプロジェクト（2026-09-19、コミット 8bdcc0d の上で実施）
+- **作ったもの**: `Tests/LargeFolderFinder.Tests/`（`LargeFolderFinder.Tests.csproj`、`ToolRunner.cs`、`GoldenBaselineTests.cs`、`LocalizationTests.cs`）。`LargeFolderFinder.sln` に加えた（構成は既存と同じ `Debug|Any CPU`・`Release|Any CPU` の2つだけ。`dotnet sln add` は x64・x86 の構成を全プロジェクトに足すため使わず、手で加えた）
+  - `net10.0-windows`、`OutputType=Exe`、xunit.v3 4.0.1（推移的に xunit.v3.mtp-v2 4.0.1、Microsoft.Testing.Platform 2.4.0）。`global.json` の `test.runner` により Microsoft Testing Platform で走る
+  - 2つの検証ツールは `ProjectReference`（`ReferenceOutputAssembly=false`、`Private=false`）で参照し、ビルドの順序と exe の存在だけを保証する。テストの出力フォルダにツールのファイルは複写されない
+- **ToolRunner**: テストの出力フォルダから親へたどり、`Tools/<名前>/bin/<構成>/net10.0-windows/<名前>.exe` を探す。構成はテスト自身のアセンブリの `AssemblyConfiguration`（SDK が `$(Configuration)` から付ける）にそろえる。見つけた親フォルダ（リポジトリのルート）を作業フォルダにして子プロセスで実行し、終了コード・標準出力・標準エラー（UTF-8）を返す。見つからない、起動できない、10分で終わらない（自分が起動したプロセスの木だけを終了させる）ときはテストを失敗にする
+- **テスト**（8件）
+
+| クラス | テスト | 確かめること |
+|---|---|---|
+| GoldenBaselineTests | `Compare_MatchesCommittedGolden` | `compare --golden baselines/fixture-v1.golden.txt` が 0 |
+| GoldenBaselineTests | `SelfCheck_AllPass` | `selfcheck` が 0 |
+| GoldenBaselineTests | `EnvironmentConstraint_*`（4件） | 終了コード 2 をスキップにする判定の規則（下記） |
+| LocalizationTests | `Check_NoProblems` | `check` が 0 |
+| LocalizationTests | `SelfCheck_AllPass` | `selfcheck` が 0 |
+
+- **環境の制約の扱い**（要件6.4）: 終了コード 0 は成功、1 は失敗。2 のうち、出力に GoldenBaseline の次の文言が含まれるものだけを xunit.v3 の `Assert.Skip` でスキップにし、理由に「成功ではありません」と終了コード・出力の全文を添える。それ以外の 2 は失敗
+  - `未生成の項目:`（フィクスチャを生成できなかった報告。基準フォルダを作れないと全項目が未生成になり、続く走査が「基準フォルダが見つかりません」で終了コード 2 になる）
+  - `文字に固定できません`（既定の置き場 `%TEMP%` が長すぎて、基準フォルダの実効絶対パス長を 80 文字に固定できない）
+  - 設計に無い判断: 印の文言は設計が例に挙げた「生成できなかった項目」とパスの長さの制約を、GoldenBaseline の実際の出力の文言に当てはめて決めた。設定不一致・期待値ファイルを読めない等の 2 は環境の制約と判断できないので失敗にする
+- **確かめたこと**
+  - ビルド: `dotnet build LargeFolderFinder.sln` を Debug・Release（Release は `--no-incremental` と `-warnaserror` でも）で行い、警告0件・エラー0件
+  - `dotnet test --solution LargeFolderFinder.sln -c Release`: 合計 8、成功 8、失敗 0、スキップ 0（テストの時間 約13秒、コマンド全体 約14〜16秒）。Debug でも同じ
+  - 期待値データの18行目（`F	normal\file_small.txt	10`）を `11` に変えると、`Compare_MatchesCommittedGolden` が失敗（合計 8、失敗 1、成功 7、`dotnet test` の終了コード 2）。理由に `判定: 差分あり（1 件）`、`[SizeMismatch] normal\file_small.txt 期待値=11 実際=10` が出た。`git restore baselines/fixture-v1.golden.txt` で戻すと再び 8件成功し、期待値データの差分は無い
+  - スキップの経路: `TEMP`・`TMP` を 80 文字を超える既存のフォルダにして `Compare_MatchesCommittedGolden` だけを走らせると、GoldenBaseline が「既定の置き場（…）が長すぎるため、基準フォルダの実効絶対パス長を 80 文字に固定できません（名前を最短にしても 163 文字になります）」で終了コード 2 を返し、テストは「スキップされました」（合計 1、成功 0、スキップ 1、`dotnet test` の終了コード 0）。フィクスチャは作られない。「未生成の項目」の経路は手元で安全に再現できない（`dotnet test` 自身も `TEMP` を使うため、作れない場所を `TEMP` にするとテストの基盤が起動しない）ので、実際の文言を与えた判定のテストで確かめた
+- **注意**: xunit.v3 の既定でテストのクラスは並列に走る（GoldenBaseline の2件は同じクラスなので順番に走り、LocalizationCheck と並ぶ）。Microsoft Testing Platform は利用統計の送信の部品（Microsoft.Testing.Extensions.Telemetry）を推移的に含む

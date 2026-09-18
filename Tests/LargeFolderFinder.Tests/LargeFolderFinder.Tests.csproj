@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- xunit.v3 は Microsoft Testing Platform で動く実行ファイルとしてテストを組み立てる -->
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <AssemblyName>LargeFolderFinder.Tests</AssemblyName>
+    <RootNamespace>LargeFolderFinder.Tests</RootNamespace>
+    <!-- テスト専用。配布物には含めない（アプリのプロジェクトからは参照しない） -->
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- xunit.v3 4.x は Microsoft Testing Platform v2 を既定で使う（global.json の test.runner と合わせる） -->
+    <PackageReference Include="xunit.v3" Version="4.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 2つの検証ツールは、ビルドの順序と実行ファイルの存在を保証するためだけに参照する。
+         アセンブリは参照しない（テストは実行ファイルを子プロセスで起動し、判定の仕組みを作り直さない。要件6.5） -->
+    <ProjectReference Include="..\..\Tools\GoldenBaseline\GoldenBaseline.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Tools\LocalizationCheck\LocalizationCheck.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>
