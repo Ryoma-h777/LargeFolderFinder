@@ -326,7 +326,8 @@ public static class LanguageFileReader
 }
 ```
 - **アプリと同じ規則**: `new DeserializerBuilder().Build()` で `Dictionary<string, string>` へ読む。結果が null なら「中身が空」として読み込み不能、例外なら読み込み不能とする。ファイルは `StreamReader` の既定の判定で文字コードを読む（アプリと同じ）
-- **重複キー**: 読み込み可否とは別に `YamlStream` で読み、最上位のマッピングのキーを数える。`YamlStream` が例外になるときは重複の検出を行わない（読み込み不能として報告される）
+- **重複キー**: 読み込み可否とは別に、YamlDotNet の解析器が出す事象の列をたどり、最上位のマッピングのキーの出現回数を数える。事象の列を読めないときは重複の検出だけを諦める（読み込み可否の判定は別経路で行う）
+  - 表現モデル（`YamlStream`）は使わない。`YamlStream.Load` は最上位に重複キーがあると例外になり、重複を数える用途に使えないため（2026-09-18 実測）
 - **書き込みをしない**
 
 #### ReportWriter
