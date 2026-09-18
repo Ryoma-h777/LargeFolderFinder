@@ -327,7 +327,10 @@ internal static class SelfChecks
             SelfAssert.That(result == expected, $"UNCパスの変換結果が想定と異なります: '{result}'");
         });
 
-        runner.Add("変換を通すと260文字を超えるフォルダの作成に成功し、変換を通さないと失敗する（要件3.1）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: 変換を通さないプレーンなパスでは260文字超のフォルダ作成が失敗する（.NET Framework の制約）。
+        // 新: .NET 10 は長いパスをそのまま扱えるため、プレーンなパスでも作成に成功する。
+        runner.Add("変換を通すと260文字を超えるフォルダの作成に成功し、変換を通さなくても成功する（要件3.1）", () =>
         {
             string root = Path.Combine(Path.GetTempPath(), "gb_lp_" + Guid.NewGuid().ToString("N").Substring(0, 8));
 
@@ -348,31 +351,26 @@ internal static class SelfChecks
                 Directory.CreateDirectory(LongPath.Extend(longPath));
                 SelfAssert.That(Directory.Exists(LongPath.Extend(longPath)), "変換を通した260文字超のフォルダが作成されていません。");
 
-                // 2. 変換を通さないプレーンなパスでは、同じ深さのフォルダ作成が失敗する（対比）
+                // 2. 変換を通さないプレーンなパスでも、同じ深さのフォルダ作成が成功する（.NET 10 移行後の事実）
                 string plainName = new string('b', segmentLength);
                 string plainPath = Path.Combine(root, plainName);
                 SelfAssert.That(plainPath.Length > 260, $"対比用パスが260文字を超えていません（{plainPath.Length}文字）。");
 
-                bool plainCreationFailed = false;
+                Exception? plainCreationError = null;
                 try
                 {
                     Directory.CreateDirectory(plainPath);
                 }
-                catch (PathTooLongException)
+                catch (Exception ex)
                 {
-                    plainCreationFailed = true;
-                }
-                catch (DirectoryNotFoundException)
-                {
-                    plainCreationFailed = true;
-                }
-                catch (IOException)
-                {
-                    plainCreationFailed = true;
+                    plainCreationError = ex;
                 }
 
-                SelfAssert.That(plainCreationFailed, "変換を通さないプレーンなパスでの260文字超フォルダ作成が、失敗せず成功してしまいました。");
-                SelfAssert.That(!Directory.Exists(plainPath), "変換を通さないプレーンなパスにもかかわらずフォルダが実際に作成されています。");
+                SelfAssert.That(
+                    plainCreationError is null,
+                    $"変換を通さないプレーンなパスでの260文字超フォルダ作成が失敗しました（{plainCreationError?.GetType().Name}: {plainCreationError?.Message}）。");
+                SelfAssert.That(Directory.Exists(plainPath), "変換を通さないプレーンなパスで作成したフォルダが、プレーンなパスで存在すると判定されません。");
+                SelfAssert.That(Directory.Exists(LongPath.Extend(plainPath)), "変換を通さないプレーンなパスで作成したフォルダが、変換を通したパスで存在すると判定されません。");
             }
             finally
             {
@@ -2349,15 +2347,15 @@ internal static class SelfChecks
                 SelfAssert.That(maxFolderLength > 248, $"検証対象の最長フォルダの相対パスが248文字を超えていません（実際: {maxFolderLength}文字）。");
                 SelfAssert.That(maxFileLength > 260, $"検証対象の最長ファイルの相対パスが260文字を超えていません（実際: {maxFileLength}文字）。");
 
-                // 対比: プレーンなパスでは絶対パス260文字以上のフォルダの実在確認自体ができないことを確認する
-                // （これは生成・参照側の上限であり、走査で項目が欠落する境界とは別の話である）。
-                // これにより、上記の確認が拡張長パス経由でなければ通らない検証であることを保証する。
+                // 対比: プレーンなパスでも絶対パス260文字以上のフォルダの実在確認ができ、拡張長パス経由と同じ結論になることを確認する。
+                // dotnet10-migration タスク2.4 で期待を改めた。旧: プレーンなパスでは実在確認自体ができない（.NET Framework の制約）。
+                // 新: .NET 10 は長いパスをそのまま扱えるため、プレーンなパスでも「存在する」と判定される。
                 var longFolderItem = FixtureSpec.Standard.Items
                     .First(i => i.Kind == GoldenEntryKind.Folder && i.Traits.Contains(FixtureTrait.LongPath) && i.RelativePath.Length > 248);
                 string plainLongFolderPath = Path.Combine(root, longFolderItem.RelativePath);
                 SelfAssert.That(
-                    !Directory.Exists(plainLongFolderPath),
-                    "対比検証: プレーンなパスで長いパスのフォルダが「存在する」と判定されました（拡張長パス経由の確認でなければ意味を持たない検証になっています）。");
+                    Directory.Exists(plainLongFolderPath),
+                    "対比検証: プレーンなパスで長いパスのフォルダが「存在しない」と判定されました（.NET 10 では拡張長パス経由と同じく存在すると判定されるはずです）。");
             }
             finally
             {
@@ -2894,7 +2892,10 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("ScanRunner が走査結果に手を加えず、長いパスの項目は現行版のまま走査結果に現れない（要件5.1, 5.5）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: 長いパスの項目は既知の不具合により走査結果に現れない（.NET Framework では列挙できない）。
+        // 新: .NET 10 は長いパスを列挙できるため、長いパスの項目も走査結果に現れる。
+        runner.Add("ScanRunner が走査結果に手を加えず、長いパスの項目も走査結果に現れる（要件5.1, 5.5）", () =>
         {
             string root = CreateTempFixtureRoot();
             var builder = new FixtureBuilder();
@@ -2923,13 +2924,12 @@ internal static class SelfChecks
                 foreach (var item in overBoundaryItems)
                 {
                     SelfAssert.That(
-                        !map.ContainsKey(item.RelativePath),
-                        $"既知の不具合により現れないはずの項目 '{item.RelativePath}'（{item.RelativePath.Length}文字）が走査結果に現れました。" +
-                        "本体の挙動が変わった可能性があり、想定と異なるため報告が必要です。");
+                        map.ContainsKey(item.RelativePath),
+                        $"長いパスの項目 '{item.RelativePath}'（{item.RelativePath.Length}文字）が走査結果に現れていません。" +
+                        ".NET 10 では列挙できるはずであり、本体の挙動が想定と異なるため報告が必要です。");
                 }
 
-                // 対比: 境界を超えない通常の項目（同じ長いパス連鎖の浅い階層）は正しく現れることを確認する。
-                // これにより、上の不在確認が「そもそも何も走査できていない」誤りでないことを保証する。
+                // 対比: 境界を超えない通常の項目（同じ長いパス連鎖の浅い階層）も正しく現れることを確認する。
                 string shallowAsciiFolder = new string('a', 50);
                 SelfAssert.That(map.ContainsKey(shallowAsciiFolder), $"境界を超えない通常のフォルダ '{shallowAsciiFolder}' が走査結果に現れていません。");
             }
@@ -3141,7 +3141,10 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("GoldenProjector が走査結果に手を加えず、長いパスの項目は射影結果にも現れない（要件5.1）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: 走査結果に現れない長いパスの項目は、射影結果にも現れない（補完しない）。
+        // 新: .NET 10 では走査結果に現れる長いパスの項目が、射影結果にもそのまま現れる（落とさない）。
+        runner.Add("GoldenProjector が走査結果に手を加えず、長いパスの項目は射影結果にもそのまま現れる（要件5.1）", () =>
         {
             string root = CreateTempFixtureRoot();
             var builder = new FixtureBuilder();
@@ -3170,15 +3173,21 @@ internal static class SelfChecks
 
                 SelfAssert.That(overBoundaryItems.Count > 0, "検証対象となる境界超過項目が定義から見つかりません（FixtureSpec.Standard の想定が変わった可能性があります）。");
 
+                var scanMap = FlattenScanTree(outcome.Root);
+
                 foreach (var item in overBoundaryItems)
                 {
+                    // 射影の前提として、走査結果に現れていることを先に確かめる（射影が補完したのではないことの切り分け）。
                     SelfAssert.That(
-                        !paths.Contains(item.RelativePath),
-                        $"既知の不具合により走査結果に現れないはずの項目 '{item.RelativePath}'（{item.RelativePath.Length}文字）が射影結果に現れました。" +
-                        "GoldenProjector が走査結果に手を加えている（欠落を補完している）可能性があります。");
+                        scanMap.ContainsKey(item.RelativePath),
+                        $"長いパスの項目 '{item.RelativePath}'（{item.RelativePath.Length}文字）が走査結果に現れていません（射影の検証の前提が崩れています）。");
+                    SelfAssert.That(
+                        paths.Contains(item.RelativePath),
+                        $"走査結果に現れた長いパスの項目 '{item.RelativePath}'（{item.RelativePath.Length}文字）が射影結果に現れません。" +
+                        "GoldenProjector が走査結果に手を加えている（項目を落としている）可能性があります。");
                 }
 
-                // 対比: 境界を超えない通常の項目（同じ長いパス連鎖の浅い階層）は射影結果に正しく現れることを確認する。
+                // 対比: 境界を超えない通常の項目（同じ長いパス連鎖の浅い階層）も射影結果に正しく現れることを確認する。
                 string shallowAsciiFolder = new string('a', 50);
                 SelfAssert.That(paths.Contains(shallowAsciiFolder), $"境界を超えない通常のフォルダ '{shallowAsciiFolder}' が射影結果に現れていません。");
             }
@@ -3230,7 +3239,11 @@ internal static class SelfChecks
     /// </summary>
     private static void RegisterKnownIssueAnalyzerChecks(SelfCheckRunner runner)
     {
-        runner.Add("KnownIssueAnalyzer が実フィクスチャの走査結果に対し、長いパスの項目を境界条件を理由とした既知の欠落として列挙する（要件5.2）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: 実フィクスチャの走査で長いパスの項目が欠落し、KnownIssueAnalyzer がそれらを根拠 LongPath の既知の欠落として列挙する。
+        // 新: .NET 10 では長いパスの項目も観測されるため欠落はなく、KnownIssueAnalyzer は何も列挙しない。
+        //     LongPath の欠落を列挙する規則そのものは、人工的な定義を使う検証項目（手作業の注釈に頼らない…）が引き続き守る。
+        runner.Add("KnownIssueAnalyzer が実フィクスチャの走査結果に対し、長いパスの項目も観測されるため既知の欠落を列挙しない（要件5.2）", () =>
         {
             string root = CreateTempFixtureRoot();
             var builder = new FixtureBuilder();
@@ -3257,32 +3270,29 @@ internal static class SelfChecks
                     .Where(i => !observedPaths.Contains(i.RelativePath))
                     .ToList();
 
-                SelfAssert.That(actuallyMissingItems.Count > 0, "検証対象となる欠落項目が見つかりません（走査環境が想定と異なる可能性があります）。");
+                SelfAssert.That(
+                    actuallyMissingItems.Count == 0,
+                    $"走査で観測されなかった項目があります（.NET 10 では長いパスを含めてすべて観測されるはずです）: {string.Join(", ", actuallyMissingItems.Select(i => i.RelativePath))}");
 
-                // 欠落項目のうち LongPath トレイトを持つものが実在すること（相対パスの実測値で確認し、タスク3.1の教訓に合わせトレイトのラベルだけでなく実体も見る）。
-                var missingLongPathItems = actuallyMissingItems.Where(i => i.Traits.Contains(FixtureTrait.LongPath)).ToList();
-                SelfAssert.That(missingLongPathItems.Count > 0, "欠落項目の中に LongPath トレイトを持つものが見つかりません。");
+                // 観測された項目に、フィクスチャ設計上の長さを超える LongPath の項目（フォルダ・ファイルの両方）が実際に含まれること
+                // （相対パスの実測値で確認し、タスク3.1の教訓に合わせトレイトのラベルだけでなく実体も見る）。
+                var observedLongPathItems = FixtureSpec.Standard.Items
+                    .Where(i => i.Traits.Contains(FixtureTrait.LongPath) && observedPaths.Contains(i.RelativePath))
+                    .ToList();
                 SelfAssert.That(
-                    missingLongPathItems.Any(i => i.Kind == GoldenEntryKind.Folder && i.RelativePath.Length > 248),
-                    "相対パス248文字（フィクスチャ設計上の長さ）を超えるフォルダの欠落が見つかりません。");
+                    observedLongPathItems.Any(i => i.Kind == GoldenEntryKind.Folder && i.RelativePath.Length > 248),
+                    "相対パス248文字（フィクスチャ設計上の長さ）を超えるフォルダが観測されていません。");
                 SelfAssert.That(
-                    missingLongPathItems.Any(i => i.Kind == GoldenEntryKind.File && i.RelativePath.Length > 260),
-                    "相対パス260文字（フィクスチャ設計上の長さ）を超えるファイルの欠落が見つかりません。");
+                    observedLongPathItems.Any(i => i.Kind == GoldenEntryKind.File && i.RelativePath.Length > 260),
+                    "相対パス260文字（フィクスチャ設計上の長さ）を超えるファイルが観測されていません。");
 
                 var analyzer = new KnownIssueAnalyzer();
                 var findings = analyzer.Analyze(FixtureSpec.Standard, document);
-                var findingsByPath = findings.ToDictionary(f => f.RelativePath, f => f.Trait, StringComparer.Ordinal);
 
-                // 完了状態: 長いパスの項目が観測されなかった場合に、その境界条件（LongPath）を理由として既知の欠落として列挙される。
-                foreach (var item in missingLongPathItems)
-                {
-                    SelfAssert.That(
-                        findingsByPath.TryGetValue(item.RelativePath, out var trait),
-                        $"長いパスの欠落項目 '{item.RelativePath}' が既知の欠落として列挙されていません。");
-                    SelfAssert.That(
-                        trait == FixtureTrait.LongPath,
-                        $"'{item.RelativePath}' の既知の欠落の根拠が LongPath ではありません（実際: {trait}）。");
-                }
+                // 完了状態: 欠落がないので、既知の欠落として列挙されるものもない。
+                SelfAssert.That(
+                    findings.Count == 0,
+                    $"欠落がないにもかかわらず既知の欠落が列挙されました（{findings.Count}件）: {string.Join(", ", findings.Select(f => f.RelativePath))}");
             }
             finally
             {
@@ -3478,7 +3488,10 @@ internal static class SelfChecks
     /// </summary>
     private static void RegisterKnownIssueBoundaryChecks(SelfCheckRunner runner)
     {
-        runner.Add("日本語を含む長いパス（相対パスがフィクスチャ設計上の長さを超える）の項目が、生成されているのに現行版の走査で観測されず、KnownIssueAnalyzer が根拠 LongPath とともに既知の欠落として列挙する（要件3.1, 3.2, 5.1, 5.2、タスク6.3）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: 日本語を含む長いパスの項目は生成されているのに走査で観測されず、KnownIssueAnalyzer が根拠 LongPath の既知の欠落として列挙する。
+        // 新: .NET 10 では生成された日本語を含む長いパスの項目が走査・射影の両方で観測され、既知の欠落として列挙されない。
+        runner.Add("日本語を含む長いパス（相対パスがフィクスチャ設計上の長さを超える）の項目が、生成され、走査と射影の両方で観測され、KnownIssueAnalyzer が既知の欠落として列挙しない（要件3.1, 3.2, 5.1, 5.2、タスク6.3）", () =>
         {
             var spec = FixtureSpec.Standard;
 
@@ -3511,7 +3524,7 @@ internal static class SelfChecks
                     buildResult.IsComplete,
                     $"前提となるフィクスチャ生成が完了しませんでした。未生成: {string.Join(", ", buildResult.Omissions.Select(o => o.RelativePath))}");
 
-                // 欠落が「生成されていない」ためではなく「走査で観測されない」ためであることを示すため、実在を先に確認する。
+                // 観測の検証の前提として、ディスク上に生成されていることを先に確認する。
                 foreach (var item in japaneseLongLabeled)
                 {
                     string extendedPath = LongPath.Extend(Path.Combine(root, item.RelativePath));
@@ -3529,32 +3542,28 @@ internal static class SelfChecks
                 foreach (var item in japaneseLongLabeled)
                 {
                     SelfAssert.That(
-                        !scanMap.ContainsKey(item.RelativePath),
-                        $"現行版では観測されないはずの日本語を含む長いパス '{item.RelativePath}'（{item.RelativePath.Length}文字）が走査結果に現れました。");
+                        scanMap.ContainsKey(item.RelativePath),
+                        $"日本語を含む長いパス '{item.RelativePath}'（{item.RelativePath.Length}文字）が走査結果に現れません（.NET 10 では観測されるはずです）。");
                     SelfAssert.That(
-                        !observedPaths.Contains(item.RelativePath),
-                        $"現行版では観測されないはずの日本語を含む長いパス '{item.RelativePath}'（{item.RelativePath.Length}文字）が射影結果に現れました。");
+                        observedPaths.Contains(item.RelativePath),
+                        $"日本語を含む長いパス '{item.RelativePath}'（{item.RelativePath.Length}文字）が射影結果に現れません（.NET 10 では観測されるはずです）。");
 
-                    // 対比: 同じ連鎖の最上位の日本語フォルダ（境界内）は観測される。
-                    // 欠落の原因が「日本語であること」ではなく「長さ」であることをこれで切り分ける。
+                    // 同じ連鎖の最上位の日本語フォルダ（境界内）も観測される。
                     string topSegment = item.RelativePath.Split('\\')[0];
                     SelfAssert.That(ContainsNonAscii(topSegment), $"'{item.RelativePath}' の最上位フォルダ '{topSegment}' が日本語を含んでいません。");
                     SelfAssert.That(
                         scanMap.ContainsKey(topSegment) && observedPaths.Contains(topSegment),
-                        $"境界内の日本語フォルダ '{topSegment}' が走査結果または射影結果に現れていません（欠落の原因を長さに切り分けられません）。");
+                        $"境界内の日本語フォルダ '{topSegment}' が走査結果または射影結果に現れていません。");
                 }
 
                 var findings = new KnownIssueAnalyzer().Analyze(spec, document);
-                var findingsByPath = findings.ToDictionary(f => f.RelativePath, f => f.Trait, StringComparer.Ordinal);
+                var findingPaths = new HashSet<string>(findings.Select(f => f.RelativePath), StringComparer.Ordinal);
 
                 foreach (var item in japaneseLongLabeled)
                 {
                     SelfAssert.That(
-                        findingsByPath.TryGetValue(item.RelativePath, out var trait),
-                        $"日本語を含む長いパス '{item.RelativePath}' が既知の欠落として列挙されていません。");
-                    SelfAssert.That(
-                        trait == FixtureTrait.LongPath,
-                        $"日本語を含む長いパス '{item.RelativePath}' の既知の欠落の根拠が LongPath ではありません（実際: {trait}）。");
+                        !findingPaths.Contains(item.RelativePath),
+                        $"観測されている日本語を含む長いパス '{item.RelativePath}' が既知の欠落として列挙されました。");
                 }
             }
             finally
@@ -3849,18 +3858,6 @@ internal static class SelfChecks
         return stdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
     }
 
-    /// <summary>
-    /// 既知の欠落として報告されるべき明細を、フィクスチャ定義から導く
-    /// （相対パスを文字列リテラルで固定せず、定義の変更に追随させる）。
-    /// </summary>
-    private static List<string> ExpectedKnownIssueDetails()
-    {
-        return FixtureSpec.Standard.Items
-            .Where(item => item.Traits.Contains(FixtureTrait.LongPath))
-            .Select(item => $"{item.RelativePath}（原因: LongPath）")
-            .ToList();
-    }
-
     /// <summary>説明できない欠落として報告されるべき明細の形を、フィクスチャ定義の項目から組み立てる。</summary>
     private static string FormatExpectedUnexplainedDetail(FixtureItem item)
     {
@@ -3915,20 +3912,18 @@ internal static class SelfChecks
                 $"{context}: スキップされた対象に、この実行の基準フォルダ配下の拒否フォルダ '{deniedFullPath}' が報告されていません: [{string.Join(" | ", skipped.Details)}]");
         }
 
+        // dotnet10-migration タスク2.4 で期待を改めた（この補助関数を使う compare / update の2項目が対象）。
+        // 旧: 境界を超える階層があるため「長さのせいで列挙できなかった対象」が1件以上あり、
+        //     既知の欠落の明細が FixtureSpec.Standard の LongPath 項目と過不足なく一致する。
+        // 新: .NET 10 は長いパスを列挙できるため、どちらも0件になる。
         var unenumerable = sections[UnenumerableSectionIndex];
         SelfAssert.That(
-            unenumerable.Count > 0,
-            $"{context}: 長さのせいで列挙できなかった対象が0件です（このフィクスチャは境界を超える階層を含むため、報告されるはずです）。");
-        foreach (var detail in unenumerable.Details)
-        {
-            SelfAssert.That(
-                detail.StartsWith(root, StringComparison.OrdinalIgnoreCase),
-                $"{context}: 長さのせいで列挙できなかった対象に、この実行の基準フォルダ（{root}）配下ではないパスが含まれます: '{detail}'");
-        }
+            unenumerable.Count == 0,
+            $"{context}: 長さのせいで列挙できなかった対象が0件ではありません（.NET 10 では長いパスも列挙できるはずです）: [{string.Join(" | ", unenumerable.Details)}]");
 
         AssertDetailsMatch(
             $"{context}: 既知の欠落",
-            ExpectedKnownIssueDetails(),
+            new List<string>(),
             sections[KnownIssueSectionIndex].Details);
     }
 
@@ -3982,17 +3977,15 @@ internal static class SelfChecks
                 AssertScanReportCountLinesMatch("compare", genSections, cmpSections);
                 AssertScanReportReflectsThisRun("compare", cmpSections, cmpRoot);
 
-                // 既知の欠落として報告された項目が、実際に「観測されていない」ことまで見る。
-                // 明細の集合を FixtureSpec の LongPath 項目と突き合わせるだけでは、
-                // 「欠落しているもの」ではなく「LongPath なもの全部」を返すよう壊れた場合に気付けないため、
-                // 走査結果（この期待値ファイルのエントリ）に現れていないことを別の角度から確かめる。
+                // 既知の欠落が0件と報告されたことが、実際に「欠落していない」ことと整合するかを見る。
+                // dotnet10-migration タスク2.4 で期待を改めた。旧: LongPath の項目は走査結果（この期待値ファイルのエントリ）に現れない。
+                // 新: .NET 10 では LongPath の項目もすべて走査結果に現れる。
                 var goldenDocument = new GoldenSerializer().Read(goldenPath);
                 foreach (var item in FixtureSpec.Standard.Items.Where(i => i.Traits.Contains(FixtureTrait.LongPath)))
                 {
                     SelfAssert.That(
-                        !goldenDocument.Entries.Any(e => e.RelativePath == item.RelativePath),
-                        $"既知の欠落として報告された '{item.RelativePath}' が走査結果のエントリに存在します。" +
-                        $"欠落していない項目を欠落として報告しています。");
+                        goldenDocument.Entries.Any(e => e.RelativePath == item.RelativePath),
+                        $"LongPath の項目 '{item.RelativePath}' が走査結果のエントリに存在しません（.NET 10 では観測されるはずです）。");
                 }
 
                 SelfAssert.That(
@@ -4312,7 +4305,10 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("generate がプロセスとして完走し、終了コード0を返し、既知の欠落（長いパス由来）が報告に含まれ、期待値ファイルが書き出される（要件2.1, 3.7, 5.2）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: 既知の欠落（原因: LongPath）が4件報告される（.NET Framework では長いパスを列挙できない）。
+        // 新: .NET 10 では長いパスも観測されるため、既知の欠落は0件と報告され、LongPath の項目は期待値ファイルに記録される。
+        runner.Add("generate がプロセスとして完走し、終了コード0を返し、既知の欠落（長いパス由来）が0件と報告され、期待値ファイルが書き出される（要件2.1, 3.7, 5.2）", () =>
         {
             string root = CreateTempFixtureRoot();
             string outPath = CreateTempCliGoldenFilePath();
@@ -4326,18 +4322,25 @@ internal static class SelfChecks
                 SelfAssert.That(result.StdOut.Contains("[期待値の生成]"), $"generate の標準出力に見出しが含まれません: {result.StdOut}");
 
                 // 既知の欠落の識別結果は期待値の生成の報告に含める（tasks.md 5.1）。
-                // Standard フィクスチャは境界越えの長いパス項目を4件含み、現行版のバグにより
-                // 走査から漏れることが tasks.md Implementation Notes（タスク4.3）で確定済み。
+                // Standard フィクスチャは境界越えの長いパス項目を4件含むが、.NET 10 では走査から漏れない。
                 SelfAssert.That(
                     result.StdOut.Contains("既知の欠落"),
                     $"generate の標準出力に既知の欠落の見出しが含まれません: {result.StdOut}");
                 int longPathMentionCount = CountOccurrences(result.StdOut, "原因: LongPath");
                 SelfAssert.That(
-                    longPathMentionCount == 4,
-                    $"既知の欠落として報告された LongPath 由来の件数が想定と異なります（実際: {longPathMentionCount} 件、想定: 4 件）。標準出力: {result.StdOut}");
+                    longPathMentionCount == 0,
+                    $"既知の欠落として報告された LongPath 由来の件数が想定と異なります（実際: {longPathMentionCount} 件、想定: 0 件）。標準出力: {result.StdOut}");
 
                 var document = new GoldenSerializer().Read(outPath);
                 SelfAssert.That(document.Entries.Count > 0, "generate が書き出した期待値ファイルにエントリが1件もありません。");
+
+                // 報告が0件であることと整合して、LongPath の項目が期待値ファイルに記録されていること。
+                foreach (var item in FixtureSpec.Standard.Items.Where(i => i.Traits.Contains(FixtureTrait.LongPath)))
+                {
+                    SelfAssert.That(
+                        document.Entries.Any(e => e.RelativePath == item.RelativePath),
+                        $"LongPath の項目 '{item.RelativePath}' が generate の期待値ファイルに記録されていません。");
+                }
 
                 SelfAssert.That(
                     !Directory.Exists(root) && !Directory.Exists(LongPath.Extend(root)),
@@ -4889,7 +4892,10 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("generate の標準出力に、FixtureSpec.Standard の LongPath トレイトを持つ項目が過不足なく「相対パス（原因: LongPath）」の形で列挙される（要件5.2、3.7）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: LongPath トレイトを持つ項目が過不足なく「相対パス（原因: LongPath）」の形で列挙され、件数行がその件数になる。
+        // 新: .NET 10 では LongPath の項目も観測されるため、明細行は1件も出ず、件数行は「0 件」になる。
+        runner.Add("generate の標準出力で、FixtureSpec.Standard の LongPath トレイトを持つ項目が観測されるため「相対パス（原因: LongPath）」の明細が1件も列挙されず、既知の欠落の件数行が0件になる（要件5.2、3.7）", () =>
         {
             string root = CreateTempFixtureRoot();
             string outPath = CreateTempCliGoldenFilePath();
@@ -4910,22 +4916,22 @@ internal static class SelfChecks
 
                 foreach (var relativePath in expectedRelativePaths)
                 {
-                    string expectedLine = $"  - {relativePath}（原因: LongPath）";
+                    string unexpectedLine = $"  - {relativePath}（原因: LongPath）";
                     SelfAssert.That(
-                        result.StdOut.Contains(expectedLine),
-                        $"generate の標準出力に既知の欠落の明細行が見つかりません: '{expectedLine}'");
+                        !result.StdOut.Contains(unexpectedLine),
+                        $"generate の標準出力に、観測されているはずの項目の既知の欠落の明細行があります: '{unexpectedLine}'");
                 }
 
-                string expectedCountLine = $"既知の欠落（境界条件に由来）: {expectedRelativePaths.Count} 件";
+                const string expectedCountLine = "既知の欠落（境界条件に由来）: 0 件";
                 SelfAssert.That(
                     result.StdOut.Contains(expectedCountLine),
                     $"generate の標準出力の件数行が想定と異なります（想定: '{expectedCountLine}'）。標準出力: {result.StdOut}");
 
-                // 過不足がないことも確認する。「（原因: LongPath）」の出現回数が、導出した件数と一致すること。
+                // 「（原因: LongPath）」が1件も出ないこと。
                 int actualLongPathMentionCount = CountOccurrences(result.StdOut, "（原因: LongPath）");
                 SelfAssert.That(
-                    actualLongPathMentionCount == expectedRelativePaths.Count,
-                    $"「（原因: LongPath）」の出現回数（{actualLongPathMentionCount}）が、FixtureSpec.Standard から導出した件数（{expectedRelativePaths.Count}）と一致しません。");
+                    actualLongPathMentionCount == 0,
+                    $"「（原因: LongPath）」の出現回数（{actualLongPathMentionCount}）が0ではありません。");
             }
             finally
             {
@@ -5743,7 +5749,11 @@ internal static class SelfChecks
     /// </summary>
     private static void RegisterPathLengthBoundaryChecks(SelfCheckRunner runner)
     {
-        runner.Add("ScanRunner が、絶対パスが258・259・260・261文字ちょうどのフォルダを含む基準フォルダでも例外を外へ漏らさず走査を完了し、長さのせいで列挙できない対象をアクセス拒否によるスキップと取り違えない（要件2.4、タスク7.2）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: 絶対258〜261文字のフォルダは「長さのせいで列挙できなかった対象」としてちょうど4件記録され、257文字は記録されない。
+        // 新: .NET 10 はそれらの直下も列挙できるため、「長さのせいで列挙できなかった対象」は0件で、直下のファイルが走査結果に現れる。
+        //     例外を漏らさないこと、スキップが読み取り拒否フォルダだけであることの期待は変えていない。
+        runner.Add("ScanRunner が、絶対パスが258・259・260・261文字ちょうどのフォルダを含む基準フォルダでも例外を外へ漏らさず走査を完了し、それらの直下を列挙でき、アクセス拒否によるスキップと取り違えない（要件2.4、タスク7.2）", () =>
         {
             var entriesBefore = SnapshotTempGbEntries();
             string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "gb_len_" + Guid.NewGuid().ToString("N").Substring(0, 8)));
@@ -5768,7 +5778,7 @@ internal static class SelfChecks
                         Path.GetFullPath(folder).Length == length,
                         $"検証用フォルダの絶対パスが{length}文字になりません（実際: {Path.GetFullPath(folder).Length}文字）。");
 
-                    // 生成は必ず拡張長パス経由で行う（プレーンなパスでは260文字以上を作成できない）。
+                    // 生成は拡張長パス経由で行う（.NET Framework ではプレーンなパスで260文字以上を作成できなかった。生成の経路は移行後も変えない）。
                     Directory.CreateDirectory(LongPath.Extend(folder));
                     SelfAssert.That(Directory.Exists(LongPath.Extend(folder)), $"絶対パス{length}文字のフォルダを作成できませんでした。");
 
@@ -5826,27 +5836,28 @@ internal static class SelfChecks
                         $"絶対パス{pair.Key}文字のフォルダが「アクセス拒否によるスキップ」として記録されています。長さのせいで列挙できないことはアクセス拒否とは別の事象であり、取り違えてはならない。");
                 }
 
-                // 長さのせいで列挙できなかった対象は、黙って消さずに別の一覧として記録する。
-                foreach (var pair in boundaryFolders)
+                // .NET 10 では長いパスも列挙できるため、「長さのせいで列挙できなかった対象」は1件もない。
+                SelfAssert.That(
+                    outcome.UnenumerablePaths.Count == 0,
+                    $"長さのせいで列挙できなかった対象が0件ではありません（実際: {outcome.UnenumerablePaths.Count} 件）。実際の内容: {string.Join(" / ", outcome.UnenumerablePaths)}");
+
+                // 列挙できたことを、直下に置いた1件が走査結果に現れることで確かめる（257文字の対比用フォルダも同じ）。
+                var scanMap = FlattenScanTree(outcome.Root!);
+                var enumeratedFolders = boundaryFolders
+                    .Select(pair => (Length: pair.Key, Folder: pair.Value))
+                    .Concat(new[] { (Length: 257, Folder: enumerableFolder) });
+                foreach (var (length, folder) in enumeratedFolders)
                 {
+                    string childRelativePath = folder.Substring(root.Length + 1) + "\\child.txt";
                     SelfAssert.That(
-                        outcome.UnenumerablePaths.Any(p => string.Equals(p, pair.Value, StringComparison.OrdinalIgnoreCase)),
-                        $"絶対パス{pair.Key}文字のフォルダが「長さのせいで列挙できなかった対象」として記録されていません。" +
-                        $"実際の内容: {string.Join(" / ", outcome.UnenumerablePaths)}");
+                        scanMap.ContainsKey(childRelativePath),
+                        $"絶対パス{length}文字のフォルダの直下のファイルが走査結果に現れません（.NET 10 では列挙できるはずです）。");
                 }
 
+                // 257文字の対比用フォルダもスキップとして記録されない。
                 SelfAssert.That(
-                    outcome.UnenumerablePaths.Count == boundaryFolders.Count,
-                    $"長さのせいで列挙できなかった対象が{boundaryFolders.Count}件ではありません（実際: {outcome.UnenumerablePaths.Count} 件）。実際の内容: {string.Join(" / ", outcome.UnenumerablePaths)}");
-                SelfAssert.That(
-                    !outcome.UnenumerablePaths.Any(p => string.Equals(p, deniedFolder, StringComparison.OrdinalIgnoreCase)),
-                    "読み取り拒否フォルダが「長さのせいで列挙できなかった対象」として記録されています。アクセス拒否とは別の事象であり、取り違えてはならない。");
-
-                // 下側の対比: 257文字は一覧できるので、どちらの一覧にも現れない。
-                SelfAssert.That(
-                    !outcome.UnenumerablePaths.Any(p => string.Equals(p, enumerableFolder, StringComparison.OrdinalIgnoreCase))
-                    && !outcome.SkippedPaths.Any(p => string.Equals(p, enumerableFolder, StringComparison.OrdinalIgnoreCase)),
-                    "絶対パス257文字のフォルダが列挙できない対象として記録されています（実測の境界は258文字であり、257文字は一覧できるはず）。");
+                    !outcome.SkippedPaths.Any(p => string.Equals(p, enumerableFolder, StringComparison.OrdinalIgnoreCase)),
+                    "絶対パス257文字のフォルダが「アクセス拒否によるスキップ」として記録されています。");
             }
             finally
             {
@@ -5864,15 +5875,20 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("実効絶対パス長105文字の基準フォルダで generate が完走して終了コード0を返し、既知の欠落（LongPath 由来）と、既知の不具合では説明できない欠落とを区別して標準出力に列挙する（要件2.4, 5.2, 5.5、タスク7.2）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: 既知の欠落（LongPath 由来）4件・説明できない欠落2件・長さのせいで列挙できなかった対象2件が、区別されて列挙される。
+        // 新: .NET 10 では、旧境界（258文字）を超えて観測されなかった項目もすべて観測されるため、3区画はいずれも0件で、
+        //     それらの項目は期待値ファイルに記録される。スキップが読み取り拒否フォルダだけであることの期待は変えていない。
+        runner.Add("実効絶対パス長105文字の基準フォルダで generate が完走して終了コード0を返し、旧境界を超える項目も観測されるため、既知の欠落・説明できない欠落・長さのせいで列挙できなかった対象がいずれも0件と報告される（要件2.4, 5.2, 5.5、タスク7.2）", () =>
         {
             // 実効絶対パス長105文字を選ぶ理由: FixtureSpec.Standard の長い連鎖の3階層目（相対152文字）の
-            // 絶対パスがちょうど258文字になり、(a) スキップ検出が例外を漏らす境界と、
-            // (b) 印（LongPath）の付いていない項目まで観測されなくなる状況とを同時に再現できるため。
+            // 絶対パスがちょうど258文字になり、.NET Framework では (a) スキップ検出が例外を漏らす境界と、
+            // (b) 印（LongPath）の付いていない項目まで観測されなくなる状況とを同時に再現できたため。
+            // .NET 10 では、その同じ状況でも全項目が観測されることを確かめる。
             const int RootLength = 105;
 
-            // 実測の境界（2026-09-16）: 親フォルダの絶対パスが258文字以上だと、その直下を一覧できない。
-            // 本番コードの実装には依存せず、この検証コード自身が独立に期待を導く。
+            // .NET Framework での実測の境界（2026-09-16）: 親フォルダの絶対パスが258文字以上だと、その直下を一覧できなかった。
+            // 本番コードの実装には依存せず、この検証コード自身が独立に「旧境界なら観測されなかった項目」を導く。
             const int EnumerationBoundary = 258;
 
             var entriesBefore = SnapshotTempGbEntries();
@@ -5909,7 +5925,7 @@ internal static class SelfChecks
                 $"前提が崩れています: 実効{RootLength}文字の基準フォルダで観測されなくなる LongPath の項目が4件ではありません（実際: {expectedKnown.Count} 件）。");
             SelfAssert.That(
                 expectedUnexplained.Count == 2,
-                $"前提が崩れています: 実効{RootLength}文字の基準フォルダで観測されなくなる「LongPath の印がない」項目が2件ではありません（実際: {expectedUnexplained.Count} 件）。この検証は説明できない欠落が実在する状況を必要とする。");
+                $"前提が崩れています: 実効{RootLength}文字の基準フォルダで観測されなくなる「LongPath の印がない」項目が2件ではありません（実際: {expectedUnexplained.Count} 件）。この検証は旧境界で「LongPath の印がない」項目まで観測されなくなる状況を必要とする。");
             SelfAssert.That(
                 expectedUnenumerable.Count == 2,
                 $"前提が崩れています: 長さのせいで一覧できないフォルダが2件ではありません（実際: {expectedUnenumerable.Count} 件）。");
@@ -5923,24 +5939,26 @@ internal static class SelfChecks
                     $"実効{RootLength}文字の基準フォルダでの generate の終了コードが0ではありません（実際: {result.ExitCode}）。" +
                     $"標準出力: {result.StdOut} 標準エラー: {result.StdErr}");
 
+                // 旧境界で観測されなかった項目（既知の欠落・説明できない欠落の候補）も、長さのせいで一覧できなかったフォルダも、
+                // .NET 10 では報告されない。
                 var reportedKnown = ExtractReportItems(result.StdOut, "既知の欠落（境界条件に由来）: ");
                 AssertReportedSetEquals(
                     "既知の欠落",
-                    expectedKnown,
+                    new List<string>(),
                     reportedKnown,
                     result.StdOut);
 
                 var reportedUnexplained = ExtractReportItems(result.StdOut, "説明できない欠落（既知の不具合では説明できない未観測の項目）: ");
                 AssertReportedSetEquals(
                     "説明できない欠落",
-                    expectedUnexplained,
+                    new List<string>(),
                     reportedUnexplained,
                     result.StdOut);
 
                 var reportedUnenumerable = ExtractReportItems(result.StdOut, "長さのせいで列挙できなかった対象: ");
                 AssertReportedSetEquals(
                     "長さのせいで列挙できなかった対象",
-                    expectedUnenumerable,
+                    new List<string>(),
                     reportedUnenumerable,
                     result.StdOut);
 
@@ -5953,6 +5971,25 @@ internal static class SelfChecks
                     result.StdOut);
 
                 SelfAssert.That(File.Exists(goldenPath), $"期待値ファイルが書き出されていません: {goldenPath}");
+
+                // 報告が0件であることと整合して、旧境界で観測されなかった項目が期待値ファイルに記録されていること。
+                var document = new GoldenSerializer().Read(goldenPath);
+                var recordedPaths = new HashSet<string>(document.Entries.Select(e => e.RelativePath), StringComparer.Ordinal);
+                foreach (var relativePath in expectedKnown.Concat(expectedUnexplained))
+                {
+                    SelfAssert.That(
+                        recordedPaths.Contains(relativePath),
+                        $"旧境界では観測されなかった項目 '{relativePath}' が期待値ファイルに記録されていません（.NET 10 では観測されるはずです）。");
+                }
+
+                // 旧境界で一覧できなかったフォルダ自身も記録されていること。
+                foreach (var fullPath in expectedUnenumerable)
+                {
+                    string relativePath = fullPath.Substring(root.Length + 1);
+                    SelfAssert.That(
+                        recordedPaths.Contains(relativePath),
+                        $"旧境界では一覧できなかったフォルダ '{relativePath}' が期待値ファイルに記録されていません。");
+                }
             }
             finally
             {
@@ -5962,7 +5999,13 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("ScanRunner の失敗分類が、長さ由来の判定に拡張長パス経由の実在確認を用い、実在しないパス・別の型の例外・アクセス拒否を長さ由来と取り違えない（要件2.4、タスク7.2）", () =>
+        // dotnet10-migration タスク2.4 で期待を改めた項目。
+        // 旧: 前提として、プレーンなパスでは絶対261文字のフォルダが「存在しない」と判定される（.NET Framework の制約）。
+        //     これにより実在確認が拡張長パス経由であることまで見分けていた。
+        // 新: .NET 10 ではプレーンなパスでも「存在する」と判定される（拡張長パス経由と同じ結論）。
+        //     拡張長パス経由かどうかはこの項目では見分けられなくなったため、名前からその主張を外した。
+        //     分類の規則（長さ由来・アクセス拒否・想定外の振り分け、実在しないパスの扱い）の期待は変えていない。
+        runner.Add("ScanRunner の失敗分類が、長さ由来の判定に実在確認を用い、実在しないパス・別の型の例外・アクセス拒否を長さ由来と取り違えない（要件2.4、タスク7.2）", () =>
         {
             // 実行経路（DetectSkippedPaths）だけでは、実在確認を省いた実装・プレーンなパスで確認する実装と
             // 正しい実装を区別できない（絶対258・259文字の経路ではプレーンな実在確認も真になるため）。
@@ -5985,7 +6028,7 @@ internal static class SelfChecks
 
                 Directory.CreateDirectory(LongPath.Extend(existingLong));
 
-                // 前提の確認。これらが崩れると、以下の照合が「拡張長パス経由かどうか」を見分けられなくなる。
+                // 前提の確認。
                 SelfAssert.That(
                     Path.GetFullPath(existingLong).Length == 261,
                     $"検証用フォルダの絶対パスが261文字になりません（実際: {Path.GetFullPath(existingLong).Length}文字）。");
@@ -5993,15 +6036,14 @@ internal static class SelfChecks
                     Directory.Exists(LongPath.Extend(existingLong)),
                     "検証用の絶対パス261文字のフォルダが、拡張長パス経由で実在すると判定されません。");
                 SelfAssert.That(
-                    !Directory.Exists(existingLong),
-                    "前提が崩れています: プレーンなパスで絶対261文字のフォルダが「存在する」と判定されました。" +
-                    "この前提が崩れると、実在確認が拡張長パス経由かどうかを見分ける検証になりません。");
+                    Directory.Exists(existingLong),
+                    "前提が崩れています: プレーンなパスで絶対261文字のフォルダが「存在しない」と判定されました" +
+                    "（.NET 10 では拡張長パス経由と同じく存在すると判定されるはずです）。");
                 SelfAssert.That(
                     !Directory.Exists(LongPath.Extend(missingLong)) && !Directory.Exists(LongPath.Extend(missingShort)),
                     "検証用の実在しないパスが、拡張長パス経由で実在すると判定されました。");
 
                 // (a) 実在する絶対261文字のフォルダ × 長さ由来になりうる例外 → 長さ由来。
-                //     プレーンな実在確認では偽になるため、拡張長パス経由でなければ通らない。
                 SelfAssert.That(
                     ScanRunner.IsPathLengthFailure(new DirectoryNotFoundException(), existingLong),
                     "実在する絶対261文字のフォルダに対する DirectoryNotFoundException が、長さ由来と判定されません。" +
@@ -6043,7 +6085,7 @@ internal static class SelfChecks
                     ScanRunner.ClassifyEnumerationFailure(new IOException("別の入出力エラー"), existingLong) == EnumerationFailureKind.Unexpected,
                     "想定していない型の例外が Unexpected に分類されません（握りつぶしてはならない）。");
 
-                // 実在確認そのものも、拡張長パス経由でなければ成立しない。
+                // 実在確認そのもの（拡張長パス経由の実装）が、実在するものと実在しないものを正しく見分ける。
                 SelfAssert.That(
                     ScanRunner.DirectoryExistsThroughExtendedPath(existingLong),
                     "拡張長パス経由の実在確認が、実在する絶対261文字のフォルダを見つけられません。");

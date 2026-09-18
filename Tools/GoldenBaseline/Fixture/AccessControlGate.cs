@@ -35,9 +35,10 @@ public interface IAccessControlGate
 /// （research.md「権限のないフォルダの生成と後始末」で非昇格ユーザーによる実測済み）。
 /// アクセス制御 API（<see cref="System.Security.AccessControl"/> / <see cref="System.Security.Principal"/>）を
 /// 直接扱うのはこのファイルに限定する。.NET Framework から .NET 10 への移行で
-/// <c>DirectorySecurity</c> の取得・設定方法が <c>FileSystemAclExtensions</c> 経由に変わるが、
+/// <c>DirectorySecurity</c> の取得・設定方法が <c>FileSystemAclExtensions</c> 経由
+/// （<c>DirectoryInfo.GetAccessControl()</c> / <c>DirectoryInfo.SetAccessControl()</c>）に変わった。
 /// その差分をこの部品の内側だけに閉じ込めることが、本部品を独立させている理由である
-/// （design.md: Migration Strategy）。
+/// （design.md: Migration Strategy、dotnet10-migration の design.md: GoldenBaselineTool）。
 /// </summary>
 public sealed class AccessControlGate : IAccessControlGate
 {
@@ -61,9 +62,12 @@ public sealed class AccessControlGate : IAccessControlGate
         }
 
         // DirectorySecurity を取得 → ルールを追加 → 書き戻す、という流れで付与する（research.md）。
-        DirectorySecurity security = Directory.GetAccessControl(directoryPath);
+        // .NET 10 では Directory.GetAccessControl / SetAccessControl が無いため、
+        // DirectoryInfo の拡張メソッド（System.IO.FileSystemAclExtensions）で取得・設定する。
+        DirectoryInfo directory = new DirectoryInfo(directoryPath);
+        DirectorySecurity security = directory.GetAccessControl();
         security.AddAccessRule(CreateDenyRule());
-        Directory.SetAccessControl(directoryPath, security);
+        directory.SetAccessControl(security);
     }
 
     /// <inheritdoc />
@@ -77,13 +81,15 @@ public sealed class AccessControlGate : IAccessControlGate
         // オブジェクトの所有者は DACL の内容に関わらず READ_CONTROL と WRITE_DAC を暗黙に持つため、
         // Deny ACE を付与していない（あるいは既に解除済みの）フォルダでも取得・書き戻しは常に成功する
         // （research.md実測）。
-        DirectorySecurity security = Directory.GetAccessControl(directoryPath);
+        // 取得・設定は DenyRead と同じく DirectoryInfo の拡張メソッドで行う。
+        DirectoryInfo directory = new DirectoryInfo(directoryPath);
+        DirectorySecurity security = directory.GetAccessControl();
 
         // DenyRead が付与するルールと全く同じ内容のルールを組み立てて除去を試みる。
         // 一致するルールが存在しない場合、RemoveAccessRule は何も変更せず false を返すだけなので、
         // DenyRead を適用していないフォルダに対しても安全に呼び出せる（design.md: Invariants）。
         security.RemoveAccessRule(CreateDenyRule());
-        Directory.SetAccessControl(directoryPath, security);
+        directory.SetAccessControl(security);
     }
 
     /// <summary>
