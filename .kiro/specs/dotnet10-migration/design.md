@@ -138,7 +138,7 @@ Tests/LargeFolderFinder.Tests/
 ```
 
 ### Modified Files
-- `LargeFolderFinder.csproj` — `TargetFramework` を `net10.0-windows` に。`UseWindowsForms`、旧式の `Reference` 11件、Fody・Costura.Fody を削除。`RuntimeIdentifier`（win-x64）、`IncludeSourceRevisionInInformationalVersion=false` を追加。MessagePack と YamlDotNet の版を上げる。Ookii.Dialogs.Wpf を削除。`DefaultItemExcludes` に `Tests\**` と `build\**` を加える
+- `LargeFolderFinder.csproj` — `TargetFramework` を `net10.0-windows` に。`UseWindowsForms`、旧式の `Reference` 11件、Fody・Costura.Fody を削除。`RuntimeIdentifier`（win-x64）、`IncludeSourceRevisionInInformationalVersion=false` を追加。MessagePack と YamlDotNet の版を上げる。Ookii.Dialogs.Wpf を削除。`DefaultItemExcludes` に `Tests\**`、`build\**`、`artifacts\**` を加える
 - `FodyWeavers.xml`、`FodyWeavers.xsd` — 削除
 - `Views/MainWindow.xaml.cs` — フォルダ選択を `Microsoft.Win32.OpenFolderDialog` に置き換える（`BrowseButton_Click`）。所有者の取得の `File.GetAccessControl(path)` を `new FileInfo(path).GetAccessControl()` に置き換え、戻り値が null のときの扱いを明示する
 - `Helpers/RelayCommand.cs` — .NET 10 の `ICommand` の null 許容の注釈に合わせる（挙動は変えない）
@@ -148,6 +148,8 @@ Tests/LargeFolderFinder.Tests/
 - `baselines/fixture-v1.golden.txt` — 移行後の走査結果で更新する（既存の `update` コマンドを使う）
 - `LargeFolderFinder.sln` — テストプロジェクトを加える
 - `.gitignore` — スクリプトの出力先 `artifacts/` を加える
+- `.kiro/steering/decisions.md` — 既存の「.NET 9 の自己完結型・単一ファイルの発行設定」の項目に、移行で自己完結・単一ファイルの配布に戻ったことと、2026-09-17 の利用者の決定と理由を追記する（200行の目安を保つため新しい項目は立てない）
+- `.kiro/specs/dotnet10-migration/research.md` — 末尾に「移行の記録」の節を設け、取り除いたもの・残したもの、自己検証13件の旧期待と新期待、期待値データの差の全文、起動確認の方式と結果を記録する（本スペックの「記録する」はすべてここに書く）
 - `Resources/License/ThirdPartyNotices.txt` — Ookii.Dialogs.Wpf・Fody・Costura.Fody を削除。自己完結版に同梱する .NET ランタイム（MIT）を加える。MessagePack の同梱物の記載を実態に合わせる
 - `README.md` — 動作環境、2つの配布物の違いと選び方、入手と起動の手順
 - `.kiro/steering/tech.md`、`product.md`、`structure.md` — 実行基盤、依存、配布、コマンド、テスト、既知の制約を移行後の事実に
@@ -270,7 +272,7 @@ graph LR
 - 削除: `UseWindowsForms`、旧式の `Reference` 11件、`Fody`、`Costura.Fody`、`Ookii.Dialogs.Wpf`、`FodyWeavers.xml`、`FodyWeavers.xsd`
 - 追加: `IncludeSourceRevisionInInformationalVersion=false`（版の文字列を `1.0.3` の形にする）
 - 維持: `Version`、`Title`、`Copyright`、`AssemblyName`、`RootNamespace`、`Nullable`、`LangVersion`、既存の `Content` の設定（`Config.txt` と `Resources/` は既存の設定のまま発行フォルダに出ることを実測済み）。**`AssemblyTitle` を変えない**（アプリデータのフォルダ名が変わるため。要件1.3）
-- `DefaultItemExcludes` に `Tests\**` と `build\**` を加え、テストやスクリプトがアプリのビルドに入らないようにする
+- `DefaultItemExcludes` に `Tests\**`、`build\**`、`artifacts\**` を加え、テスト・スクリプト・発行物がアプリのビルドに入らないようにする
 - 版: MessagePack 3.1.9、YamlDotNet 18.1.0
 - 単一ファイルの圧縮は使わない（zip が縮まず、起動が遅くなるだけのため）
 
@@ -359,7 +361,7 @@ graph LR
 #### TestProject（`Tests/LargeFolderFinder.Tests`）
 
 **Contracts**: Batch [x]
-- 実行: `dotnet test`（リポジトリ直下。`global.json` の設定で Microsoft Testing Platform で走る）
+- 実行: `dotnet test --solution LargeFolderFinder.sln -c Release`（リポジトリ直下。直下に csproj と sln が並ぶためソリューションを明示する。`global.json` の設定で Microsoft Testing Platform で走る）。構成（`-c`）はビルドとそろえる。ToolRunner が `bin/<構成>/` を探すため
 - 参照: 2つの検証ツールを `ProjectReference`（`ReferenceOutputAssembly=false`）で参照し、ビルドの順序と出力の存在だけを保証する
 - `ToolRunner`: 検証ツールの実行ファイルを、テストの出力フォルダから親へたどってリポジトリの `Tools/<名前>/bin/<構成>/net10.0-windows/<名前>.exe` として探す。子プロセスで実行し、終了コード・標準出力・標準エラーを返す。見つからないときはテストを失敗にする
 - テスト:
@@ -372,23 +374,24 @@ graph LR
 
 #### CiWorkflow（`ci.yml`）
 - 契機: すべてのブランチへの push と pull request
-- 手順: チェックアウト → `global.json` に従って SDK を入れる → `dotnet build LargeFolderFinder.sln -c Release` → `dotnet test`（テストの中で検証ツールが走る）
+- 手順: チェックアウト → `global.json` に従って SDK を入れる → `dotnet build LargeFolderFinder.sln -c Release -warnaserror`（警告が1件でもあれば失敗。要件1.1）→ `dotnet test --solution LargeFolderFinder.sln -c Release --no-build`（テストの中で検証ツールが走る）
 - 失敗したら全体を失敗にする（要件5.5、6.3、7.3）
 
 #### ReleaseWorkflow（`release.yml`）
-- 契機: `v*` のタグの push
+- 契機: `v*` のタグの push。手動実行（`workflow_dispatch`）は既定のブランチに定義が無いと使えないため、契機にしない
+- 試験: 本番のタグと区別できる試験用のタグ（`vX.Y.Z-test.N`）でも動く。試験用のタグでは、版の照合は `-` より前だけを比べ、下書きのタイトルに試験である印を付ける。試験後はタグと下書きを削除する
 - 権限: `contents: write`（下書きのリリースを作るため。他の権限は与えない）
 - 手順:
-  1. タグ `vX.Y.Z` と csproj の `Version` の一致を確かめる。不一致なら失敗
+  1. タグ `vX.Y.Z`（試験用は `-` より前）と csproj の `Version` の一致を確かめる。不一致なら失敗
   2. ビルドとテスト（CiWorkflow と同じ手順）
-  3. `Publish.ps1` で2形態を発行
+  3. `Publish.ps1` で2形態を発行し、発行した exe の `ProductVersion` が `X.Y.Z` の形（コミットハッシュが付かない）であることを確かめる（要件2.6）
   4. `Test-Launch.ps1` で2つの exe を起動確認（要件5.2）
   5. `Package.ps1` で zip を2つ作る
   6. `gh release create <tag> --draft --title <tag> --notes <2つの配布物の違いの定型文>` に2つの zip を添える。同じタグのリリースが既にあれば失敗させる（上書きしない）
 - 公開（下書きの解除）はしない（要件5.4）
 
 **Implementation Notes**
-- **Risks**: ホスト型ランナーで GUI の起動確認が成立するかは未確認（公開情報が食い違う）。最初に試験用のタグか手動実行（`workflow_dispatch`）で確かめる。成立しない場合の代替は、起動確認を「プロセスが決められた時間生き続けること」に弱め、その判断を記録する。アプリ側に確認用の起動引数を加える案は、アプリの挙動を増やすため本スペックでは採らない
+- **Risks**: ホスト型ランナーで GUI の起動確認が成立するかは未確認（公開情報が食い違う）。最初に試験用のタグで確かめる。成立しない場合の代替は、起動確認を「プロセスが決められた時間生き続けること」に弱め、その判断を記録する。アプリ側に確認用の起動引数を加える案は、アプリの挙動を増やすため本スペックでは採らない
 
 ### 記録
 
@@ -407,11 +410,11 @@ graph LR
 ## Testing Strategy
 
 ### 自動（CI とテストプロジェクト）
-1. アプリのビルドの警告が0件であること（要件1.1。ビルドの出力で確かめる）
+1. アプリのビルドの警告が0件であること（要件1.1。CI のビルドを `-warnaserror` で行う）
 2. `GoldenBaseline` の `selfcheck`（書き直した13件を含む）と `compare`（更新後の期待値と一致）が 0（要件4、7.1、7.4）
 3. `LocalizationCheck` の `selfcheck` と `check` が 0（要件3.5、7.3）
 4. 2形態の発行物について、構成の検査と起動確認が通ること（要件2.1〜2.4、2.7、5.2）
-5. 版の文字列が `X.Y.Z` の形であること（発行した exe の `ProductVersion` を確かめる。要件2.6）
+5. 版の文字列が `X.Y.Z` の形であること（ReleaseWorkflow が発行した exe の `ProductVersion` を確かめる。要件2.6）
 
 ### 移行時に一度だけ行う確認（記録に残す）
 1. 更新前の期待値との `compare` の差が、既知の4件と親8件のサイズだけであること（要件4.1）
