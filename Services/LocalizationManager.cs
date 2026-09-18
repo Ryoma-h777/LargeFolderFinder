@@ -8,7 +8,10 @@ using System.Globalization;
 namespace LargeFolderFinder
 {
     /// <summary>
-    /// ローカライズテキストのキー定義（YAMLファイルと順序を一致させること）
+    /// ローカライズテキストのキー定義。
+    /// キーは名前で言語ファイル（Resources/Languages/*.yaml）から引かれるため、言語ファイル側の並び順は問わない。
+    /// キーを追加・削除したときは、全13言語の言語ファイルに訳文を加える・消すこと。
+    /// 訳文の欠けや差し込み位置のずれは、Tools/LocalizationCheck の check コマンドで確かめられる。
     /// </summary>
     public enum LanguageKey
     {
