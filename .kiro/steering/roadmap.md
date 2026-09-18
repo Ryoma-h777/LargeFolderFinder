@@ -86,9 +86,9 @@ Large Folder Finder v1.0.3 は、2025年11月〜2026年1月ごろの旧世代 AI
 
 ## Specs (dependency order)
 
-- [ ] scan-golden-baseline -- 現行版の走査結果をパス→サイズの一覧として固定し、変更前後を比較する仕組みを整える。移行をまたぐ安全網。Dependencies: none
-- [ ] requirements-preservation -- `docs/` 配下42フォルダの設計ドキュメントから要望・仕様・設計判断の要点を抽出し、`.kiro/steering/` へ保全する。Dependencies: none
-- [ ] localization-completeness -- 11言語で欠落している翻訳キーを補完し、`LanguageKey` と全13言語の YAML の網羅を機械的に検証する仕組みを設ける。Dependencies: none
+- [x] scan-golden-baseline -- 現行版の走査結果をパス→サイズの一覧として固定し、変更前後を比較する仕組みを整える。移行をまたぐ安全網。Dependencies: none
+- [x] requirements-preservation -- `docs/` 配下42フォルダの設計ドキュメントから要望・仕様・設計判断の要点を抽出し、`.kiro/steering/` へ保全する。Dependencies: none
+- [x] localization-completeness -- 11言語で欠落している翻訳キーを補完し、`LanguageKey` と全13言語の YAML の網羅を機械的に検証する仕組みを設ける。Dependencies: none
 - [ ] dotnet10-migration -- .NET 10 への移行、Costura.Fody の除去と PublishSingleFile 化、Ookii.Dialogs.Wpf の削除、依存バージョンの更新、`global.json` による SDK 固定、GitHub Actions による2形態の自動ビルド。Dependencies: scan-golden-baseline
 - [ ] scan-correctness -- 手書き P/Invoke の全廃、260文字超パスへの対応と日本語パスでの実機検証、走査中の暫定ツリー共有による競合の解消、例外の握りつぶし方針の是正。Dependencies: dotnet10-migration
 - [ ] scan-performance -- `FolderInfo.AddSize` の再設計（祖先への逐次 Interlocked を廃止）、`FileSystemEnumerator<T>` による1パス列挙、並列度の制御。Dependencies: scan-correctness, scan-golden-baseline
