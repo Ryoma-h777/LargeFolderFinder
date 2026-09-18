@@ -541,3 +541,20 @@
   - 期待値データの18行目（`F	normal\file_small.txt	10`）を `11` に変えると、`Compare_MatchesCommittedGolden` が失敗（合計 8、失敗 1、成功 7、`dotnet test` の終了コード 2）。理由に `判定: 差分あり（1 件）`、`[SizeMismatch] normal\file_small.txt 期待値=11 実際=10` が出た。`git restore baselines/fixture-v1.golden.txt` で戻すと再び 8件成功し、期待値データの差分は無い
   - スキップの経路: `TEMP`・`TMP` を 80 文字を超える既存のフォルダにして `Compare_MatchesCommittedGolden` だけを走らせると、GoldenBaseline が「既定の置き場（…）が長すぎるため、基準フォルダの実効絶対パス長を 80 文字に固定できません（名前を最短にしても 163 文字になります）」で終了コード 2 を返し、テストは「スキップされました」（合計 1、成功 0、スキップ 1、`dotnet test` の終了コード 0）。フィクスチャは作られない。「未生成の項目」の経路は手元で安全に再現できない（`dotnet test` 自身も `TEMP` を使うため、作れない場所を `TEMP` にするとテストの基盤が起動しない）ので、実際の文言を与えた判定のテストで確かめた
 - **注意**: xunit.v3 の既定でテストのクラスは並列に走る（GoldenBaseline の2件は同じクラスなので順番に走り、LocalizationCheck と並ぶ）。Microsoft Testing Platform は利用統計の送信の部品（Microsoft.Testing.Extensions.Telemetry）を推移的に含む
+### 4.2 変更のたびに走る自動ビルド（2026-09-19、コミット 7216922 の上で実施）
+- **作ったもの**: `.github/workflows/ci.yml`（CiWorkflow）
+  - 契機: すべてのブランチへの push（`branches: ['**']`）と pull request
+  - ランナー: `windows-2025`。権限: `contents: read` のみ
+  - 手順: `actions/checkout@v7` → `actions/setup-dotnet@v6`（`global-json-file: global.json`）→ `dotnet --version`（使う SDK の版をログに残す）→ `dotnet build LargeFolderFinder.sln -c Release -warnaserror` → `dotnet test --solution LargeFolderFinder.sln -c Release --no-build`。どの手順が失敗してもワークフロー全体が失敗になる
+  - アクションの版: 設計は版の固定の方法を指定していないため、メジャーの版のタグで指定した。`setup-dotnet` は research の調査どおり最新メジャーの v6、`checkout` は `git ls-remote` で確かめた最新メジャーの v7（2026-09-19 時点）。どちらも GitHub 公式のアクションで、サードパーティのアクションは使わない
+  - `setup-dotnet@v6` は `global.json` の `rollForward: latestPatch` を読んで `10.0.4xx` の最新の SDK を入れる（v6 のソースの `getVersionFromGlobalJson` で確認）。`global.json` の固定（10.0.401 以上の 10.0.4xx）と同じ範囲で、プリインストールの 10.0.400 は条件を満たさないので使われない。実際に使われた版は `dotnet --version` の手順でログに出る
+- **設計に無い追加**
+  - ワークフローの `env` に `DOTNET_CLI_TELEMETRY_OPTOUT: 1` と `TESTINGPLATFORM_TELEMETRY_OPTOUT: 1` を設定した（dotnet CLI と Microsoft Testing Platform の利用統計の送信を止める。4.1 で判明した推移的な依存への対処）
+  - SDK の版を表示する手順（`dotnet --version`）を加えた。`global.json` の固定がランナーで効いていることをログで確かめるため
+- **スキップの件数の確かめ方**: `dotnet test` の最後の集計（「合計」「失敗」「成功」「スキップ済み」）がログに出る（ランナーの表示言語では英語になる見込み）。5.3 では、この集計のスキップが 0 件であることを GitHub 上のログで確かめる
+- **確かめたこと**（手元、ワークフローと同じ環境変数を設定して、同じコマンドを順番に実行）
+  - `dotnet --version`: `10.0.401`、終了コード 0
+  - `dotnet build LargeFolderFinder.sln -c Release -warnaserror`: 警告 0、エラー 0、終了コード 0。`--no-incremental` を付けても同じ
+  - `dotnet test --solution LargeFolderFinder.sln -c Release --no-build`: 合計 8、失敗 0、成功 8、スキップ 0、終了コード 0
+  - YAML の構文: PyYAML（リポジトリの外に一時的に入れたもの）の `safe_load` で読み込め、契機・権限・環境変数・手順が意図どおりの構造になっていることを確かめた。actionlint は手元に無いため使っていない
+  - GitHub 上での実行は 5.3 で確かめる

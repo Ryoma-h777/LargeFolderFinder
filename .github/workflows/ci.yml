@@ -1,0 +1,44 @@
+# 変更のたびに走る自動ビルド（CiWorkflow）
+# すべてのブランチへの push と pull request で、global.json に固定した SDK を入れ、
+# 警告を失敗として扱うソリューションのビルドと、同じ構成でのテストを実行する。
+# どの手順が失敗してもワークフロー全体が失敗になる（要件 1.1、5.5、6.3、7.3）。
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+# 権限は最小にする（リポジトリの読み取りのみ）
+permissions:
+  contents: read
+
+env:
+  # dotnet CLI と Microsoft Testing Platform の利用統計の送信を止める
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
+
+jobs:
+  build-and-test:
+    name: ビルドとテスト
+    runs-on: windows-2025
+    steps:
+      - name: リポジトリを取得する
+        uses: actions/checkout@v7
+
+      - name: global.json に従って .NET SDK を入れる
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: 使う SDK の版を表示する
+        run: dotnet --version
+
+      - name: ソリューションをビルドする（警告は失敗として扱う）
+        run: dotnet build LargeFolderFinder.sln -c Release -warnaserror
+
+      # テストの中で2つの検証ツール（GoldenBaseline、LocalizationCheck）が走る。
+      # 環境の制約によるスキップは成功と区別してログの集計（スキップの件数）に出る
+      - name: テストを実行する
+        run: dotnet test --solution LargeFolderFinder.sln -c Release --no-build
