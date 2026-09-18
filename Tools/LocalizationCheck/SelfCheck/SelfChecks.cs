@@ -130,6 +130,7 @@ internal static class SelfChecks
 
         RegisterPlaceholderParserChecks(runner);
         RegisterLanguageFileReaderChecks(runner);
+        RegisterCoverageCheckerChecks(runner);
     }
 
     /// <summary>
@@ -251,6 +252,29 @@ internal static class SelfChecks
             });
 
         runner.Add(
+            "LanguageFileReader: 値の無いキーは読み込みに成功し、訳文が null になる",
+            () =>
+            {
+                // YAML で「Title:」と書いて値を省いた形。実測では読み込みは成功し、キーは存在し、
+                // 値は空文字列ではなく null になる（2026-09-18 実測）。
+                // CoverageChecker が「値が null のキーを欠落として扱う」判断はこの挙動に立っているため、
+                // YamlDotNet の版が変わって挙動が変わったら、この項目で気づけるようにしておく。
+                var content = LanguageFileReader.Parse("empty-value.yaml", "Title:\nMenuFile: \"File\"\n");
+
+                AssertReadable(content);
+                AssertEntryCount(content, 2);
+                SelfAssert.That(
+                    content.Entries!.ContainsKey("Title"),
+                    "値を省いたキー Title は、読み込み結果に存在するはずです。");
+                SelfAssert.That(
+                    content.Entries["Title"] == null,
+                    $"値を省いたキー Title の訳文は null を期待しましたが、" +
+                    $"「{content.Entries["Title"]}」でした。");
+                AssertEntry(content, "MenuFile", "File");
+                AssertNoDuplicates(content);
+            });
+
+        runner.Add(
             "LanguageFileReader: 構文の誤りを読み込み不能として理由に型名を残す",
             () =>
             {
@@ -356,6 +380,463 @@ internal static class SelfChecks
                 AssertUnreadable(content, "YamlException");
                 AssertNoDuplicates(content);
             });
+    }
+
+    /// <summary>
+    /// 自己検証で使う「期待するキーの一覧」（LanguageKey の定義順に相当する）。
+    /// </summary>
+    /// <remarks>
+    /// 並びをわざと辞書順とずらしてある（Title が MenuFile より前）。
+    /// 欠落の並びが「キー名の順」ではなく「定義順」であることを確かめられるようにするため。
+    /// </remarks>
+    private static readonly string[] CoverageKeys = { "Title", "MenuFile", "TimeStatusFormat" };
+
+    /// <summary>問題の無い英語の言語ファイルの内容。差し込み位置の基準に使う。</summary>
+    private const string ReferenceText =
+        "Title: \"Large Folder Finder\"\nMenuFile: \"File\"\nTimeStatusFormat: \"{0} {1}\"\n";
+
+    /// <summary>
+    /// CoverageChecker の検証項目を登録する
+    /// （design.md: Testing Strategy / Unit Tests 3・4、requirements.md: 1.1、2.2、3.1〜3.5、3.9、3.10、4.3）。
+    /// </summary>
+    /// <remarks>
+    /// ファイルは作らず、<see cref="LanguageFileReader.Parse"/> で合成した読み込み結果を渡す。
+    /// 判定の中核がファイルシステムを扱わないことは、この呼び出し方自体が示している。
+    /// </remarks>
+    private static void RegisterCoverageCheckerChecks(SelfCheckRunner runner)
+    {
+        runner.Add(
+            "CoverageChecker: 5種類の問題を1つずつ仕込むと、それぞれちょうど1件ずつ報告される",
+            () =>
+            {
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        // 読み込み不能: 閉じていない引用符。
+                        LanguageFileReader.Parse("broken.yaml", "Title: \"unterminated\nMenuFile: [1, 2\n"),
+                        // 重複: Title が2回。
+                        LanguageFileReader.Parse(
+                            "dup.yaml",
+                            "Title: \"T\"\nMenuFile: \"M\"\nTimeStatusFormat: \"{0} {1}\"\nTitle: \"T2\"\n"),
+                        // 欠落: MenuFile が無い。
+                        LanguageFileReader.Parse("missing.yaml", "Title: \"T\"\nTimeStatusFormat: \"{0} {1}\"\n"),
+                        // 孤児: LanguageKey に無い OldKey がある。
+                        LanguageFileReader.Parse(
+                            "orphan.yaml",
+                            "Title: \"T\"\nMenuFile: \"M\"\nTimeStatusFormat: \"{0} {1}\"\nOldKey: \"x\"\n"),
+                        // 差し込み位置のずれ: {1} が無い。
+                        LanguageFileReader.Parse(
+                            "mismatch.yaml",
+                            "Title: \"T\"\nMenuFile: \"M\"\nTimeStatusFormat: \"{0} Vergangen\"\n"),
+                    });
+
+                // ファイル名の序数順で並ぶ。mismatch.yaml は missing.yaml より前
+                // （4文字目が m と s のため）。
+                AssertProblems(
+                    report,
+                    "broken.yaml/Unreadable/-",
+                    "dup.yaml/Duplicate/Title",
+                    "mismatch.yaml/PlaceholderMismatch/TimeStatusFormat",
+                    "missing.yaml/Missing/MenuFile",
+                    "orphan.yaml/Orphan/OldKey");
+
+                SelfAssert.That(
+                    report.LanguageCount == 6,
+                    $"検証した言語ファイルの数は 6 を期待しましたが、{report.LanguageCount} でした。");
+                SelfAssert.That(
+                    report.KeyCount == CoverageKeys.Length,
+                    $"キーの数は {CoverageKeys.Length} を期待しましたが、{report.KeyCount} でした。");
+                SelfAssert.That(
+                    report.IsReferenceUsable,
+                    "英語のファイルは読み込めているので、基準は使えるはずです。");
+            });
+
+        runner.Add(
+            "CoverageChecker: 1件目の問題で打ち切らず、同じファイルの複数の問題をすべて報告する",
+            () =>
+            {
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        // 1本のファイルに重複・欠落・孤児・差し込み位置のずれを同時に仕込む。
+                        LanguageFileReader.Parse(
+                            "de.yaml",
+                            "MenuFile: \"M\"\nTimeStatusFormat: \"{0}\"\nMenuFile: \"M2\"\nOldKey: \"x\"\n"),
+                    });
+
+                AssertProblems(
+                    report,
+                    "de.yaml/Duplicate/MenuFile",
+                    "de.yaml/Missing/Title",
+                    "de.yaml/Orphan/OldKey",
+                    "de.yaml/PlaceholderMismatch/TimeStatusFormat");
+            });
+
+        runner.Add(
+            "CoverageChecker: 読み込めなかったファイルは読み込み不能の1件だけにする（重複を報告しない）",
+            () =>
+            {
+                // 読み込み不能かつ重複キーがある形。LanguageFileReader は読み込み不能でも
+                // 重複キーの一覧を返すため、報告から落とすのは判定の層の役目である
+                // （design.md: CoverageChecker の事後条件）。
+                var unreadableWithDuplicates = LanguageFileReader.Parse("xx.yaml", "AA: [1, 2]\nAA: [3]\n");
+
+                SelfAssert.That(
+                    unreadableWithDuplicates.Entries == null,
+                    "この入力は読み込み不能になる前提ですが、読み込めてしまいました。前提が崩れています。");
+                SelfAssert.That(
+                    unreadableWithDuplicates.DuplicateKeys.Count > 0,
+                    "この入力は重複キーを伴う前提ですが、重複が挙がりませんでした。前提が崩れています。");
+
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        unreadableWithDuplicates,
+                    });
+
+                AssertProblems(report, "xx.yaml/Unreadable/-");
+            });
+
+        runner.Add(
+            "CoverageChecker: 読み込み不能の理由を問題の補足に残す",
+            () =>
+            {
+                var unreadable = LanguageFileReader.Parse("broken.yaml", "Title: \"unterminated\nMenuFile: [1, 2\n");
+
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        unreadable,
+                    });
+
+                AssertProblems(report, "broken.yaml/Unreadable/-");
+                SelfAssert.That(
+                    report.Problems[0].Detail == unreadable.UnreadableReason,
+                    $"読み込み不能の補足には読み込めなかった理由をそのまま期待しましたが、" +
+                    $"「{report.Problems[0].Detail}」でした。");
+            });
+
+        runner.Add(
+            "CoverageChecker: 英語が読み込めないと差し込み位置を比べず、基準が使えないことを残す",
+            () =>
+            {
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        // 英語が読み込めない。
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, "Title: \"unterminated\n"),
+                        // 英語が読めていれば差し込み位置のずれとして挙がる内容。
+                        LanguageFileReader.Parse(
+                            "de.yaml",
+                            "Title: \"T\"\nMenuFile: \"M\"\nTimeStatusFormat: \"{0} Vergangen\"\n"),
+                    });
+
+                SelfAssert.That(
+                    !report.IsReferenceUsable,
+                    "英語が読み込めないので、基準は使えないはずです。");
+
+                // 英語の読み込み不能だけが挙がり、差し込み位置は1件も比べられない。
+                AssertProblems(report, "en.yaml/Unreadable/-");
+            });
+
+        runner.Add(
+            "CoverageChecker: 英語のファイルが1本も無いときも差し込み位置を比べない",
+            () =>
+            {
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(
+                            "de.yaml",
+                            "Title: \"T\"\nMenuFile: \"M\"\nTimeStatusFormat: \"{0} Vergangen\"\n"),
+                    });
+
+                SelfAssert.That(
+                    !report.IsReferenceUsable,
+                    "英語のファイルが無いので、基準は使えないはずです。");
+                AssertProblems(report);
+            });
+
+        runner.Add(
+            "CoverageChecker: 問題の無い入力では問題が0件になる",
+            () =>
+            {
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        LanguageFileReader.Parse(
+                            "ja.yaml",
+                            // 並び順が英語と違っても、差し込み位置の番号の組が同じなら問題にしない。
+                            "TimeStatusFormat: \"{1} / {0}\"\nMenuFile: \"ファイル\"\nTitle: \"大きいフォルダーの検索\"\n"),
+                    });
+
+                AssertProblems(report);
+                SelfAssert.That(
+                    report.IsReferenceUsable,
+                    "英語のファイルは読み込めているので、基準は使えるはずです。");
+                SelfAssert.That(
+                    report.LanguageCount == 2 && report.KeyCount == CoverageKeys.Length,
+                    $"検証した範囲は 言語 2・キー {CoverageKeys.Length} を期待しましたが、" +
+                    $"言語 {report.LanguageCount}・キー {report.KeyCount} でした。");
+            });
+
+        runner.Add(
+            "CoverageChecker: 並び順をファイル名・種類・キーの定義順（孤児はキー名の順）で固定する",
+            () =>
+            {
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        // ファイル名の順とは違う並びで渡し、並べ替えが行われることを確かめる。
+                        LanguageFileReader.Parse(
+                            "zz.yaml",
+                            "MenuFile: \"M\"\nTimeStatusFormat: \"{0}\"\nMenuFile: \"M2\"\n" +
+                            "OldKey: \"x\"\nAnotherKey: \"y\"\n"),
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        LanguageFileReader.Parse("aa.yaml", "Title: \"unterminated\n"),
+                    });
+
+                AssertProblems(
+                    report,
+                    // ファイル名の序数順: aa.yaml → en.yaml → zz.yaml。
+                    "aa.yaml/Unreadable/-",
+                    // 同じファイルの中は種類の順: 重複 → 欠落 → 孤児 → 差し込み位置。
+                    "zz.yaml/Duplicate/MenuFile",
+                    "zz.yaml/Missing/Title",
+                    // 孤児はキー名の序数順（AnotherKey → OldKey）。
+                    "zz.yaml/Orphan/AnotherKey",
+                    "zz.yaml/Orphan/OldKey",
+                    "zz.yaml/PlaceholderMismatch/TimeStatusFormat");
+            });
+
+        runner.Add(
+            "CoverageChecker: 欠落はキー名の順ではなくキーの定義順で並ぶ",
+            () =>
+            {
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        // Title と MenuFile の両方が欠けている。定義順では Title が先。
+                        LanguageFileReader.Parse("de.yaml", "TimeStatusFormat: \"{0} {1}\"\n"),
+                    });
+
+                AssertProblems(
+                    report,
+                    "de.yaml/Missing/Title",
+                    "de.yaml/Missing/MenuFile");
+            });
+
+        runner.Add(
+            "CoverageChecker: 差し込み位置のずれに英語側と当該言語側の組を添える",
+            () =>
+            {
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        LanguageFileReader.Parse(
+                            "de.yaml",
+                            "Title: \"T\"\nMenuFile: \"M\"\nTimeStatusFormat: \"{0} Vergangen\"\n"),
+                    });
+
+                AssertProblems(report, "de.yaml/PlaceholderMismatch/TimeStatusFormat");
+
+                var detail = report.Problems[0].Detail;
+                SelfAssert.That(
+                    detail == "英語={0},{1} 当該={0}",
+                    $"差し込み位置の補足は「英語={{0}},{{1}} 当該={{0}}」を期待しましたが、「{detail}」でした。");
+            });
+
+        runner.Add(
+            "CoverageChecker: 訳文が片方にしか無いキーは差し込み位置を比べない",
+            () =>
+            {
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        // TimeStatusFormat が無い。欠落としてだけ挙がり、差し込み位置のずれにはしない。
+                        LanguageFileReader.Parse("de.yaml", "Title: \"T\"\nMenuFile: \"M\"\n"),
+                        // 英語に無い孤児のキー。孤児としてだけ挙がり、差し込み位置のずれにはしない。
+                        LanguageFileReader.Parse(
+                            "fr.yaml",
+                            "Title: \"T\"\nMenuFile: \"M\"\nTimeStatusFormat: \"{0} {1}\"\nOldKey: \"{9}\"\n"),
+                    });
+
+                AssertProblems(
+                    report,
+                    "de.yaml/Missing/TimeStatusFormat",
+                    "fr.yaml/Orphan/OldKey");
+            });
+
+        runner.Add(
+            "CoverageChecker: 英語と当該言語の双方にあるキーは、LanguageKey に無くても差し込み位置を比べる",
+            () =>
+            {
+                // 差し込み位置の比較の対象は「英語の訳文が存在するキー」である
+                // （design.md: CoverageChecker の事後条件、requirements.md: 3.4）。
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(
+                            CoverageChecker.ReferenceFileName,
+                            ReferenceText + "OldKey: \"{0} of {1}\"\n"),
+                        LanguageFileReader.Parse(
+                            "de.yaml",
+                            "Title: \"T\"\nMenuFile: \"M\"\nTimeStatusFormat: \"{0} {1}\"\nOldKey: \"{0}\"\n"),
+                    });
+
+                // どちらのファイルでも OldKey は孤児であり、加えて de.yaml では差し込み位置がずれている。
+                AssertProblems(
+                    report,
+                    "de.yaml/Orphan/OldKey",
+                    "de.yaml/PlaceholderMismatch/OldKey",
+                    "en.yaml/Orphan/OldKey");
+            });
+
+        runner.Add(
+            "CoverageChecker: 訳文が無い（null の）キーを欠落として報告し、差し込み位置は比べない",
+            () =>
+            {
+                // キーはあっても訳文の値が無い状態は、アプリでは英語に落ちずに例外になる
+                // （LocalizationManager.GetText が値ありとみなして Replace を呼ぶため）。
+                // そのため欠落として報告する（design.md: CoverageChecker の事後条件、
+                // requirements.md: 3.1、3.2）。
+                // 一方、PlaceholderParser.ParseIndexes は null を渡されると例外を投げる契約のため
+                // （tasks.md: Implementation Notes、タスク2.1のレビュー）、差し込み位置の比較からは外す。
+                // 欠落として別に挙がるので、報告が二重になることもない。
+                var entries = new Dictionary<string, string>
+                {
+                    ["Title"] = "T",
+                    ["MenuFile"] = "M",
+                    ["TimeStatusFormat"] = null!,
+                };
+
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        new LanguageFileContent("de.yaml", entries, null, null),
+                    });
+
+                // 欠落1件だけ。差し込み位置のずれは挙がらない（例外にもならない）。
+                AssertProblems(report, "de.yaml/Missing/TimeStatusFormat");
+            });
+
+        runner.Add(
+            "CoverageChecker: 英語側の訳文が無いキーは英語の欠落として挙げ、差し込み位置は比べない",
+            () =>
+            {
+                var referenceEntries = new Dictionary<string, string>
+                {
+                    ["Title"] = "Large Folder Finder",
+                    ["MenuFile"] = "File",
+                    ["TimeStatusFormat"] = null!,
+                };
+
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        new LanguageFileContent(CoverageChecker.ReferenceFileName, referenceEntries, null, null),
+                        // 英語に訳文があれば差し込み位置のずれとして挙がる内容。
+                        // 英語側が null なので比較そのものが行われないことを、この形で確かめる。
+                        LanguageFileReader.Parse(
+                            "de.yaml",
+                            "Title: \"T\"\nMenuFile: \"M\"\nTimeStatusFormat: \"{0} Vergangen\"\n"),
+                    });
+
+                // 英語自身の欠落1件のみ。de.yaml の差し込み位置は比べられない。
+                AssertProblems(report, "en.yaml/Missing/TimeStatusFormat");
+            });
+
+        runner.Add(
+            "CoverageChecker: 事前条件に反する引数を受け付けない",
+            () =>
+            {
+                var files = new[] { LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText) };
+
+                AssertThrows<ArgumentNullException>(
+                    () => CoverageChecker.Check(null!, files),
+                    "期待するキーの一覧が null");
+                AssertThrows<ArgumentNullException>(
+                    () => CoverageChecker.Check(CoverageKeys, null!),
+                    "読み込み結果の一覧が null");
+                AssertThrows<ArgumentException>(
+                    () => CoverageChecker.Check(Array.Empty<string>(), files),
+                    "期待するキーの一覧が空");
+                AssertThrows<ArgumentException>(
+                    () => CoverageChecker.Check(new[] { "Title", "Title" }, files),
+                    "期待するキーの一覧に重複がある");
+            });
+    }
+
+    /// <summary>
+    /// 検証結果の問題の一覧が、期待する並びと内容に完全に一致することを確かめる。
+    /// </summary>
+    /// <param name="report">確かめる検証結果。</param>
+    /// <param name="expected">
+    /// 期待する問題を「ファイル名/種類/キー」の形で並べたもの。キーが無い問題は「-」で表す。
+    /// </param>
+    private static void AssertProblems(CheckReport report, params string[] expected)
+    {
+        var actual = report.Problems.Select(DescribeProblem).ToArray();
+
+        SelfAssert.That(
+            actual.SequenceEqual(expected),
+            $"報告された問題は [{string.Join(" , ", expected)}] を期待しましたが、" +
+            $"[{string.Join(" , ", actual)}] でした。");
+    }
+
+    /// <summary>1件の問題を、比較しやすい「ファイル名/種類/キー」の形に直す。</summary>
+    private static string DescribeProblem(Problem problem)
+    {
+        return $"{problem.FileName}/{problem.Kind}/{problem.Key ?? "-"}";
+    }
+
+    /// <summary>指定した型の例外が送出されることを確かめる。</summary>
+    /// <typeparam name="TException">期待する例外の型。</typeparam>
+    /// <param name="action">実行する処理。</param>
+    /// <param name="description">何を渡した場合かの説明（失敗時の文に使う）。</param>
+    private static void AssertThrows<TException>(Action action, string description)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            throw new SelfCheckFailedException(
+                $"{description} の場合は {typeof(TException).Name} を期待しましたが、" +
+                $"{ex.GetType().Name} が送出されました。");
+        }
+
+        throw new SelfCheckFailedException(
+            $"{description} の場合は {typeof(TException).Name} を期待しましたが、例外は送出されませんでした。");
     }
 
     /// <summary>読み込みに成功していることを確かめる。</summary>
