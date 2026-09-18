@@ -416,3 +416,25 @@
 | `LocalizationCheck.exe check`（Debug・Release） | 問題はありません（言語 13、キー 81） | — | 0 |
 
   - 実行後、`%TEMP%` に `gb_*` の一時フォルダ・ファイルは残っていない
+
+### 3.1 2形態を発行するスクリプト（2026-09-19、コミット 4900ba9 の上で実施）
+- **作ったもの**: `build/Publish.ps1`（Windows PowerShell 5.1 で動くよう UTF-8 BOM 付き・CRLF で保存）。設計（design.md PublishScript）どおり、引数は `-Form SelfContained | FrameworkDependent`（必須）、`-OutputDir`（省略時 `artifacts/publish/<Form>`）、`-Configuration Release | Debug`（既定 Release）
+  - 自己完結: `dotnet publish LargeFolderFinder.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o <OutputDir>`
+  - フレームワーク依存: `dotnet publish LargeFolderFinder.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true -o <OutputDir>`（`--self-contained false` は使わない。dotnet/sdk#51888）
+  - 単一ファイルの圧縮（`EnableCompressionInSingleFile`）は指定しない（既定の無効のまま）。csproj は変えていない
+  - 使い方: `powershell -NoProfile -ExecutionPolicy Bypass -File build/Publish.ps1 -Form SelfContained`（相対の `-OutputDir` は現在の場所が基準）
+- **失敗の扱い**（すべて終了コード 1、標準エラーに「エラー: …」）: `-Form` の省略・不正な値、`-Configuration` の不正な値（`dotnet` を呼ぶ前に止める。大文字小文字の違いは許す）、`dotnet` が無い、`dotnet publish` の失敗（その終了コードを表示）、`dotnet publish` が成功を返しても `LargeFolderFinder.exe` が無い、途中の例外
+- **設計に無い判断（発行先の扱い）**: 前回の発行物が残ったままだと成功と取り違えるため、`artifacts/publish` 配下の発行先は発行の前に消して作り直す。それ以外の場所は利用者のファイルを消さないよう、存在しないか空のフォルダだけを受け付け、空でなければ何も消さずに失敗にする（`artifacts/legacy-net48` などの控えには触れない）
+- **引数の検証の試験**（RED→GREEN）: 偽の `dotnet`（受け取った引数を記録し、指定の終了コードで終わる）を PATH の先頭に置いて8項目を確かめた（試験の道具はリポジトリの外に置き、コミットしない）。スクリプトを作る前は8件中3件が失敗（`dotnet` の失敗の伝播、両形態の引数。スクリプトが無いため）、作った後は8件中0件が失敗
+  - 項目: 不正な形態・形態の省略・不正な構成で非0かつ `dotnet` を呼ばない／`dotnet` の失敗で非0／フレームワーク依存の引数が `--no-self-contained` を含み `--self-contained false` を含まない／自己完結の引数が `--self-contained true`・単一ファイル・`-r win-x64` を含み圧縮を含まない／`dotnet` が成功でも exe が無ければ非0／`artifacts/publish` の外の空でない発行先で非0かつ中身を消さない
+- **実際の発行**（SDK 10.0.401、Release、順番に実施。アプリは起動していない）
+
+| 形態 | 発行先 | `LargeFolderFinder.exe` | ProductVersion | FileVersion | 終了コード |
+|---|---|---|---|---|---|
+| 自己完結 | `artifacts/publish/SelfContained` | 140,586,265 バイト（約140.6MB） | `1.0.3` | `1.0.3.0` | 0 |
+| フレームワーク依存 | `artifacts/publish/FrameworkDependent` | 1,052,929 バイト（約1.05MB） | `1.0.3` | `1.0.3.0` | 0 |
+
+  - 両形態とも exe の隣に `Config.txt`（234 バイト）、`Resources/Languages/*.yaml` 13本、`Resources/Readme/Readme_*.txt` 13本、`Resources/License/`（`LICENSE.txt`、`ThirdPartyNotices.txt`）の2本、`LargeFolderFinder.pdb`（75,868 バイト）が出た。exe 以外のファイルの一覧と大きさは両形態で同じ。pdb を zip に入れないのは 3.3 の仕事
+  - 版の文字列はコミットハッシュが付かない `X.Y.Z` の形（要件2.6）
+  - 設計段階の実測（自己完結 140.8MB、フレームワーク依存 1.28MB）と比べ、フレームワーク依存版が約0.23MB 小さい（差の理由は調べていない）が、いずれも「約140MB」「約1MB」の範囲に収まる
+  - 自己完結版を形態の名前の大文字小文字を変えて（`-Form selfcontained`）もう一度発行し、前回の発行先を消して作り直して同じ大きさになること、フレームワーク依存版の発行を挟んでも自己完結版が 140,586,265 バイトになることを確かめた
