@@ -106,3 +106,66 @@
 - ~~`localization-completeness` の検証ツールの実装順~~ → 2026-09-18 に完成済み。本スペックでは移行の対象になる
 
 ---
+
+## 設計フェーズの実測（2026-09-18、リポジトリの複製で実施）
+
+複製（本物のリポジトリは変更していない）を .NET 10 に移し、発行・起動・比較を実測した。起動試験ではアプリのデータフォルダ名を変え、利用者の設定に触れないようにした。
+
+### 最小の移行とビルド
+- 対象を `net10.0-windows` にし、旧式の `Reference` 11件、Fody・Costura.Fody・`FodyWeavers.xml`、`UseWindowsForms` を外すと、エラーは1件だけ: `Views/MainWindow.xaml.cs` の `File.GetAccessControl(path)`（.NET 10 に無い）。`new FileInfo(path).GetAccessControl()` で解消する。ギャップ分析の一覧に無かった箇所
+- 警告は移行前 0件 → 移行後 5件（WPF の二重コンパイルで表示は10件）。`Helpers/RelayCommand.cs` の null 許容の注釈（CS8767 ×2、CS8612 ×1）と、所有者の取得の null の扱い（CS8602 ×2）。要件1.1 を満たすにはこの5件を直す
+- `UseWindowsForms` を外しても `MessageBox` を含めて問題なし。Ookii.Dialogs.Wpf は残してもビルドできるが、`OpenFolderDialog`（`Title`、`InitialDirectory`、`FolderName`、`ShowDialog(owner)`）への置き換えもビルドできる
+
+### SDK の版ごとの発行と起動
+| SDK | 自己完結の単一 exe | `--no-self-contained` | `--self-contained false` |
+|---|---|---|---|
+| 10.0.108 / 10.0.112（1xx） | 起動可（約140MB） | 起動可（約1MB） | 起動可だが**自己完結になる**（約132MB）＝ sdk#51888 を再現 |
+| 10.0.303 / 10.0.401 | 起動可（約140MB） | 起動可（約1MB） | 起動可（約1MB） |
+
+- wpf#11678（フォルダ名による無言終了）は、空白・日本語・括弧を含むフォルダでも再現しなかった（10.0.112、10.0.303、10.0.401）。2xx 系は手元に無く未確認
+- 自己完結版に同梱されるランタイムは SDK の版で決まる。2026-09-08 のセキュリティ修正（ランタイム 10.0.12）を含むのは SDK 10.0.401 と 10.0.112 だけ
+
+### 発行物
+- `Config.txt` と `Resources/` 配下（言語13、Readme 13、ライセンス2）は、既存の `Content` の設定のまま exe の隣に出る。追加の指定は不要。アプリはそこから言語ファイルを読めた
+- `LargeFolderFinder.pdb` も発行フォルダに出る
+- 大きさ（10.0.401）: 自己完結 140.8MB（zip 118.2MB）、フレームワーク依存 1.28MB（zip 1.08MB）。`EnableCompressionInSingleFile=true` は展開後 65.4MB になるが **zip は 119.2MB で縮まず**、ウィンドウが出るまでが 0.2〜0.6 秒遅くなる
+
+### バージョン表示
+- 発行した exe も、**現行の net48 ビルドも**、`ProductVersion` は `1.0.3+<コミットハッシュ>`。今の SDK の既定の動き。`IncludeSourceRevisionInInformationalVersion=false` で `1.0.3` だけになる
+
+### 実行ファイルのパス
+- `MainModule.FileName` と `Environment.ProcessPath` は、自己完結・フレームワーク依存の単一 exe のどちらでも exe 自身を返す。`dotnet X.dll` の形で起動したときは両方とも dotnet.exe を返すので、置き換えても差はない。`AppContext.BaseDirectory` は常に exe のフォルダ
+
+### 走査結果の同等性（GoldenBaseline を net10 にして実測）
+- `AccessControlGate.cs` を `DirectoryInfo` の拡張メソッドに置き換えるとビルドできる
+- `compare`: 終了コード 1、差分12件。**既知の欠落4件が `[Unexpected]` として現れ、それを含む親フォルダ8件のサイズが 0→8 に変わった**。走査の報告の「説明できない欠落」は0件、アクセス拒否のフォルダのスキップは移行前と同じ。要件4.1 の想定どおり
+- `selfcheck`: **128件中13件が失敗**。13件すべて「net48 では長いパスを作れない・列挙できない」ことを前提にした項目（例: 260文字超のフォルダ作成が成功してしまう、既知の欠落が4件出るはずが0件）
+
+### 翻訳の網羅の検証ツール、依存
+- `Tools/LocalizationCheck` は対象を変えるだけで、`selfcheck` 59件成功・`check` 問題0件。YamlDotNet 18.1.0 でも同じ結果。アプリの `Config.txt` も 16.3.0 と 18.1.0 の両方で正しく読めた
+- MessagePack 3.1.8 と 3.1.9（2026-09-17 公開）でビルド・発行でき、脆弱性の登録なし。net48 が書いた設定とセッションを net10 が読め、逆も読めた（読み直して保存した結果はバイト単位で一致）
+- net10 では推移的依存が MessagePack.Annotations などに減り、net48 で入っていた `System.Memory` などは不要になる
+
+## 設計判断（実測を受けて）
+
+### Decision: SDK は 10.0.4xx 系に固定する
+- **Context**: 要件5.6、5.7。自己完結版は SDK に付いているランタイムを同梱して配る
+- **Alternatives**: (1) 10.0.303（手元と CI に既にある） (2) 10.0.401（最新、ランタイム 10.0.12） (3) 10.0.112（1xx、`--self-contained false` の不具合あり）
+- **Selected**: `global.json` で `10.0.401`、`rollForward: latestPatch`（4xx 系のパッチだけ追う）
+- **Rationale**: 自己完結版に最新のセキュリティ修正を含むランタイムを入れるため。4xx 系は実測で起動・発行とも問題がなかった
+- **Trade-offs**: 開発者の PC に SDK 10.0.4xx の導入が要る（手元には 10.0.303 までしかない）
+
+### Decision: 単一ファイルの圧縮は使わない
+- zip の大きさが縮まず、起動が遅くなるだけのため
+
+### Decision: テストは検証ツールの実行ファイルを呼び、終了コードで判定する
+- **Context**: 要件6.2、6.5（既存の判定を作り直さない）
+- **Alternatives**: (1) テストが検証ツールの部品（`FixtureBuilder`、`ScanRunner`、`BaselineComparer` など）を組み立て直す (2) テストが検証ツールの `compare`・`selfcheck`・`check` を子プロセスで実行し、終了コードと出力で判定する
+- **Selected**: (2)
+- **Rationale**: 判定の組み立てを重複させず、開発者が手で打つコマンドと CI とテストが同じ入口を通る
+
+### Decision: GoldenBaseline の自己検証のうち、net48 の制約を前提にした13件を書き直す
+- 要件7.5 が守るのは「期待値の形式」と「判定の規則」で、実行基盤の制約を確かめる自己検証項目はその外にある。移行後の事実（長いパスを作れる・列挙できる）に合わせて期待を改め、改めた項目と理由を記録する
+
+### Decision: バージョン文字列からコミットハッシュを外す
+- 要件2.6 の「余分な付加情報のない形」に合わせ、`IncludeSourceRevisionInInformationalVersion=false` とする。現行のビルドにも付いていたことは記録に残す
