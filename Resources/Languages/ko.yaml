@@ -63,6 +63,8 @@ HeaderName: "이름"
 HeaderSize: "크기"
 HeaderDate: "수정 날짜"
 HeaderType: "유형"
+HeaderOwner: "소유자"
+ContextShowOwner: "소유자 표시"
 ContextOpen: "열기"
 
 ####### Result #######

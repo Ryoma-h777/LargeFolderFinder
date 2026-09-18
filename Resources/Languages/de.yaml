@@ -63,6 +63,8 @@ HeaderName: "Name"
 HeaderSize: "Größe"
 HeaderDate: "Datum"
 HeaderType: "Typ"
+HeaderOwner: "Besitzer"
+ContextShowOwner: "Besitzer anzeigen"
 ContextOpen: "Öffnen"
 
 ####### Result #######

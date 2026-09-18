@@ -63,6 +63,8 @@ HeaderName: "名稱"
 HeaderSize: "大小"
 HeaderDate: "修改日期"
 HeaderType: "類型"
+HeaderOwner: "擁有者"
+ContextShowOwner: "顯示擁有者"
 ContextOpen: "開啟"
 
 ####### Result #######

@@ -63,6 +63,8 @@ HeaderName: "Nome"
 HeaderSize: "Dimensione"
 HeaderDate: "Data"
 HeaderType: "Tipo"
+HeaderOwner: "Proprietario"
+ContextShowOwner: "Mostra proprietario"
 ContextOpen: "Apri"
 
 ####### Result #######

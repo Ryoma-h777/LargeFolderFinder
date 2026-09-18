@@ -63,6 +63,8 @@ HeaderName: "नाम"
 HeaderSize: "आकार"
 HeaderDate: "दिनांक"
 HeaderType: "प्रकार"
+HeaderOwner: "स्वामी"
+ContextShowOwner: "स्वामी दिखाएं"
 ContextOpen: "खोलें"
 
 ####### Result #######

@@ -63,6 +63,8 @@ HeaderName: "Имя"
 HeaderSize: "Размер"
 HeaderDate: "Дата изменения"
 HeaderType: "Тип"
+HeaderOwner: "Владелец"
+ContextShowOwner: "Показать владельца"
 ContextOpen: "Открыть"
 
 ####### Result #######

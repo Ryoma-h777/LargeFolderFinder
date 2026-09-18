@@ -63,6 +63,8 @@ HeaderName: "Ad"
 HeaderSize: "Boyut"
 HeaderDate: "Tarih"
 HeaderType: "Tür"
+HeaderOwner: "Sahip"
+ContextShowOwner: "Sahibi Göster"
 ContextOpen: "Aç"
 
 ####### Result #######
