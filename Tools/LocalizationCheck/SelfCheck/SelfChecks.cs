@@ -73,6 +73,13 @@ public sealed class SelfCheckRunner
 {
     private readonly List<(string Name, Action Assertion)> _checks = new();
 
+    /// <summary>登録済みの検証項目の数。</summary>
+    /// <remarks>
+    /// 登録そのものが消えていないことを自己検証の項目から確かめるために公開している
+    /// （tasks.md: Implementation Notes、タスク1.2のレビュー）。
+    /// </remarks>
+    public int Count => _checks.Count;
+
     /// <summary>
     /// 検証項目を登録する。assertion が例外を送出した場合、その項目は失敗として扱われる。
     /// </summary>
@@ -121,6 +128,16 @@ public sealed class SelfCheckRunner
 /// </remarks>
 internal static class SelfChecks
 {
+    /// <summary>
+    /// 登録されているべき検証項目の数の下限（タスク2.4 の完了時点の実数）。
+    /// </summary>
+    /// <remarks>
+    /// 登録の呼び出しが誤って消えても気づけるようにするための値
+    /// （tasks.md: Implementation Notes、タスク1.2のレビュー）。
+    /// 項目を増やすのは歓迎なので「以上」で判定し、減ったときだけ失敗させる。
+    /// </remarks>
+    private const int MinimumCheckCount = 50;
+
     public static void Register(SelfCheckRunner runner)
     {
         if (runner == null)
@@ -131,6 +148,33 @@ internal static class SelfChecks
         RegisterPlaceholderParserChecks(runner);
         RegisterLanguageFileReaderChecks(runner);
         RegisterCoverageCheckerChecks(runner);
+        RegisterReportWriterChecks(runner);
+        RegisterRegistrationChecks(runner);
+    }
+
+    /// <summary>
+    /// 自己検証の登録そのものを見張る検証項目を登録する
+    /// （tasks.md: Implementation Notes、タスク1.2のレビュー）。
+    /// </summary>
+    /// <remarks>
+    /// 部品ごとの登録の呼び出しが消えると、残った項目だけが全部成功して「問題なし」に見えてしまう。
+    /// 別の入れ物へ登録し直して数を数えることで、その壊れ方をこの1項目で捕まえる。
+    /// 数えるだけで実行はしないため、ここから登録が再帰することはない。
+    /// </remarks>
+    private static void RegisterRegistrationChecks(SelfCheckRunner runner)
+    {
+        runner.Add(
+            "SelfChecks: 登録された検証項目の数が想定以上である",
+            () =>
+            {
+                var probe = new SelfCheckRunner();
+                Register(probe);
+
+                SelfAssert.That(
+                    probe.Count >= MinimumCheckCount,
+                    $"登録された検証項目は {MinimumCheckCount} 件以上を期待しましたが、{probe.Count} 件でした。" +
+                    "どこかの登録が消えている可能性があります。");
+            });
     }
 
     /// <summary>
@@ -788,6 +832,249 @@ internal static class SelfChecks
                     () => CoverageChecker.Check(new[] { "Title", "Title" }, files),
                     "期待するキーの一覧に重複がある");
             });
+    }
+
+    /// <summary>
+    /// ReportWriter の検証項目を登録する
+    /// （design.md: Testing Strategy / Unit Tests 5、requirements.md: 3.2〜3.6、3.9、3.10）。
+    /// </summary>
+    /// <remarks>
+    /// 行の形式と要約の文面は、design.md: Io / ReportWriter に挙げられた例をそのまま期待値にしている。
+    /// 検証結果は手で組み立てるものと、<see cref="CoverageChecker"/> に作らせるものの両方を使う。
+    /// 前者は行の形式そのものを、後者は判定の層が作る補足と報告の層の前置きが噛み合うことを押さえる。
+    /// </remarks>
+    private static void RegisterReportWriterChecks(SelfCheckRunner runner)
+    {
+        runner.Add(
+            "ReportWriter: 読み込み不能の行をファイル名と理由で出す",
+            () =>
+            {
+                var lines = ReportWriter.Format(ReportOf(
+                    new Problem(
+                        ProblemKind.Unreadable,
+                        "xx.yaml",
+                        null,
+                        "SyntaxErrorException: While scanning a quoted scalar")));
+
+                AssertLines(
+                    lines,
+                    "[読み込み不能] xx.yaml: SyntaxErrorException: While scanning a quoted scalar",
+                    "問題 1 件（言語 13、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: 重複の行をファイル名とキーで出す",
+            () =>
+            {
+                var lines = ReportWriter.Format(ReportOf(
+                    new Problem(ProblemKind.Duplicate, "de.yaml", "HeaderSize", null)));
+
+                AssertLines(
+                    lines,
+                    "[重複] de.yaml: HeaderSize",
+                    "問題 1 件（言語 13、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: 欠落の行をファイル名とキーで出す",
+            () =>
+            {
+                var lines = ReportWriter.Format(ReportOf(
+                    new Problem(ProblemKind.Missing, "de.yaml", "HeaderOwner", null)));
+
+                AssertLines(
+                    lines,
+                    "[欠落] de.yaml: HeaderOwner",
+                    "問題 1 件（言語 13、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: 孤児の行をファイル名とキーで出す",
+            () =>
+            {
+                var lines = ReportWriter.Format(ReportOf(
+                    new Problem(ProblemKind.Orphan, "de.yaml", "OldKey", null)));
+
+                AssertLines(
+                    lines,
+                    "[孤児] de.yaml: OldKey",
+                    "問題 1 件（言語 13、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: 差し込み位置の行にキーと英語側・当該言語側の組を添える",
+            () =>
+            {
+                var lines = ReportWriter.Format(ReportOf(
+                    new Problem(
+                        ProblemKind.PlaceholderMismatch,
+                        "de.yaml",
+                        "TimeStatusFormat",
+                        "英語={0},{1} 当該={0}")));
+
+                AssertLines(
+                    lines,
+                    "[差し込み位置] de.yaml: TimeStatusFormat 英語={0},{1} 当該={0}",
+                    "問題 1 件（言語 13、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: 差し込み位置の行が CoverageChecker の作る補足をそのまま続ける",
+            () =>
+            {
+                // 行の形式を手書きの期待値だけで確かめると、判定の層が作る補足の形（番号が無い側の
+                // 「（なし）」を含む）と食い違っていても気づけない。実際に CoverageChecker に
+                // 作らせた検証結果を整形して、前置きと補足が噛み合うことを確かめる。
+                var report = CoverageChecker.Check(
+                    CoverageKeys,
+                    new[]
+                    {
+                        LanguageFileReader.Parse(CoverageChecker.ReferenceFileName, ReferenceText),
+                        // Title は英語に差し込み位置が無く当該言語にある（英語側が「（なし）」）。
+                        // TimeStatusFormat はその逆（当該言語側が「（なし）」）。
+                        LanguageFileReader.Parse(
+                            "de.yaml",
+                            "Title: \"{0}\"\nMenuFile: \"M\"\nTimeStatusFormat: \"Vergangen\"\n"),
+                    });
+
+                AssertLines(
+                    ReportWriter.Format(report),
+                    "[差し込み位置] de.yaml: Title 英語=（なし） 当該={0}",
+                    "[差し込み位置] de.yaml: TimeStatusFormat 英語={0},{1} 当該=（なし）",
+                    "問題 2 件（言語 2、キー 3）");
+            });
+
+        runner.Add(
+            "ReportWriter: 問題が無いときは言語とキーの数を添えて問題なしと要約する",
+            () =>
+            {
+                var report = new CheckReport(Array.Empty<Problem>(), 13, 81, isReferenceUsable: true);
+
+                AssertLines(ReportWriter.Format(report), "問題はありません（言語 13、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: 問題があるときは件数と、言語とキーの数を添えて要約する",
+            () =>
+            {
+                var report = new CheckReport(
+                    new[]
+                    {
+                        new Problem(ProblemKind.Missing, "de.yaml", "HeaderOwner", null),
+                        new Problem(ProblemKind.Missing, "de.yaml", "ContextShowOwner", null),
+                        new Problem(ProblemKind.Missing, "ko.yaml", "HeaderOwner", null),
+                    },
+                    13,
+                    81,
+                    isReferenceUsable: true);
+
+                var lines = ReportWriter.Format(report);
+
+                SelfAssert.That(
+                    lines[lines.Count - 1] == "問題 3 件（言語 13、キー 81）",
+                    $"要約は「問題 3 件（言語 13、キー 81）」を期待しましたが、" +
+                    $"「{lines[lines.Count - 1]}」でした。");
+            });
+
+        runner.Add(
+            "ReportWriter: 英語が使えないときは要約の直前に検証不能の行を出す",
+            () =>
+            {
+                var report = new CheckReport(
+                    new[] { new Problem(ProblemKind.Unreadable, "en.yaml", null, "中身が空") },
+                    13,
+                    81,
+                    isReferenceUsable: false);
+
+                AssertLines(
+                    ReportWriter.Format(report),
+                    "[読み込み不能] en.yaml: 中身が空",
+                    "[検証不能] en.yaml が無いか読み込めないため、差し込み位置を検証できません",
+                    "問題 1 件（言語 13、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: 英語が使えず問題も無いときも、検証不能の行を添えて問題なしと要約する",
+            () =>
+            {
+                var report = new CheckReport(Array.Empty<Problem>(), 13, 81, isReferenceUsable: false);
+
+                AssertLines(
+                    ReportWriter.Format(report),
+                    "[検証不能] en.yaml が無いか読み込めないため、差し込み位置を検証できません",
+                    "問題はありません（言語 13、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: 問題の並びを変えない（並べ替えは判定の層の役目）",
+            () =>
+            {
+                // わざと「ファイル名・種類・キー」の規定の並びとは違う順で渡す。
+                // 報告の層が並べ直してしまうと、この期待値と食い違って失敗する。
+                var report = new CheckReport(
+                    new[]
+                    {
+                        new Problem(ProblemKind.Orphan, "zz.yaml", "OldKey", null),
+                        new Problem(ProblemKind.Missing, "aa.yaml", "HeaderOwner", null),
+                        new Problem(ProblemKind.Unreadable, "mm.yaml", null, "中身が空"),
+                    },
+                    3,
+                    81,
+                    isReferenceUsable: true);
+
+                AssertLines(
+                    ReportWriter.Format(report),
+                    "[孤児] zz.yaml: OldKey",
+                    "[欠落] aa.yaml: HeaderOwner",
+                    "[読み込み不能] mm.yaml: 中身が空",
+                    "問題 3 件（言語 3、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: キーも補足も無い問題でも行が尻切れにならない",
+            () =>
+            {
+                // Problem の型はキーも補足も無い組み合わせを許す。今の LanguageFileReader は
+                // 読み込み不能の理由を必ず添えるためこの形は生じないが、備えの分岐を置いた以上、
+                // 壊すと落ちる項目を用意しておく（tasks.md: Implementation Notes、タスク2.2のレビュー）。
+                var lines = ReportWriter.Format(ReportOf(
+                    new Problem(ProblemKind.Unreadable, "xx.yaml", null, null)));
+
+                AssertLines(
+                    lines,
+                    "[読み込み不能] xx.yaml: （詳細なし）",
+                    "問題 1 件（言語 13、キー 81）");
+            });
+
+        runner.Add(
+            "ReportWriter: 検証結果が null のときは例外にする",
+            () => AssertThrows<ArgumentNullException>(
+                () => ReportWriter.Format(null!),
+                "検証結果が null"));
+    }
+
+    /// <summary>
+    /// 1件の問題だけを持つ検証結果を作る（行の形式を確かめる項目で使う）。
+    /// </summary>
+    /// <remarks>
+    /// 言語の数とキーの数は、実データと同じ 13・81 に固定して要約の文面も併せて確かめられるようにする。
+    /// </remarks>
+    private static CheckReport ReportOf(Problem problem)
+    {
+        return new CheckReport(new[] { problem }, 13, 81, isReferenceUsable: true);
+    }
+
+    /// <summary>
+    /// 報告の行が、期待する並びと文面に完全に一致することを確かめる。
+    /// </summary>
+    /// <param name="actual">整形された報告の行。</param>
+    /// <param name="expected">期待する行（最終行は要約）。</param>
+    private static void AssertLines(IReadOnlyList<string> actual, params string[] expected)
+    {
+        SelfAssert.That(
+            actual.SequenceEqual(expected),
+            $"報告の行は [{string.Join(" / ", expected)}] を期待しましたが、" +
+            $"[{string.Join(" / ", actual)}] でした。");
     }
 
     /// <summary>
