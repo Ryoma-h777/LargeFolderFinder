@@ -195,3 +195,39 @@
   - 検証ツールの実行後、`%TEMP%` に `gb_fix_*` の一時フォルダは残っていない
 - **バージョン管理から外したもの**: `.gitignore` に `artifacts/` を加えた
 - **移行前の版の控え**: `artifacts/legacy-net48/` に、上の手順でビルドした **Release 構成**の出力（`bin/Release/net48/`）一式をそのまま複製した（`LargeFolderFinder.exe`、`.exe.config`、`.pdb`、`Config.txt`、`Languages/`、`Readme/`、`License/`、`Resources/`）。exe の `FileVersion` は `1.0.3.0`、`ProductVersion` は `1.0.3+48d8a5dfddf57a4e87216a730bd78560073d8b40`。要件4.4 の確認（5.4）で使う
+
+### 2.1 アプリのプロジェクト設定の移行（2026-09-19、コミット fbfc66a の上で実施）
+- **対象の変更**: `LargeFolderFinder.csproj` の `TargetFramework` を `net48` から `net10.0-windows` に変えた。`UseWPF=true` は維持
+- **加えたもの**: `RuntimeIdentifier=win-x64`、`IncludeSourceRevisionInInformationalVersion=false`。`DefaultItemExcludes` に `Tests\**`、`build\**`、`artifacts\**` を加えた（既存の `TestPerf\**`、`Tools\**` はそのまま）
+- **依存の版**: MessagePack 3.1.7 → 3.1.9、YamlDotNet 16.3.0 → 18.1.0（`obj/project.assets.json` で解決された版を確認）
+- **取り除いたもの**（要件1.6、3.1）
+  - 不要な UI 基盤の指定: `UseWindowsForms=true`（`System.Windows.Forms` の使用は0件。外しても `MessageBox` を含めてビルドできた）
+  - 旧式の `Reference` 11件: `System`、`System.Data`、`System.Xml`、`Microsoft.CSharp`、`System.Core`、`System.Xaml`、`WindowsBase`、`PresentationCore`、`PresentationFramework`、`System.Net.Http`、`System.Configuration`
+  - 依存 DLL の埋め込みの仕組み: パッケージ `Fody` 6.8.2 と `Costura.Fody` 6.0.0、設定ファイル `FodyWeavers.xml`（`<Costura DisableCompression="false" />` のみ）と `FodyWeavers.xsd`。単一ファイルの発行は 3.1 のスクリプトで行う
+- **API の置き換え**（要件1.4）: `Views/MainWindow.xaml.cs` の所有者の取得で、.NET 10 に無い `File.GetAccessControl(path)` を `new FileInfo(path).GetAccessControl()`（`System.IO.FileSystemAclExtensions`）に置き換えた。フォルダ側は既に `new DirectoryInfo(path).GetAccessControl()` だったので変えていない。null の扱いの明示は 2.2 で行う
+  - 置き換え前のビルド（Debug）: エラー1件 `Views/MainWindow.xaml.cs(779,37): error CS1929: 'File' に 'GetAccessControl' の定義が含まれておらず…`、警告4件
+- **この時点で残したもの**
+  - `Ookii.Dialogs.Wpf` 5.0.1（2.3 で標準のダイアログに置き換える。.NET 10 でもビルドでき、出力に `Ookii.Dialogs.Wpf.dll` が出る）
+  - 見つけたが移行に不要なため残したもの（設計の Non-Goals）: 未使用の P/Invoke 2件 `Helpers/Win32.cs` の `ShowWindow`（59行）と `GetCompressedFileSize`（78行）、未使用の定数 `Models/AppConstants.cs` の `AppIconFileName`（39行）
+- **変えていないもの**: `Version`、`Title`、`Copyright`、`AssemblyName`、`RootNamespace`、`Nullable`、`LangVersion`、`Content` の設定。アセンブリのタイトル（アプリデータのフォルダ名の元、要件1.3）は移行前の exe と同じ `LargeFolderFinder`（`FileDescription` で確認）
+- **アプリのプロジェクト単体のビルド**（`dotnet build LargeFolderFinder.csproj -c <構成> --no-incremental`、順番に実施）
+
+| 構成 | 結果 | エラー | 警告（表示） | 警告（重複を除く） | 終了コード |
+|---|---|---|---|---|---|
+| Debug | 成功 | 0 | 10 | 5 | 0 |
+| Release | 成功 | 0 | 10 | 5 | 0 |
+
+  - 警告は WPF の二重コンパイル（`*_wpftmp.csproj` と本体）で同じものが2回ずつ表示される。重複を除いた5件は設計の予測と一致した
+
+| 設計の予測 | 実際の警告 |
+|---|---|
+| `Helpers/RelayCommand.cs` CS8767 | `(17,21)` `CanExecute(object parameter)` と `ICommand.CanExecute(object? parameter)` の null 許容の不一致 |
+| `Helpers/RelayCommand.cs` CS8767 | `(22,21)` `Execute(object parameter)` と `ICommand.Execute(object? parameter)` の null 許容の不一致 |
+| `Helpers/RelayCommand.cs` CS8612 | `(27,35)` `event EventHandler CanExecuteChanged` と `event EventHandler? ICommand.CanExecuteChanged` の不一致 |
+| 所有者の取得 CS8602 | `Views/MainWindow.xaml.cs(779,37)` ファイルの所有者（`GetOwner(...)` の戻り値の `ToString()`） |
+| 所有者の取得 CS8602 | `Views/MainWindow.xaml.cs(783,37)` フォルダの所有者（同上） |
+
+  - 5件の解消は 2.2 で行う。この時点では抑制していない
+- **出力**: 出力先は `RuntimeIdentifier` の指定により `bin/<構成>/net10.0-windows/win-x64/` になった（移行前は `bin/<構成>/net48/`）。`Config.txt` と `Resources/`（言語13、Readme 13、ライセンス2）が隣に出る。Release の `LargeFolderFinder.dll` の `ProductVersion` は `1.0.3`（移行前の exe は `1.0.3+48d8a5d…`）、`FileVersion` は `1.0.3.0`
+  - 依存の DLL として `MessagePack.dll`、`MessagePack.Annotations.dll`、`Microsoft.NET.StringTools.dll`（MessagePack の推移的依存）、`YamlDotNet.dll`、`Ookii.Dialogs.Wpf.dll` が出る。著作権表示の見直し（5.1）で扱う
+- ソリューション全体のビルドは、検証ツールが net48 のままのため 2.5 まで通らない（実施していない）

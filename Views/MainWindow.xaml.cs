@@ -776,7 +776,7 @@ namespace LargeFolderFinder
                     {
                         if (node.IsFile)
                         {
-                            owner = File.GetAccessControl(path).GetOwner(typeof(System.Security.Principal.NTAccount)).ToString();
+                            owner = new FileInfo(path).GetAccessControl().GetOwner(typeof(System.Security.Principal.NTAccount)).ToString();
                         }
                         else
                         {
