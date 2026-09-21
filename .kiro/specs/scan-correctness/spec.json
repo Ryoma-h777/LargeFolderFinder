@@ -1,0 +1,22 @@
+{
+  "feature_name": "scan-correctness",
+  "created_at": "2026-09-21T20:51:22Z",
+  "updated_at": "2026-09-21T21:03:42Z",
+  "language": "ja",
+  "phase": "design-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": false
+    },
+    "tasks": {
+      "generated": false,
+      "approved": false
+    }
+  },
+  "ready_for_implementation": false
+}

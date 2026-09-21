@@ -2,17 +2,17 @@
 
 ## Overview
 
-**Purpose**: Large Folder Finder の実行基盤を .NET Framework 4.8 から .NET 10 へ移し、後続のすべてのスペックが前提とする土台（長いパスを扱える基盤、テストの基盤、自動ビルド）を整える。
+**Purpose**: Large Folder Finder の実行基盤を .NET Framework 4.8 から .NET 10 へ移し、後続のすべてのスペックが前提とする土台（長いパスを扱える基盤、テストの基盤、手元で完結する配布物の生成手順）を整える。
 
-**Users**: 利用者は、ランタイムの導入が要らない自己完結版と、軽いフレームワーク依存版のどちらかを入手して、これまでと同じ操作で使う。開発者は、タグを送るだけで2形態の配布物と下書きのリリースが用意され、変更のたびにテストと検証ツールが自動で走る環境で作業する。
+**Users**: 利用者は、ランタイムの導入が要らない自己完結版と、軽いフレームワーク依存版のどちらかを入手して、これまでと同じ操作で使う。開発者は、発行・テスト・起動確認・梱包の決まった手順を手元で実行して2形態の配布物を用意し、GitHub の画面でリリースを作る環境で作業する（GitHub Actions は 2026-09-21 の利用者の決定により使わない。経緯は research.md の「5.3 自動ビルドの取り止め」を参照）。
 
-**Impact**: アプリのプロジェクト設定を差し替え、コードは .NET 10 で使えない API と新たに出る警告の箇所だけを直す。フォルダ選択ダイアログを標準のものに置き換える。検証ツール2つを .NET 10 に移し、テストプロジェクト、CI、発行・梱包・起動確認のスクリプトを新設する。走査結果の期待値データを、移行で現れる既知の欠落4件を含む形に更新する。
+**Impact**: アプリのプロジェクト設定を差し替え、コードは .NET 10 で使えない API と新たに出る警告の箇所だけを直す。フォルダ選択ダイアログを標準のものに置き換える。検証ツール2つを .NET 10 に移し、テストプロジェクト、発行・梱包・起動確認のスクリプトを新設する。走査結果の期待値データを、移行で現れる既知の欠落4件を含む形に更新する。
 
 ### Goals
 - `net10.0-windows` でビルドでき、警告が移行前（0件）から増えない
-- 自己完結の単一 exe（既定）とフレームワーク依存の単一 exe を、同じ手順で手元と CI の両方で作れる
-- タグの push で、2形態のビルド・起動確認・zip・下書きのリリースまでが自動で行われる
-- テストが期待値データとの突き合わせと翻訳の網羅の検証を行い、CI で毎回走る
+- 自己完結の単一 exe（既定）とフレームワーク依存の単一 exe を、手元で何度実行しても同じ手順で作れる
+- 発行・起動確認・梱包のスクリプトを手元で順に実行し、GitHub の画面でリリースを作れる
+- テストが期待値データとの突き合わせと翻訳の網羅の検証を行い、手元でのビルドのたびに走る
 - 走査結果の差が既知の欠落4件とその親のサイズだけであることを確かめ、期待値データを更新する
 
 ### Non-Goals
@@ -32,7 +32,7 @@
 - 移行に伴うコードの修正（.NET 10 に無い API の置き換え、フォルダ選択ダイアログの置き換え、移行で増えた警告の解消）
 - 2つの検証ツールの対象フレームワークの変更と、実行基盤の変更で壊れる箇所の修正（GoldenBaseline の ACL の API と、net48 の制約を前提にした自己検証13件）
 - テストプロジェクト `Tests/LargeFolderFinder.Tests`
-- 発行・梱包・起動確認のスクリプト（`build/`）と CI（`.github/workflows/`）
+- 発行・梱包・起動確認のスクリプト（`build/`）
 - 走査結果の期待値データ `baselines/fixture-v1.golden.txt` の更新と、その記録
 - 依存の版（MessagePack、YamlDotNet、CommunityToolkit.Mvvm の下限の記録）と `Resources/License/ThirdPartyNotices.txt`
 - 利用者向けの案内（`README.md`）と steering の移行後の事実への更新
@@ -47,18 +47,17 @@
 ### Allowed Dependencies
 - .NET 10 SDK（`global.json` で固定）と Windows Desktop ランタイム
 - NuGet: MessagePack、YamlDotNet（アプリ）、xunit.v3（テストのみ。配布物に含めない）
-- GitHub Actions の `windows-2025` ランナー、`actions/checkout`、`actions/setup-dotnet`、`gh`（ランナーに同梱）
 - 検証ツール → アプリ本体（`ProjectReference`、読み取り専用。現状のまま）
 - テスト → 検証ツールの実行ファイル（子プロセスとして起動）
 - アプリ本体は、検証ツール・テスト・スクリプトのいずれにも依存しない
 
 ### Revalidation Triggers
-- SDK の版を変えるとき → 2形態の発行と起動確認、検証ツールとテストを再実行する（`global.json` の変更は必ず CI を通す）
+- SDK の版を変えるとき → 2形態の発行と起動確認、検証ツールとテストを手元で再実行する
 - 発行の設定（単一ファイル、自己完結、同梱ファイル）を変えるとき → 発行物の中身と起動確認、利用者向けの案内を見直す
 - YamlDotNet の版を変えるとき → `Tools/LocalizationCheck` の `selfcheck`（重複キー・空のファイル・値の無いキーの扱い）とアプリの `Config.txt` の読み込みを確かめる
 - MessagePack の版を変えるとき → 移行前の設定・セッションを読めることを確かめる
 - 期待値データを更新したとき → `scan-correctness`、`scan-performance` はこの更新後の期待値を基準にする
-- CI の終了コードの扱いや検証ツールの入口を変えるとき → 後続のすべてのスペックの検証手順に影響する
+- 発行・梱包・起動確認の手順や検証ツールの入口を変えるとき → 後続のすべてのスペックの検証手順に影響する
 
 ## Architecture
 
@@ -83,28 +82,20 @@ graph TB
         Package[Package script]
         Launch[Launch check script]
     end
-    subgraph CI
-        CiWorkflow[CI workflow]
-        ReleaseWorkflow[Release workflow]
-    end
     Golden --> App
     Loc --> App
     Tests --> Golden
     Tests --> Loc
-    CiWorkflow --> Tests
-    ReleaseWorkflow --> Tests
-    ReleaseWorkflow --> Publish
     Publish --> App
-    ReleaseWorkflow --> Launch
-    ReleaseWorkflow --> Package
     Package --> Publish
+    Launch --> Publish
 ```
 
 **Architecture Integration**:
 - **採用した型**: 段階を分けた移行（research.md の Option B）。各段階の終わりで、既存の期待値データとの比較と検証ツールが成立する位置に区切る
-- **スクリプトを単一の入口にする**: 発行・梱包・起動確認は PowerShell スクリプトにまとめ、開発者の手元と CI が同じスクリプトを呼ぶ（要件5.8）。ワークフローはスクリプトを呼ぶだけの薄い層にする
+- **スクリプトを単一の入口にする**: 発行・梱包・起動確認は PowerShell スクリプトにまとめ、開発者が手元で毎回同じスクリプトを呼ぶ（要件5.8）
 - **テストは検証ツールの入口を使う**: テストは検証ツールの実行ファイルを子プロセスで起動し、終了コードと出力で判定する。判定の組み立てを重複させない（要件6.5）
-- **依存の向き**: アプリ ← 検証ツール ← テスト ← CI。スクリプトはアプリのプロジェクトを外から発行するだけで、アプリはどれにも依存しない
+- **依存の向き**: アプリ ← 検証ツール ← テスト。スクリプトはアプリのプロジェクトを外から発行するだけで、アプリはどれにも依存しない
 
 ### Technology Stack
 
@@ -115,8 +106,7 @@ graph TB
 | App packages | MessagePack 3.1.9、YamlDotNet 18.1.0 | 保存データ、設定と言語ファイル | どちらも実測でビルド・読み書きを確認済み |
 | MVVM（記録のみ） | CommunityToolkit.Mvvm 8.4.2 以上 | 後続スペックで導入 | 8.4.0 は .NET 10 でビルド不能 |
 | Test | xunit.v3 4.x（Microsoft Testing Platform v2） | テストの基盤 | テスト専用。配布物に含めない |
-| Scripts | Windows PowerShell 5.1 互換の `.ps1` | 発行・梱包・起動確認 | 開発者の PC と CI の両方で動く |
-| CI | GitHub Actions `windows-2025`、`actions/setup-dotnet`、`gh` | ビルド・テスト・下書きリリース | SDK は `global.json` から入れる |
+| Scripts | Windows PowerShell 5.1 互換の `.ps1` | 発行・梱包・起動確認 | 開発者の PC で動く |
 
 ## File Structure Plan
 
@@ -127,9 +117,6 @@ build/
 ├── Publish.ps1                              # 2形態の発行（自己完結 / フレームワーク依存）。発行先と形態を引数で受ける
 ├── Package.ps1                              # 発行物から配布用の zip を2つ作る（pdb を除く、構成を検査する）
 └── Test-Launch.ps1                          # exe を起動し、ウィンドウが出て生きていることを確かめて閉じる
-.github/workflows/
-├── ci.yml                                   # push と pull request: ビルド、テスト、検証ツール
-└── release.yml                              # バージョンのタグ: 版の照合、発行、起動確認、zip、下書きのリリース
 Tests/LargeFolderFinder.Tests/
 ├── LargeFolderFinder.Tests.csproj           # net10.0-windows、xunit.v3。検証ツールを参照（出力だけを使う）
 ├── ToolRunner.cs                            # 検証ツールの実行ファイルを探して子プロセスで実行し、終了コードと出力を返す
@@ -156,27 +143,19 @@ Tests/LargeFolderFinder.Tests/
 
 ## System Flows
 
-### リリースの流れ（タグの push）
+### リリースの流れ（手元の手順）
 
 ```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant GH as GitHub Actions
-    participant Scripts as build scripts
-    participant Rel as GitHub Releases
-    Dev->>GH: push tag vX.Y.Z
-    GH->>GH: check tag equals csproj Version
-    GH->>GH: build and run tests
-    GH->>Scripts: Publish both forms
-    GH->>Scripts: Test-Launch each exe
-    GH->>Scripts: Package two zips
-    GH->>Rel: create draft release with two zips
-    Dev->>Rel: review and publish manually
+graph LR
+    Build[Build solution and run tests] --> PublishForms[Publish both forms]
+    PublishForms --> Launch[Test-Launch each exe]
+    Launch --> Package[Package two zips]
+    Package --> Release[Create release on GitHub screen]
 ```
 
 **判定の分岐**:
-- タグと csproj の `Version` が一致しない、テストが失敗する、起動確認が失敗する、梱包の検査が失敗する → その時点で失敗として止め、下書きは作らない
-- 同じタグの下書きが既にある → 失敗として止める（上書きしない）
+- ビルドの警告、テストの失敗、起動確認の失敗、梱包の検査の失敗のいずれかが起きたとき → その時点で作業を止め、原因を直してからやり直す（次の手順に進めない）
+- 上記のすべてが成功したことを確かめたうえで、開発者が GitHub の画面でリリースを作り、2つの zip を添える（自動では作らない）
 
 ### 移行の段階
 
@@ -184,14 +163,14 @@ sequenceDiagram
 graph LR
     Stage1[Stage1 prepare on net48] --> Stage2[Stage2 retarget app and tools]
     Stage2 --> Stage3[Stage3 publish and package]
-    Stage3 --> Stage4[Stage4 tests and CI]
+    Stage3 --> Stage4[Stage4 tests]
     Stage4 --> Stage5[Stage5 docs and records]
 ```
 
 - **段階1（net48 のまま）**: `global.json` の追加と、SDK 10.0.4xx で net48 のビルド・検証ツールが今までどおり通ることの確認。フォルダ選択ダイアログの置き換えはこの段階では行わない（`OpenFolderDialog` は .NET 8 以降にしか無いため）
 - **段階2**: アプリと検証ツールの対象の変更、依存の更新、API と警告の修正。ここで期待値データとの差を測り、既知の4件だけであることを確かめて更新する
 - **段階3**: 発行・梱包・起動確認のスクリプト
-- **段階4**: テストプロジェクトと CI
+- **段階4**: テストプロジェクト（当初はここで CI も新設する計画だったが、2026-09-21 の利用者の決定で取り止めた。経緯は research.md の「5.3 自動ビルドの取り止め」を参照）
 - **段階5**: 案内と記録の更新
 
 ## Requirements Traceability
@@ -224,22 +203,22 @@ graph LR
 | 4.3 | 期待値を更新し内訳を記録 | GoldenBaselineTool | `update` | 段階2 |
 | 4.4 | 保存データ・設定・ログが引き続き動く | 手動確認、LaunchCheck | — | 段階2・3 |
 | 4.5 | 長いパス対応の実装をしない | 境界（`Scanner.cs` に触れない） | — | — |
-| 5.1 | タグで2形態をビルドし書庫に | ReleaseWorkflow、PublishScript、PackageScript | — | リリース |
-| 5.2 | 起動を確かめ、失敗を報告 | ReleaseWorkflow、LaunchCheck | `Test-Launch.ps1` | リリース |
-| 5.3 | 下書きのリリースを作る | ReleaseWorkflow | `gh release create --draft` | リリース |
-| 5.4 | 公開は人が行う | ReleaseWorkflow（公開しない） | — | リリース |
-| 5.5 | 変更のたびにビルドとテスト | CiWorkflow | — | — |
+| 5.1 | 手元の手順で2形態をビルドし書庫に | PublishScript、PackageScript | — | リリース |
+| 5.2 | 起動を確かめ、失敗を報告 | LaunchCheck | `Test-Launch.ps1` | リリース |
+| 5.3 | GitHub の画面でリリースを作り書庫を添える | Docs（release 手順） | — | リリース |
+| 5.4 | 公開は人が行う | Docs（release 手順） | — | リリース |
+| 5.5 | 変更を送る前にビルドとテスト | TestProject | `dotnet test` | — |
 | 5.6 | SDK の版を固定し記録 | GlobalJson、Docs | `global.json` | — |
 | 5.7 | 問題があれば版を変えて記録 | GlobalJson、Docs（手順） | — | — |
 | 5.8 | 手元でも同じ手順 | PublishScript、PackageScript、LaunchCheck | 各スクリプト | — |
 | 6.1 | テストを1つのコマンドで | TestProject | `dotnet test` | — |
 | 6.2 | 期待値との突き合わせ | TestProject（GoldenBaselineTests） | `compare` | — |
-| 6.3 | CI でテストを実行し、失敗で止める | CiWorkflow、ReleaseWorkflow | — | — |
+| 6.3 | ビルドの手順でテストを実行し、失敗を見逃さない | TestProject | `dotnet test` | — |
 | 6.4 | 環境の制約で成立しないときは区別して報告 | TestProject（スキップ） | 終了コード 2 の扱い | — |
 | 6.5 | 既存の判定を作り直さない | TestProject（ToolRunner） | 子プロセス | — |
 | 7.1 | 走査結果の検証ツールが同じ入口で動く | GoldenBaselineTool | コマンドと終了コード | 段階2 |
 | 7.2 | 使えなくなる API の置き換え | GoldenBaselineTool（AccessControlGate） | — | 段階2 |
-| 7.3 | 翻訳の網羅の検証ツールが動き、CI で判定 | LocalizationCheckTool、TestProject、CiWorkflow | `check` | 段階2・4 |
+| 7.3 | 翻訳の網羅の検証ツールが動き、テストで判定 | LocalizationCheckTool、TestProject | `check` | 段階2・4 |
 | 7.4 | 自己検証がすべて成功 | GoldenBaselineTool、LocalizationCheckTool | `selfcheck` | 段階2 |
 | 7.5 | 判定規則を変えない | GoldenBaselineTool（自己検証の前提だけを改める） | — | 段階2 |
 | 8.1 | 記録を移行後の事実に | Docs（steering） | — | 段階5 |
@@ -259,9 +238,7 @@ graph LR
 | PackageScript | ビルドの道具 | 発行物から zip を作り、構成を検査する | 2.7, 5.1, 5.8 | PublishScript (P0) | Batch |
 | LaunchCheck | ビルドの道具 | exe が起動して使える状態になるかを確かめる | 2.3, 2.4, 4.4, 5.2, 5.8 | PublishScript (P0) | Batch |
 | TestProject | テスト | 検証ツールを呼び、結果を成否として示す | 6.1, 6.2, 6.4, 6.5, 7.3 | GoldenBaselineTool (P0), LocalizationCheckTool (P0) | Batch |
-| CiWorkflow | CI | 変更のたびにビルド・テストを走らせる | 5.5, 6.3, 7.3 | TestProject (P0) | Batch |
-| ReleaseWorkflow | CI | タグから下書きのリリースまでを作る | 5.1, 5.2, 5.3, 5.4, 6.3 | 各スクリプト (P0), TestProject (P0) | Batch |
-| Docs | 記録 | 案内・著作権表示・steering を移行後の事実に | 2.8, 3.6, 3.7, 5.6, 8.1, 8.2, 8.3 | — | — |
+| Docs | 記録 | 案内・著作権表示・steering・release 手順を移行後の事実に | 2.8, 3.6, 3.7, 5.3, 5.4, 5.6, 8.1, 8.2, 8.3 | — | — |
 
 ### プロジェクト設定
 
@@ -286,7 +263,7 @@ graph LR
 }
 ```
 - 4xx 系のパッチ（10.0.402 以降）は自動で使い、3xx 系や 5xx 系には移らない
-- 版を変えるときは、2形態の発行・起動確認・テストを CI で通し、選んだ版と理由を steering の tech.md に記録する（要件5.7）
+- 版を変えるときは、2形態の発行・起動確認・テストを手元で通し、選んだ版と理由を steering の tech.md に記録する（要件5.7）
 
 ### アプリのコード
 
@@ -354,7 +331,7 @@ graph LR
 - 引数: `-ExePath`、`-TimeoutSeconds`（既定 20）
 - 処理: exe を起動し、プロセスが生きていてメインウィンドウのハンドルが得られるまで待つ。得られたらウィンドウを閉じる要求を送り、決められた時間内に終わらなければ**自分が起動したそのプロセスだけ**を終了させる
 - 判定: ウィンドウが出る前にプロセスが終了した、または時間内にウィンドウが出なかった → 終了コード 1（exe の標準エラーの出力や終了コードを添えて報告する）
-- 実行時の注意: 起動するとアプリはアプリデータ配下に設定とログを書く。CI では使い捨ての環境なので問題ない。開発者の手元で使うときは、そのことを案内に書く
+- 実行時の注意: 起動するとアプリはアプリデータ配下に設定とログを書く。開発者の手元で使うときは、実行前にアプリデータを退避し、終わったら戻すことを案内に書く
 
 ### テスト
 
@@ -370,28 +347,18 @@ graph LR
 - **環境の制約の扱い**（要件6.4）: 検証ツールが終了コード 2（エラー）を返した場合、出力から原因が実行環境の制約（権限のないフォルダを作れない、パスの長さの制約など、ツールが報告する「生成できなかった項目」）と判断できるときはテストを**スキップ**として報告し、成功と区別する。それ以外の 2 は失敗にする
 - 配布物に含めない（アプリのプロジェクトから参照しない）
 
-### CI（`.github/workflows/`）
+### リリースの手順（記録・手動）
 
-#### CiWorkflow（`ci.yml`）
-- 契機: すべてのブランチへの push と pull request
-- 手順: チェックアウト → `global.json` に従って SDK を入れる → `dotnet build LargeFolderFinder.sln -c Release -warnaserror`（警告が1件でもあれば失敗。要件1.1）→ `dotnet test --solution LargeFolderFinder.sln -c Release --no-build`（テストの中で検証ツールが走る）
-- 失敗したら全体を失敗にする（要件5.5、6.3、7.3）
+2026-09-21 の利用者の決定により GitHub Actions は使わない（`.github/workflows/ci.yml` と `release.yml` は削除済み。経緯は research.md の「5.3 自動ビルドの取り止め」を参照）。ビルド・テスト・発行・起動確認・梱包・リリースの作成は、すべて開発者が手元で次の順に行う（要件5.1〜5.5、6.3、7.3）。
 
-#### ReleaseWorkflow（`release.yml`）
-- 契機: `v*` のタグの push。手動実行（`workflow_dispatch`）は既定のブランチに定義が無いと使えないため、契機にしない
-- 試験: 本番のタグと区別できる試験用のタグ（`vX.Y.Z-test.N`）でも動く。試験用のタグでは、版の照合は `-` より前だけを比べ、下書きのタイトルに試験である印を付ける。試験後はタグと下書きを削除する
-- 権限: `contents: write`（下書きのリリースを作るため。他の権限は与えない）
-- 手順:
-  1. タグ `vX.Y.Z`（試験用は `-` より前）と csproj の `Version` の一致を確かめる。不一致なら失敗
-  2. ビルドとテスト（CiWorkflow と同じ手順）
-  3. `Publish.ps1` で2形態を発行し、発行した exe の `ProductVersion` が `X.Y.Z` の形（コミットハッシュが付かない）であることを確かめる（要件2.6）
-  4. `Test-Launch.ps1` で2つの exe を起動確認（要件5.2）
-  5. `Package.ps1` で zip を2つ作る
-  6. `gh release create <tag> --draft --title <tag> --notes <2つの配布物の違いの定型文>` に2つの zip を添える。同じタグのリリースが既にあれば失敗させる（上書きしない）
-- 公開（下書きの解除）はしない（要件5.4）
+1. `dotnet build LargeFolderFinder.sln -c Release -warnaserror`（警告が1件でもあれば失敗。要件1.1、5.5）
+2. `dotnet test --solution LargeFolderFinder.sln -c Release --no-build`（テストの中で検証ツールが走る。要件6.3、7.3）
+3. `build/Publish.ps1` を `-Form SelfContained`・`-Form FrameworkDependent` の順で実行し、発行した exe の `ProductVersion` が `X.Y.Z` の形（コミットハッシュが付かない）であることを確かめる（要件2.6、5.1）
+4. `build/Test-Launch.ps1` で2つの exe を起動確認する（要件5.2）
+5. `build/Package.ps1` で zip を2つ作る（要件5.1）
+6. GitHub の画面でリリースを作り、2つの zip を添える。公開の操作も開発者が行う（要件5.3、5.4）
 
-**Implementation Notes**
-- **Risks**: ホスト型ランナーで GUI の起動確認が成立するかは未確認（公開情報が食い違う）。最初に試験用のタグで確かめる。成立しない場合の代替は、起動確認を「プロセスが決められた時間生き続けること」に弱め、その判断を記録する。アプリ側に確認用の起動引数を加える案は、アプリの挙動を増やすため本スペックでは採らない
+いずれかの手順が失敗したら、その時点で止めて原因を直し、次の手順には進まない。
 
 ### 記録
 
@@ -400,27 +367,27 @@ graph LR
 - `Resources/License/ThirdPartyNotices.txt`: Ookii.Dialogs.Wpf、Fody、Costura.Fody を削除。自己完結版に同梱される .NET ランタイム（MIT）を加える。MessagePack の節の同梱物を実態に合わせる。xunit.v3 は配布物に含まないので載せない
 - steering `tech.md`: 実行基盤、依存、発行と配布、`global.json` と SDK の版の理由、コマンド（ビルド、発行、テスト、検証ツールの新しい場所）、テストの節、既知の制約（自己完結版の大きさ、フォルダ数の事前カウントに残る長さの制限）、CommunityToolkit.Mvvm の下限 8.4.2。「.NET Framework 4.8 を維持」の判断を移行後の判断（利用者の決定と理由）に置き換える
 - steering `product.md`: 「ランタイム導入不要（.NET Framework 4.8 は Windows 標準搭載）」を、自己完結版での事実に改める
-- steering `structure.md`: `build/`、`.github/`、`Tests/` の所在と役割
+- steering `structure.md`: `build/`、`Tests/` の所在と役割
 
 ## Error Handling
 - スクリプトは失敗を終了コードで返し、途中の成果物を成功として扱わない
-- リリースの流れは、どこで失敗しても下書きを作らない（部分的なリリースを残さない）
+- リリースの手順は、どこかの手順が失敗したら次の手順に進めない（発行や梱包が済んでいない状態で zip やリリースを作らない）
 - テストは、検証ツールの終了コード 2 のうち環境の制約に由来するものだけをスキップにし、それ以外は失敗にする
 
 ## Testing Strategy
 
-### 自動（CI とテストプロジェクト）
-1. アプリのビルドの警告が0件であること（要件1.1。CI のビルドを `-warnaserror` で行う）
+### 手元での実行（ビルドとテストプロジェクト）
+1. アプリのビルドの警告が0件であること（要件1.1。手元のビルドを `-warnaserror` で行う）
 2. `GoldenBaseline` の `selfcheck`（書き直した13件を含む）と `compare`（更新後の期待値と一致）が 0（要件4、7.1、7.4）
 3. `LocalizationCheck` の `selfcheck` と `check` が 0（要件3.5、7.3）
 4. 2形態の発行物について、構成の検査と起動確認が通ること（要件2.1〜2.4、2.7、5.2）
-5. 版の文字列が `X.Y.Z` の形であること（ReleaseWorkflow が発行した exe の `ProductVersion` を確かめる。要件2.6）
+5. 版の文字列が `X.Y.Z` の形であること（発行した exe の `ProductVersion` を確かめる。要件2.6）
 
 ### 移行時に一度だけ行う確認（記録に残す）
 1. 更新前の期待値との `compare` の差が、既知の4件と親8件のサイズだけであること（要件4.1）
 2. 移行前の設定とセッションを移行後のアプリが読めること（要件4.4。実測済みの手順を再実行する）
 3. 手元で2形態の発行・梱包・起動確認のスクリプトが通ること（要件5.8）
-4. CI で、試験用の手動実行により下書きのリリースが作られること（要件5.1〜5.4）
+4. 取り止め（2026-09-21）。CI のホスト型ランナーでの試験用の手動実行による下書きリリースの確認は行わない。経緯は research.md の「5.3 自動ビルドの取り止め」を参照。代わりに5.4は、開発者が手元の2つの zip を GitHub の画面で実際にリリースへ添付できることを確認した（research.md「5.4 移行全体の確認と利用者の確認手順」）
 
 ### 手動での確認（利用者）
 1. 自己完結版と軽量版の両方で、フォルダの選択（新しいダイアログ。説明の文言と開始フォルダ）、走査、タブ、並べ替え、絞り込み、コピー、言語の切り替え、設定ファイル・Readme・ライセンスの表示が移行前と同じであること（要件1.2、1.5、3.2、3.3）
