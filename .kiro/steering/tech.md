@@ -89,17 +89,17 @@ Win32 側では `FindExInfoBasic`（代替名を取得しない）と `FIND_FIRS
 - Visual Studio（任意。.NET 10 SDK を使える版。`LargeFolderFinder.sln` を同梱）
 
 ### SDK の版
-`global.json` で **SDK 10.0.401、`rollForward: latestPatch`**（4xx 系のパッチだけを追い、3xx・5xx には移らない）に固定し、テストの実行方式（`Microsoft.Testing.Platform`）も指定しています。CI も `actions/setup-dotnet` がこのファイルから SDK を入れます。
+`global.json` で **SDK 10.0.401、`rollForward: latestPatch`**（4xx 系のパッチだけを追い、3xx・5xx には移らない）に固定し、テストの実行方式（`Microsoft.Testing.Platform`）も指定しています。
 
 - **理由**: 自己完結版は SDK に付いているランタイムを同梱して配るため、2026-09-08 のセキュリティ修正（ランタイム 10.0.12）を含む SDK を選んだ（該当は 10.0.401 と 10.0.112）。4xx 系は実測で発行・起動とも問題がなかった
 - 1xx 系は `--self-contained false` が効かず自己完結になる不具合（dotnet/sdk#51888）がある。2xx 系は WPF と単一ファイル発行の組み合わせで起動時の例外・無言終了の報告（dotnet/wpf#11678）がある
-- **版を変えるとき**: `global.json` を変え、ビルド・テスト・2形態の発行・起動確認・梱包を通す（`global.json` の変更は必ず CI を通し、リリースのワークフローは試験用のタグで確かめる）。同梱するランタイムの版が変わるので `Resources/License/ThirdPartyNotices.txt` の .NET ランタイムの節を見直す。選んだ版と理由をこの節に記録する
+- **版を変えるとき**: `global.json` を変え、ビルド・テスト・2形態の発行・起動確認・梱包を通す。同梱するランタイムの版が変わるので `Resources/License/ThirdPartyNotices.txt` の .NET ランタイムの節を見直す。選んだ版と理由をこの節に記録する
 
 ### コマンド
 リポジトリ直下で実行します。**ビルドは順番に行う**（検証ツールとテストは同じアプリのプロジェクトを参照するため、同時にビルドすると出力の取り合いになる）。
 
 ```bash
-# ビルド（アプリ・検証ツール2つ・テスト。CI と同じく警告を失敗として扱う）
+# ビルド（アプリ・検証ツール2つ・テスト。警告を失敗として扱う）
 dotnet build LargeFolderFinder.sln -c Release -warnaserror
 
 # テスト（直下に csproj と sln が並ぶのでソリューションを明示する。構成はビルドとそろえる）
@@ -130,25 +130,29 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build/Package.ps1
 - 発行は `build/Publish.ps1` が行う。自己完結は `--self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true`、フレームワーク依存は `--no-self-contained -p:PublishSingleFile=true`（`--self-contained false` は使わない）。**単一ファイルの圧縮は使わない**（zip が縮まず、起動が遅くなるだけのため）
 - `Config.txt` と `Resources/`（言語・Readme・ライセンス）は csproj の `Content` の設定で exe の隣に出る。zip は `build/Package.ps1` が exe・`Config.txt`・言語・Readme・ライセンスだけで作り（pdb などは入れない）、2つの zip の構成が exe の大きさを除いて一致することを検査する
 - 版の文字列は `IncludeSourceRevisionInInformationalVersion=false` でコミットハッシュを付けない `X.Y.Z` の形にする
-- **リリース**: csproj の `Version` を上げ、`vX.Y.Z` のタグを push すると、`.github/workflows/release.yml` が版の照合・ビルドとテスト・2形態の発行・起動確認・梱包を行い、2つの zip を添えた**下書き**のリリースを作る。公開は人が GitHub の画面で行う。ワークフローを試すときは試験用のタグ `vX.Y.Z-test.N` を使い（手動実行は契機にしていない）、試験後にタグと下書きを消す
-- 変更の push と pull request では `.github/workflows/ci.yml` がビルド（`-warnaserror`）とテストを行う。どちらのワークフローも dotnet CLI と Microsoft Testing Platform の利用統計の送信を環境変数で止めている
+- **リリースは手作業で行う**（2026-09-21 利用者の決定。自動ビルドは使わない。経緯は decisions.md）。csproj の `Version` を上げ、次を順に実行して2つの zip を作り、GitHub の画面でリリースを作って添付する
+  1. `dotnet build LargeFolderFinder.sln -c Release -warnaserror`
+  2. `dotnet test --solution LargeFolderFinder.sln -c Release --no-build`
+  3. `build/Publish.ps1 -Form SelfContained` と `build/Publish.ps1 -Form FrameworkDependent`
+  4. `build/Test-Launch.ps1 -ExePath <各 exe>`
+  5. `build/Package.ps1`
 
 ## 既知の制約
 
 - **自己完結版は約140MB**。WPF がトリミングに非対応（dotnet/wpf#3811）のため削れない。軽さが要る利用者にはフレームワーク依存版を案内する
 - **フォルダ数の事前カウントに長さの制限が残る**。本スキャンは長いパスを列挙できるが、事前カウントの P/Invoke は MAX_PATH の制約を受け、長いパスの配下を数え損ねる（進捗率の分母がずれる）。解消は `scan-correctness` の範囲
-- **CI はコードを変えていなくても失敗しうる**。ビルドは警告を失敗として扱うため、使っているパッケージ（.NET 10 では推移的な依存も監査の対象）に脆弱性が新たに公表されただけで、NuGet の監査の警告（`NU1901`〜`NU1904`）が出て CI が失敗する。失敗の原因がこの警告かどうかをログの警告の番号で見分け、コードの変更による失敗と取り違えない
+- **ビルドはコードを変えていなくても失敗しうる**。警告を失敗として扱うため、使っているパッケージ（.NET 10 では推移的な依存も監査の対象）に脆弱性が新たに公表されただけで、NuGet の監査の警告（`NU1901`〜`NU1904`）が出てビルドが失敗する。失敗の原因がこの警告かどうかを警告の番号で見分け、コードの変更による失敗と取り違えない
 - **梱包は構成外のファイルを黙って除く**。発行の設定を変えるときは、発行フォルダに exe 以外の dll が出ていないかを確かめる（出ても zip から黙って抜ける。現状は `IncludeNativeLibrariesForSelfExtract=true` でネイティブ DLL も exe に入るので出ない）
-- **手元の起動確認で、閉じたアプリのプロセスが消えずに残ったことが1回ある**（終了済みのままスレッドが残り、発行先の exe がロックされる。OS 側の I/O の完了待ちとみられ、PC の再起動で解消する）。起動確認の出力は管で受けず、ファイルに取る。CI の起動確認の手順には `timeout-minutes` を付けてある
+- **手元の起動確認で、閉じたアプリのプロセスが消えずに残ったことが1回ある**（終了済みのままスレッドが残り、発行先の exe がロックされる。OS 側の I/O の完了待ちとみられ、PC の再起動で解消する）。起動確認の出力は管で受けず、ファイルに取る
 
 ## 主要な技術判断とその理由
 
 - **.NET 10 へ移行し、2形態で配る** — 移行前の実行基盤（.NET Framework）では 260 文字を超えるパスが走査から無言で漏れる欠陥を直せないため。後続のスペックが前提とする土台（長いパスを扱える基盤、テストの基盤、自動ビルド）もこの移行で整えた（roadmap.md）。移行で失われる「ランタイム導入不要」は自己完結版で守り、失われる「実行ファイルの軽さ」はフレームワーク依存版で補う（2026-09-17 利用者の決定）
 - **MessagePack + LZ4** — MessagePack は JSON や YAML より読み書きが速くコンパクトなため採用した。起動時に不要な巨大データを読まないよう、アプリ設定（`Settings.msgpack`）とタブごとの結果（`Sessions/`）を別ファイルに分けている。LZ4 圧縮によるデータ量の削減は、コード中のコメントでは 50〜70% とされるが、計測の記録はない
 - **単一 exe の配布** — zip を解凍して exe をダブルクリックするだけ、という利用体験を守るため。依存 DLL は実行基盤の単一ファイルの発行で exe に入れる（埋め込みの外部の仕組みは使わない）
-- **発行・梱包・起動確認はスクリプトを単一の入口にする** — 開発者の手元と CI が同じ `build/*.ps1` を呼び、ワークフローはそれを呼ぶだけの薄い層にする
+- **発行・梱包・起動確認はスクリプトを単一の入口にする** — 手順を `build/*.ps1` に閉じ込め、いつでも同じ入口から呼べるようにする
 - **ローカライズは `enum LanguageKey` の名前を文字列キーとして YAML を辞書引き** — `GetText` は `key.ToString()` で解決し、見つからなければ `en.yaml` にフォールバックする。**YAML 側の並び順は問わない**（`LanguageKey` の宣言コメントもこの実態に合わせてある）
-  - キー追加時は enum と**全 13 言語の YAML** に追加する。欠落しても例外にはならず英語表示に落ちるため、**翻訳漏れが発覚しにくい**。欠落・差し込み位置（`{0}` など）のずれ・重複は `Tools/LocalizationCheck` の `check` で確かめる（テストと CI でも走る）
+  - キー追加時は enum と**全 13 言語の YAML** に追加する。欠落しても例外にはならず英語表示に落ちるため、**翻訳漏れが発覚しにくい**。欠落・差し込み位置（`{0}` など）のずれ・重複は `Tools/LocalizationCheck` の `check` で確かめる（テストでも走る）
   - ただし **`Key:` と書いて訳文の値を省くと、英語に落ちずに `GetText` の中で例外になる**（値が null のまま `Replace` を呼ぶため）。検証ツールはこれを欠落として報告する
   - 単位名（KB・GB など）は訳さないと決めた例外がある（decisions.md の「単位の名前を翻訳すること」）
 

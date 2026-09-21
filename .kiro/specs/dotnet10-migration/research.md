@@ -647,3 +647,45 @@
 
   - 発行は `-OutputDir` にスクラッチの空のフォルダを渡した。`artifacts/publish/SelfContained` は 4.3 で残ったプロセスが exe をロックしているため触れていない。`build/Test-Launch.ps1` はアプリを起動するため実行していない（3.2・4.3 で確認済み）
   - zip は 3.3 より両方とも約13.4KB（13,425・13,424 バイト）大きい。exe の大きさは同じなので、5.1 で著作権表示が約92KB に増えた分とみられる
+
+### 5.3 自動ビルドの取り止め（2026-09-21、コミット 33b1c52 の上で実施）
+
+**経緯**
+
+タスク5.3 のために `refactor/modernization` を GitHub へ push したところ、拒否された。
+
+```
+! [remote rejected] refactor/modernization -> refactor/modernization
+  (refusing to allow an OAuth App to create or update workflow
+   `.github/workflows/ci.yml` without `workflow` scope)
+```
+
+保存されている認証情報に `workflow` スコープが無く、`.github/workflows/` を含むコミットを送れないためである。これを機に利用者から「GitHub Actions を使う意味が見えていない」という疑問が出たため、費用対効果を評価し直した。
+
+**評価**
+
+- ワークフローは `build/Publish.ps1` → `Test-Launch.ps1` → `Package.ps1` を呼ぶだけの薄い層であり、**発行・起動確認・梱包は Actions が無くても手元で同じことができる**
+- Actions が追加で提供するのは「クリーンな環境でのビルドとテストの確認」と「下書きのリリースの自動作成」の2点のみ
+- GUI アプリの起動確認がホスト型ランナーで成立するかは不明で、タスク5.3 の定義自体が代替手段への切り替えを織り込んでいた（設計時点で弱いと認識されていた）
+- 本プロジェクトは単独開発でリリース頻度が低く、ロードマップが掲げる4つの目的（可読性・技術的追従・速度・UI）のいずれにも Actions は直接寄与しない
+
+**決定**
+
+**GitHub Actions は使わない。** `.github/workflows/ci.yml` と `release.yml` を削除した。
+
+- ビルドとテストは手元で `dotnet build LargeFolderFinder.sln -c Release -warnaserror` と `dotnet test --solution LargeFolderFinder.sln -c Release --no-build` を実行する
+- リリースは `build/` の3スクリプトを順に実行して2つの zip を作り、GitHub の画面でリリースを作って添付する
+- 4.2・4.3 の成果物は削除したが、タスク自体は当時の完了条件を満たしていたため `[x]` のまま残し、削除した旨を追記した
+
+**本来 5.3 で確かめるはずだった事項の扱い**
+
+| 事項 | 扱い |
+|---|---|
+| クリーンな環境でのビルドとテスト | 行わない。手元での実行で代替する |
+| 下書きのリリースの zip の中身の照合 | 5.4 で手元の zip を直接確かめる |
+| CI のログでスキップが0件であること | 手元での実測に置き換える。2026-09-21 の実行で8件すべて成功・スキップ0件を確認済み |
+| ランナーでの GUI 起動確認の成否 | 対象外。起動確認は手元で行う |
+
+**注意**
+
+ワークフローのファイルは過去のコミットの履歴に残るため、**このブランチを push するには `workflow` スコープを持つ認証が必要**である（削除するコミットを足しても、履歴に作成したコミットがある限り拒否される）。履歴の書き換えは96コミットに対して割に合わないと判断し、認証側を直す方針とした。

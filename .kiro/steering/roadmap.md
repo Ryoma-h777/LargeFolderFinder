@@ -30,7 +30,7 @@ Large Folder Finder v1.0.3 は、2025年11月〜2026年1月ごろの旧世代 AI
   - 走査速度の最適化
   - アーキテクチャの整理（コードビハインドの肥大解消、MVVM の徹底）
   - UI の視認性改善とデザイントークンの整備
-  - ゴールデンデータによる安全網と GitHub Actions による CI
+  - ゴールデンデータによる安全網
   - 旧 AI が生成した設計ドキュメントからの要望・仕様の抽出と保全
 
 - **Out**:
@@ -54,8 +54,8 @@ Large Folder Finder v1.0.3 は、2025年11月〜2026年1月ごろの旧世代 AI
 
 ### 技術的制約（実現性検証で確定した事項、2026年9月時点）
 - **.NET 10 は LTS、サポート終了は 2028年11月14日。** .NET 8 / 9 はいずれも 2026年11月10日に終了するため移行先にならない
-- **`--self-contained false` は .NET 10 SDK で機能しない**（[dotnet/sdk#51888](https://github.com/dotnet/sdk/issues/51888) オープン中）。CI では必ず `--no-self-contained` を使う
-- **WPF + PublishSingleFile に SDK 10.0.200 / 10.0.202 のリグレッションあり**（[dotnet/wpf#11678](https://github.com/dotnet/wpf/issues/11678) 未トリアージ）。`global.json` で SDK を固定し、生成した exe の起動確認を CI に組み込む
+- **`--self-contained false` は .NET 10 SDK で機能しない**（[dotnet/sdk#51888](https://github.com/dotnet/sdk/issues/51888) オープン中）。発行では必ず `--no-self-contained` を使う
+- **WPF + PublishSingleFile に SDK 10.0.200 / 10.0.202 のリグレッションあり**（[dotnet/wpf#11678](https://github.com/dotnet/wpf/issues/11678) 未トリアージ）。`global.json` で SDK を固定し、生成した exe の起動確認を発行の手順に組み込む
 - **apphost は long path aware ではない**（[dotnet/runtime#43555](https://github.com/dotnet/runtime/issues/43555)）。BCL 経由なら 260 文字制限を受けないが、**手書き P/Invoke が1つでも残ると制限を受ける**。したがって長いパス対応には **P/Invoke の全廃が必須条件**
 - **日本語を含む260文字超のパスで失敗する未解決の報告あり**（[dotnet/runtime#126535](https://github.com/dotnet/runtime/issues/126535)）。日本語パスを扱うツールのため実機検証が必須
 - WPF はトリミング非対応（[dotnet/wpf#3811](https://github.com/dotnet/wpf/issues/3811) オープン中）。自己完結版のサイズ削減は期待できない
@@ -63,7 +63,7 @@ Large Folder Finder v1.0.3 は、2025年11月〜2026年1月ごろの旧世代 AI
 
 ### 配布形態
 - **自己完結・単一exe 版（既定）とフレームワーク依存版（軽量）の2種類を併置**する
-- GitHub Actions（公開リポジトリは無料）で両方を自動生成し、リリース作業を増やさない
+- 発行・起動確認・梱包は `build/` のスクリプトで行い、リリース作業を増やさない（2026-09-21 の決定で自動ビルドは使わない）
 
 ### 資料の保全
 - 旧 AI が生成した設計ドキュメントは `docs/` 配下に42フォルダ存在するが、**`.gitignore` の `/docs/` により Git 管理外**である
@@ -89,7 +89,7 @@ Large Folder Finder v1.0.3 は、2025年11月〜2026年1月ごろの旧世代 AI
 - [x] scan-golden-baseline -- 現行版の走査結果をパス→サイズの一覧として固定し、変更前後を比較する仕組みを整える。移行をまたぐ安全網。Dependencies: none
 - [x] requirements-preservation -- `docs/` 配下42フォルダの設計ドキュメントから要望・仕様・設計判断の要点を抽出し、`.kiro/steering/` へ保全する。Dependencies: none
 - [x] localization-completeness -- 11言語で欠落している翻訳キーを補完し、`LanguageKey` と全13言語の YAML の網羅を機械的に検証する仕組みを設ける。Dependencies: none
-- [ ] dotnet10-migration -- .NET 10 への移行、Costura.Fody の除去と PublishSingleFile 化、Ookii.Dialogs.Wpf の削除、依存バージョンの更新、`global.json` による SDK 固定、GitHub Actions による2形態の自動ビルド。Dependencies: scan-golden-baseline
+- [ ] dotnet10-migration -- .NET 10 への移行、Costura.Fody の除去と PublishSingleFile 化、Ookii.Dialogs.Wpf の削除、依存バージョンの更新、`global.json` による SDK 固定、2形態の発行・起動確認・梱包のスクリプト化。Dependencies: scan-golden-baseline
 - [ ] scan-correctness -- 手書き P/Invoke の全廃、260文字超パスへの対応と日本語パスでの実機検証、走査中の暫定ツリー共有による競合の解消、例外の握りつぶし方針の是正。Dependencies: dotnet10-migration
 - [ ] scan-performance -- `FolderInfo.AddSize` の再設計（祖先への逐次 Interlocked を廃止）、`FileSystemEnumerator<T>` による1パス列挙、並列度の制御。Dependencies: scan-correctness, scan-golden-baseline
 - [ ] architecture-refactoring -- `MainWindow.xaml.cs` の分割、MVVM の責務整理、CommunityToolkit.Mvvm の導入、C# の新しい言語機能の適用、定数の二重管理の解消。Dependencies: scan-performance

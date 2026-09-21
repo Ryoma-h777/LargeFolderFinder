@@ -50,9 +50,9 @@
 **入るもの**: xunit.v3 のテスト。検証ツールの実行ファイルを子プロセスで呼び、終了コードで判定する（判定の仕組みはツール側に置き、テストで作り直さない）
 **追加時の注意**: 検証ツールは `ProjectReference`（`ReferenceOutputAssembly=false`）で参照し、ビルドの順序と出力の存在だけを保証する。本体からテストを参照しない（配布物に入れない）。ソリューションの構成は既存の `Debug|Any CPU`・`Release|Any CPU` だけにそろえる
 
-### build / .github — 発行と自動ビルド
-**場所**: `build/`（`Publish.ps1`・`Package.ps1`・`Test-Launch.ps1`）、`.github/workflows/`（`ci.yml`・`release.yml`）
-**入るもの**: 発行・梱包・起動確認の PowerShell スクリプトと、それを呼ぶだけの薄いワークフロー。手元と CI が同じスクリプトを通る（手順は tech.md の「コマンド」「発行と配布」）
+### build — 発行・梱包・起動確認のスクリプト
+**場所**: `build/`（`Publish.ps1`・`Package.ps1`・`Test-Launch.ps1`）
+**入るもの**: 発行・梱包・起動確認の PowerShell スクリプト。リリースはこれらを手元で順に実行して行う（手順は tech.md の「発行と配布」）
 **追加時の注意**: スクリプトは Windows PowerShell 5.1 でも動く書き方にし、UTF-8（BOM 付き）・CRLF で保存する。失敗は 0 以外の終了コードで返す。出力の既定はバージョン管理外の `artifacts/`
 
 ### リポジトリ直下のその他
