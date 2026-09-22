@@ -22,7 +22,6 @@ namespace LargeFolderFinder.ViewModels
         private readonly SessionData _model;
         private readonly IMainLayoutView _view; // Viewへの参照（MVP/Controllerパターン的利用）
         private readonly ResultFormatter _formatter = new ResultFormatter();
-        private bool _hasShownProgressError = false;
 
         public SessionData Model => _model;
 
@@ -92,8 +91,6 @@ namespace LargeFolderFinder.ViewModels
             _model.CreatedAt = DateTime.Now;
             _model.FileName = SessionFileManager.Save(_model);
 
-            _hasShownProgressError = false;
-
             _model.Cts = new CancellationTokenSource();
             _model.IsScanning = true;
 
@@ -112,10 +109,29 @@ namespace LargeFolderFinder.ViewModels
                 {
                     try
                     {
-                        string statusMsg;
-                        if (!config.SkipFolderCount && totalFolders > 0)
+                        bool hasTotal = !config.SkipFolderCount && totalFolders > 0;
+
+                        // 完了の印つきの最後の報告: 走査は終わり、成功の経路の描画がこのあと続く。
+                        // 状態を走査中の文言に戻さず描画中の文言にし、結果（CurrentResult は null）は描画しない。
+                        // 最終結果の描画は成功の経路の RenderResult（最新の要求だけを反映する仕組み）に任せる
+                        if (p.IsFinal)
                         {
-                            double percentage = (double)p.ProcessedFolders / totalFolders * 100;
+                            if (hasTotal)
+                            {
+                                // 事前カウントを行った走査はバーを埋める
+                                _view.ScanProgressBar.IsIndeterminate = false;
+                                _view.ScanProgressBar.Value = 100;
+                            }
+                            // 事前カウントを省いた走査は不定のまま（成功の経路の finally で非表示に戻る）
+                            _view.StatusTextBlock.Text = lm.GetText(LanguageKey.RenderingStatus);
+                            return;
+                        }
+
+                        string statusMsg;
+                        if (hasTotal)
+                        {
+                            // 事前カウントの後にフォルダが増えた場合などでも 100% を超えないよう頭打ちにする（バーと文言で同じ値を使う）
+                            double percentage = Math.Min(100, (double)p.ProcessedFolders / totalFolders * 100);
                             _view.ScanProgressBar.Value = percentage;
                             _view.ScanProgressBar.IsIndeterminate = false;
 
@@ -187,12 +203,8 @@ namespace LargeFolderFinder.ViewModels
                     }
                     catch (Exception ex)
                     {
+                        // 途中経過の更新の失敗は記録するだけで、走査は止めない（利用者にダイアログは出さない）
                         Logger.Log(AppConstants.LogScanProgressError, ex);
-                        if (!_hasShownProgressError)
-                        {
-                            _hasShownProgressError = true;
-                            MessageBox.Show($"Failed to update progress: {ex.Message}", "Debug");
-                        }
                     }
                 });
 
