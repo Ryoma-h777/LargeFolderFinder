@@ -112,6 +112,7 @@ namespace LargeFolderFinder
 
         // ####### Error Messages #######
         ConfigError,
+        ConfigParseError,
         ReadmeError,
         PathInvalidError,
         ThresholdInvalidError,

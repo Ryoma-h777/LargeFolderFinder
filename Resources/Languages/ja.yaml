@@ -104,6 +104,7 @@ CopyNotification: "コピーしました！"
 
 ####### Error Messages #######
 ConfigError: "Config.txt を開けませんでした: "
+ConfigParseError: "Config.txt を読み取れなかったため、既定の設定で動作しています。\nConfig.txt の内容を修正するか、ファイルを削除してください（削除すると既定の内容で作り直されます）。\n\n理由: {0}"
 ReadmeError: "Readme.txt を開けませんでした: "
 PathInvalidError: "有効なフォルダを選択してください。"
 ThresholdInvalidError: "検索サイズが無効です。"

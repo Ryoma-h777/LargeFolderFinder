@@ -104,6 +104,7 @@ CopyNotification: "Kopyalandı!"
 
 ####### Error Messages #######
 ConfigError: "Yapılandırma dosyası açılamadı: "
+ConfigParseError: "Config.txt okunamadığı için varsayılan ayarlar kullanılıyor.\nLütfen Config.txt dosyasını düzeltin veya silin (silinirse varsayılan ayarlarla yeniden oluşturulur).\n\nNeden: {0}"
 ReadmeError: "Readme açılamadı: "
 PathInvalidError: "Lütfen geçerli bir klasör seçin."
 ThresholdInvalidError: "Geçersiz arama boyutu."

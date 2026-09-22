@@ -104,6 +104,7 @@ CopyNotification: "Copied!"
 
 ####### Error Messages #######
 ConfigError: "Config.txt"
+ConfigParseError: "Config.txt could not be read, so the default settings are being used.\nPlease correct Config.txt or delete the file (it will be recreated with the default settings).\n\nReason: {0}"
 ReadmeError: "Failed to open Readme.txt: "
 PathInvalidError: "Please select a valid folder."
 ThresholdInvalidError: "Invalid search size."

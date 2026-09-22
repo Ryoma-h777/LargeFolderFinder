@@ -104,6 +104,7 @@ CopyNotification: "Скопировано!"
 
 ####### Error Messages #######
 ConfigError: "Не удалось открыть файл конфигурации: "
+ConfigParseError: "Не удалось прочитать Config.txt, поэтому используются настройки по умолчанию.\nИсправьте Config.txt или удалите файл (он будет создан заново с настройками по умолчанию).\n\nПричина: {0}"
 ReadmeError: "Не удалось открыть Readme: "
 PathInvalidError: "Выберите допустимую папку."
 ThresholdInvalidError: "Недопустимый размер поиска."

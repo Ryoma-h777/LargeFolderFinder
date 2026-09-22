@@ -104,6 +104,7 @@ CopyNotification: "已复制！"
 
 ####### Error Messages #######
 ConfigError: "无法打开配置文件: "
+ConfigParseError: "无法读取 Config.txt，因此正在使用默认设置。\n请修改 Config.txt 或删除该文件（删除后将以默认设置重新创建）。\n\n原因: {0}"
 ReadmeError: "无法打开 Readme: "
 PathInvalidError: "请选择一个有效的文件夹。"
 ThresholdInvalidError: "搜索大小无效。"

@@ -104,6 +104,7 @@ CopyNotification: "कॉपी किया गया!"
 
 ####### Error Messages #######
 ConfigError: "कॉन्फ़िगरेशन फ़ाइल नहीं खोली जा सकी: "
+ConfigParseError: "Config.txt को पढ़ा नहीं जा सका, इसलिए डिफ़ॉल्ट सेटिंग्स का उपयोग किया जा रहा है।\nकृपया Config.txt को ठीक करें या फ़ाइल हटा दें (हटाने पर यह डिफ़ॉल्ट सेटिंग्स के साथ फिर से बनाई जाएगी)।\n\nकारण: {0}"
 ReadmeError: "Readme नहीं खोला जा सका: "
 PathInvalidError: "कृपया एक मान्य फ़ोल्डर चुनें।"
 ThresholdInvalidError: "अमान्य खोज आकार।"

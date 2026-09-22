@@ -104,6 +104,7 @@ CopyNotification: "Copiato!"
 
 ####### Error Messages #######
 ConfigError: "Impossibile aprire il file di configurazione: "
+ConfigParseError: "Impossibile leggere Config.txt, pertanto vengono utilizzate le impostazioni predefinite.\nCorreggi Config.txt oppure elimina il file (verrà ricreato con le impostazioni predefinite).\n\nMotivo: {0}"
 ReadmeError: "Impossibile aprire il Readme: "
 PathInvalidError: "Seleziona una cartella valida."
 ThresholdInvalidError: "Dimensione ricerca non valida."

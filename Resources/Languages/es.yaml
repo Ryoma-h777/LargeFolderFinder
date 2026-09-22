@@ -104,6 +104,7 @@ CopyNotification: "¡Copiado!"
 
 ####### Error Messages #######
 ConfigError: "No se pudo abrir el archivo de configuración: "
+ConfigParseError: "No se pudo leer Config.txt, por lo que se está usando la configuración predeterminada.\nCorrija Config.txt o elimine el archivo (se volverá a crear con la configuración predeterminada).\n\nMotivo: {0}"
 ReadmeError: "No se pudo abrir el Readme: "
 PathInvalidError: "Seleccione una carpeta válida."
 ThresholdInvalidError: "Tamaño de búsqueda no válido."

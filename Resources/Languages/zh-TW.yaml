@@ -104,6 +104,7 @@ CopyNotification: "已複製！"
 
 ####### Error Messages #######
 ConfigError: "無法開啟設定檔案: "
+ConfigParseError: "無法讀取 Config.txt，因此目前使用預設設定。\n請修正 Config.txt 或刪除該檔案（刪除後將以預設設定重新建立）。\n\n原因: {0}"
 ReadmeError: "無法開啟 Readme: "
 PathInvalidError: "請選擇一個有效的資料夾。"
 ThresholdInvalidError: "搜尋大小無效。"
