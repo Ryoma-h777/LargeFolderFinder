@@ -208,8 +208,12 @@ namespace LargeFolderFinder
         [IgnoreMember]
         public string? CachedCopyText { get; set; }
 
+        /// <summary>
+        /// 描画の取り消し（最新の描画だけを有効にする）。タブごとに1つ持ち、保存しない。
+        /// 読み戻しでは既定のコンストラクタが走るため、初期化子により常に null でない
+        /// </summary>
         [IgnoreMember]
-        public System.Threading.CancellationTokenSource? RenderCts { get; set; }
+        public LatestOnlyCancellation RenderCancellation { get; } = new LatestOnlyCancellation();
 
         [IgnoreMember]
         public string? LastStatus { get; set; }

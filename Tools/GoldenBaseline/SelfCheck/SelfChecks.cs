@@ -54,6 +54,7 @@ internal static class SelfChecks
         RegisterFinalProgressChecks(runner);
         RegisterWin32DeclarationChecks(runner);
         RegisterConcurrentTreeReadChecks(runner);
+        RegisterRenderCancellationChecks(runner);
     }
 
     /// <summary>
@@ -4546,6 +4547,85 @@ internal static class SelfChecks
             SelfAssert.That(
                 missing.Length == 0,
                 $"残すべき宣言が見つかりません: {string.Join(", ", missing)}（宣言されているメンバー: {string.Join(", ", declared.OrderBy(n => n, StringComparer.Ordinal))}）");
+        });
+    }
+
+    /// <summary>
+    /// 最新の要求だけを有効にする描画の取り消しの部品と、それを持つタブのデータの保存の検証項目を登録する
+    /// （scan-correctness タスク2.6、要件3.3, 6.1, 6.2, 6.3）。
+    /// 本体に触れる呼び出しは Scan 層の <see cref="RenderCancellationProbe"/> を通す。
+    /// </summary>
+    private static void RegisterRenderCancellationChecks(SelfCheckRunner runner)
+    {
+        runner.Add("描画の取り消しの部品で2回目の開始が1回目を取り消し、1回目の通知が最新でなくなる（scan-correctness 要件3.3, 6.1, 6.3）", () =>
+        {
+            SequentialBeginOutcome outcome = RenderCancellationProbe.RunTwoBegins();
+
+            SelfAssert.That(outcome.FirstLatestBeforeSecond, "2回目を始める前の1回目の通知が最新と判定されません。");
+            SelfAssert.That(!outcome.FirstCanceledBeforeSecond, "2回目を始める前に1回目の通知が取り消されています。");
+            SelfAssert.That(outcome.FirstCanceledAfterSecond, "2回目を始めても1回目の通知が取り消されていません。");
+            SelfAssert.That(!outcome.FirstLatestAfterSecond, "2回目を始めた後も1回目の通知が最新と判定されます。");
+            SelfAssert.That(!outcome.SecondCanceled, "2回目の通知が取り消されています。");
+            SelfAssert.That(outcome.SecondLatest, "2回目の通知が最新と判定されません。");
+            SelfAssert.That(!outcome.DefaultTokenLatest, "取り消しの通知の既定値（None）が最新と判定されます。");
+        });
+
+        runner.Add("描画の取り消しの部品の別のインスタンスどうしは、開始しても互いの通知を取り消さず、相手の通知を最新と判定しない（scan-correctness 要件6.2）", () =>
+        {
+            IndependentInstancesOutcome outcome = RenderCancellationProbe.RunTwoInstances();
+
+            SelfAssert.That(!outcome.ACanceled, "別のインスタンスの開始で、1つ目のインスタンスの通知が取り消されました。");
+            SelfAssert.That(outcome.ALatestInA, "1つ目のインスタンスの通知が、別のインスタンスの開始の後に最新と判定されません。");
+            SelfAssert.That(!outcome.BCanceled, "2つ目のインスタンスの通知が取り消されています。");
+            SelfAssert.That(outcome.BLatestInB, "2つ目のインスタンスの通知が最新と判定されません。");
+            SelfAssert.That(!outcome.ALatestInB, "2つ目のインスタンスが1つ目の通知を最新と判定しました。");
+            SelfAssert.That(!outcome.BLatestInA, "1つ目のインスタンスが2つ目の通知を最新と判定しました。");
+        });
+
+        runner.Add("描画の取り消しの部品でまとめて取り消すと最新の通知も取り消され、その後の開始は通常どおり使える（scan-correctness 要件6.1）", () =>
+        {
+            CancelAllOutcome outcome = RenderCancellationProbe.RunCancelAll();
+
+            SelfAssert.That(outcome.LatestCanceled, "まとめて取り消した後も、最新の通知が取り消されていません。");
+            SelfAssert.That(!outcome.LatestStillLatest, "まとめて取り消した後も、最新だった通知が最新と判定されます。");
+            SelfAssert.That(!outcome.NextCanceled, "まとめて取り消した後の開始で得た通知が取り消されています。");
+            SelfAssert.That(outcome.NextLatest, "まとめて取り消した後の開始で得た通知が最新と判定されません。");
+        });
+
+        runner.Add("描画の取り消しの部品を多数のスレッドから一斉に開始しても、取り消されていない通知と最新と判定される通知がちょうど1つになる（scan-correctness 要件6.1, 6.3）", () =>
+        {
+            const int ThreadCount = 8;
+            const int BeginsPerThread = 2000;
+
+            ConcurrentBeginOutcome outcome = RenderCancellationProbe.RunConcurrentBegins(ThreadCount, BeginsPerThread);
+
+            SelfAssert.That(
+                outcome.TotalTokens == ThreadCount * BeginsPerThread,
+                $"得た通知の数が想定と違います（想定 {ThreadCount * BeginsPerThread}、実際 {outcome.TotalTokens}）。");
+            SelfAssert.That(
+                outcome.UncanceledCount == 1,
+                $"取り消されていない通知が1つではありません（{outcome.UncanceledCount} 個）。");
+            SelfAssert.That(
+                outcome.LatestCount == 1,
+                $"最新と判定される通知が1つではありません（{outcome.LatestCount} 個）。");
+        });
+
+        runner.Add("タブのデータを本体の保存と同じ設定で保存して読み戻すと、描画の取り消しの部品は保存されず、読み戻した後も使える（scan-correctness 要件6.1, 6.2）", () =>
+        {
+            SessionRoundTripOutcome outcome = RenderCancellationProbe.RoundTripSession();
+
+            SelfAssert.That(outcome.PropertyFound, "タブのデータに描画の取り消しの部品（RenderCancellation）が見つかりません。");
+            SelfAssert.That(outcome.HasIgnoreMember, "描画の取り消しの部品に保存の対象外の印（IgnoreMember）が付いていません。");
+            SelfAssert.That(!outcome.HasKey, "描画の取り消しの部品に保存の番号（Key）が付いています。");
+            SelfAssert.That(
+                outcome.BytesIndependentOfRenderState,
+                "描画の取り消しを進行中にしたデータと未使用のデータで、保存した中身が一致しません（取り消しの状態が保存されています）。");
+            SelfAssert.That(!outcome.RestoredGateIsNull, "読み戻したタブのデータの描画の取り消しの部品が null です。");
+            SelfAssert.That(outcome.RestoredUsable, "読み戻したタブのデータの描画の取り消しの部品で、開始した通知が最新と判定されません。");
+            SelfAssert.That(!outcome.InFlightLatestInRestored, "読み戻した部品が、保存前の部品の通知を最新と判定しました。");
+            SelfAssert.That(
+                outcome.RestoredPath == @"C:\probe" && outcome.RestoredFilterText == "probe",
+                $"保存する欄が読み戻せていません（Path={outcome.RestoredPath}、FilterText={outcome.RestoredFilterText}）。");
         });
     }
 
