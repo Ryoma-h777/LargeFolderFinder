@@ -115,6 +115,34 @@ public sealed class ScanOutcome
 }
 
 /// <summary>
+/// <see cref="ScanRunner.RunForFinalProgress"/> の結果。本体の走査の戻り値と、走査が送った最後の報告をそのまま持つ。
+/// </summary>
+public sealed class FinalProgressOutcome
+{
+    /// <summary>本体の RunScan の戻り値（走査結果のルートノード）。</summary>
+    public global::LargeFolderFinder.FolderInfo? Root { get; }
+
+    /// <summary>受け取った最後の報告（<c>IsFinal</c> が真）。1件も届かなければ null。</summary>
+    public global::LargeFolderFinder.ScanProgress? FinalProgress { get; }
+
+    /// <summary>受け取った最後の報告の件数。正常な完了なら1になるはず。</summary>
+    public int FinalReportCount { get; }
+
+    /// <summary>
+    /// FinalProgressOutcome を構築する。
+    /// </summary>
+    public FinalProgressOutcome(
+        global::LargeFolderFinder.FolderInfo? root,
+        global::LargeFolderFinder.ScanProgress? finalProgress,
+        int finalReportCount)
+    {
+        Root = root;
+        FinalProgress = finalProgress;
+        FinalReportCount = finalReportCount;
+    }
+}
+
+/// <summary>
 /// 列挙・属性取得に失敗した理由の分類（タスク7.2）。
 /// 記録先の振り分けを1箇所に集約するために用いる。
 /// </summary>
@@ -240,6 +268,88 @@ public sealed class ScanRunner : IScanRunner
             CancellationToken.None));
 
         return countTask.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// 本体の走査（<see cref="global::LargeFolderFinder.Scanner.RunScan"/>）を深さの上限 <paramref name="maxDepth"/> で呼び、
+    /// 走査が送った最後の報告（<c>IsFinal</c> が真の進捗）を受け取って返す（scan-correctness 要件1.4, 5.3）。
+    /// 本体に触れる呼び出しをこの層に閉じ込めるための入口であり、報告の中身に手を加えない。
+    /// </summary>
+    /// <remarks>
+    /// 進捗は <see cref="Progress{T}"/> ではなく、報告されたその場で記録する同期の受け手で受ける。
+    /// <see cref="Progress{T}"/> は同期コンテキストの無いスレッドでは報告をスレッドプールへ投げるため、
+    /// RunScan の完了の時点で最後の報告がまだ届いていない（あるいは完了の後に届く）競合が起きる。
+    /// </remarks>
+    /// <param name="rootPath">走査の起点のフォルダのパス。実在している必要がある。</param>
+    /// <param name="maxDepth">深さの上限。起点を深さ0とする。事前カウントと同じ値を渡す。</param>
+    /// <param name="useParallel">並列で走査するかどうか。</param>
+    public FinalProgressOutcome RunForFinalProgress(string rootPath, int maxDepth, bool useParallel)
+    {
+        if (string.IsNullOrEmpty(rootPath))
+        {
+            throw new ArgumentException("基準フォルダのパスが空です。", nameof(rootPath));
+        }
+
+        if (!Directory.Exists(rootPath))
+        {
+            throw new DirectoryNotFoundException($"基準フォルダが見つかりません: {rootPath}");
+        }
+
+        var recorder = new SynchronousProgressRecorder();
+
+        // Run と同じく、呼び出し元のコンテキストに関わらずデッドロックしないようスレッドプール上に切り離して待つ
+        var scanTask = Task.Run(() => global::LargeFolderFinder.Scanner.RunScan(
+            rootPath,
+            thresholdBytes: 0L,
+            totalFolders: 0,
+            maxDepth: maxDepth,
+            useParallel: useParallel,
+            usePhysicalSize: false,
+            progress: recorder,
+            token: CancellationToken.None));
+
+        global::LargeFolderFinder.FolderInfo? root = scanTask.GetAwaiter().GetResult();
+
+        return new FinalProgressOutcome(root, recorder.LastFinal, recorder.FinalCount);
+    }
+
+    /// <summary>
+    /// 進捗の報告を、報告されたスレッドの上でその場で記録する受け手。最後の報告（<c>IsFinal</c>）の件数と中身を持つ。
+    /// </summary>
+    private sealed class SynchronousProgressRecorder : IProgress<global::LargeFolderFinder.ScanProgress>
+    {
+        /// <summary>並列の走査から並行に呼ばれうるため、記録をこのロックで守る</summary>
+        private readonly object _gate = new object();
+
+        private global::LargeFolderFinder.ScanProgress? _lastFinal;
+        private int _finalCount;
+
+        /// <summary>受け取った最後の報告のうち最新のもの。1件も無ければ null</summary>
+        public global::LargeFolderFinder.ScanProgress? LastFinal
+        {
+            get { lock (_gate) { return _lastFinal; } }
+        }
+
+        /// <summary>受け取った最後の報告の件数</summary>
+        public int FinalCount
+        {
+            get { lock (_gate) { return _finalCount; } }
+        }
+
+        /// <inheritdoc />
+        public void Report(global::LargeFolderFinder.ScanProgress value)
+        {
+            if (value is null || !value.IsFinal)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                _lastFinal = value;
+                _finalCount++;
+            }
+        }
     }
 
     /// <summary>

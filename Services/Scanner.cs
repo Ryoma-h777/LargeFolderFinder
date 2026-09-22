@@ -62,6 +62,12 @@ namespace LargeFolderFinder
                     // 最終的に閾値未満の枝を剪定しない（全ノード保持）
                     // PruneTree(rootNode, thresholdBytes);
 
+                    // 正常に完了したときだけ、完了の印・最後の数・スキップの一覧を載せた進捗を1回報告する。
+                    // 取り消し・例外のときは上の呼び出しから例外が伝わるため、ここには来ない。
+                    // この報告は走査のスレッドで送る。UI の同期コンテキストへ投げられる報告が、
+                    // RunScan の続き（await の後）より先に並ぶようにするため
+                    ReportFinalProgress(progressCounter.Value, totalFolders, skipRecorder, progress);
+
                     return rootNode; // 閾値に関わらずルートノードを返す
                 }, token);
             }
@@ -235,6 +241,26 @@ namespace LargeFolderFinder
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 走査の正常な完了時の最後の進捗を1回報告する。途中の報告の間隔（5秒）やログ（20秒）の計時には関わらない。
+        /// </summary>
+        /// <remarks>
+        /// 結果の木（CurrentResult）は載せない。完了後の木は RunScan の戻り値で渡るため、
+        /// ここで載せると受け手が同じ木の描画を二重に始めてしまう。
+        /// </remarks>
+        private static void ReportFinalProgress(int processed, int total, ScanSkipRecorder skipRecorder, IProgress<ScanProgress> progress)
+        {
+            progress?.Report(new ScanProgress
+            {
+                ProcessedFolders = processed,
+                TotalFolders = total,
+                EstimatedTimeRemaining = null,
+                CurrentResult = null,
+                IsFinal = true,
+                Skipped = skipRecorder.Snapshot()
+            });
         }
 
         private static void ReportProgress(int processed, int total, DateTime startTime, ProgressCounter counter, IProgress<ScanProgress> progress, string currentPath)

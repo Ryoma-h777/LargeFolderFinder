@@ -51,6 +51,7 @@ internal static class SelfChecks
         RegisterPathLengthBoundaryChecks(runner);
         RegisterScanReportParityChecks(runner);
         RegisterFolderCounterChecks(runner);
+        RegisterFinalProgressChecks(runner);
     }
 
     /// <summary>
@@ -4295,6 +4296,118 @@ internal static class SelfChecks
                 ForceCleanupFixtureResidue(root);
             }
         });
+    }
+
+    /// <summary>
+    /// 本体の走査の最後の報告（ScanProgress.IsFinal）の検証項目を登録する（scan-correctness タスク2.3）。
+    /// 本体に触れる呼び出しは Scan 層の <see cref="ScanRunner.RunForFinalProgress"/> と <see cref="ScanRunner.CountFolders"/> を通す。
+    /// </summary>
+    private static void RegisterFinalProgressChecks(SelfCheckRunner runner)
+    {
+        foreach (int maxDepth in new[] { 3, 6 })
+        {
+            foreach (bool useParallel in new[] { false, true })
+            {
+                int depth = maxDepth;
+                bool parallel = useParallel;
+                string mode = parallel ? "並列" : "逐次";
+
+                runner.Add($"深さの上限{depth}（{mode}）で、事前カウントの数と走査の最後の報告の数が一致する（access_denied_folder を含む。scan-correctness 要件1.4, 1.5）", () =>
+                {
+                    WithStandardFixture(root =>
+                    {
+                        var scanRunner = new ScanRunner();
+                        int counted = scanRunner.CountFolders(root, depth);
+                        var outcome = scanRunner.RunForFinalProgress(root, depth, parallel);
+
+                        SelfAssert.That(outcome.Root != null, "走査が結果の木を返しませんでした。");
+                        SelfAssert.That(
+                            outcome.FinalReportCount == 1,
+                            $"最後の報告（IsFinal）がちょうど1回届きませんでした（届いた回数: {outcome.FinalReportCount}）。");
+
+                        var final = outcome.FinalProgress!;
+                        SelfAssert.That(
+                            final.ProcessedFolders == counted,
+                            $"事前カウントの数と最後の報告の数が一致しません（事前カウント: {counted}, 最後の報告: {final.ProcessedFolders}, 深さの上限: {depth}）。");
+
+                        // 深さの上限より深い階層が数に入らない（打ち切り）ことを、定義から導いた数とも照合する
+                        int expected = CountExpectedFolders(FixtureSpec.Standard, depth);
+                        SelfAssert.That(
+                            final.ProcessedFolders == expected,
+                            $"最後の報告の数が定義から導いた数と一致しません（期待: {expected}, 実際: {final.ProcessedFolders}, 深さの上限: {depth}）。");
+
+                        // 深さの上限3では、フィクスチャのより深い階層が実際に数から外れていること（打ち切りが効く条件であること）を確かめる
+                        int unlimited = CountExpectedFolders(FixtureSpec.Standard, int.MaxValue);
+                        SelfAssert.That(
+                            depth >= 6 || expected < unlimited,
+                            $"深さの上限{depth}で打ち切られる階層がフィクスチャにありません（上限あり: {expected}, 上限なし: {unlimited}）。");
+                    });
+                });
+            }
+        }
+
+        runner.Add("access_denied_folder を含むフィクスチャの走査が完了し、最後の報告のスキップの一覧にそのパスが AccessDenied で入る（scan-correctness 要件3.4, 5.3）", () =>
+        {
+            WithStandardFixture(root =>
+            {
+                string deniedPath = Path.Combine(
+                    root,
+                    FixtureSpec.Standard.Items
+                        .Single(i => i.Kind == GoldenEntryKind.Folder && i.Traits.Contains(FixtureTrait.AccessDenied))
+                        .RelativePath);
+
+                var outcome = new ScanRunner().RunForFinalProgress(root, 6, useParallel: false);
+
+                SelfAssert.That(outcome.Root != null, "走査が結果の木を返しませんでした（完了していません）。");
+                SelfAssert.That(
+                    outcome.FinalProgress != null && outcome.FinalProgress.IsFinal,
+                    "走査の最後の報告（IsFinal）が届きませんでした。");
+
+                var skipped = outcome.FinalProgress!.Skipped;
+                var match = skipped.Where(s => string.Equals(s.Path, deniedPath, StringComparison.OrdinalIgnoreCase)).ToList();
+                SelfAssert.That(
+                    match.Count == 1 && match[0].Kind == global::LargeFolderFinder.ScanSkipKind.AccessDenied,
+                    $"スキップの一覧にアクセス拒否のフォルダが AccessDenied で1件入っていません（対象: {deniedPath}, 一覧: {string.Join(", ", skipped.Select(s => $"[{s.Kind}] {s.Path}"))}）。");
+
+                // 拒否されたフォルダ自身は結果の木に残る（スキップしても走査は止まらない）
+                SelfAssert.That(
+                    outcome.Root!.Children.Any(c => !c.IsFile && string.Equals(c.Name, Path.GetFileName(deniedPath), StringComparison.OrdinalIgnoreCase)),
+                    "アクセス拒否のフォルダが結果の木にありません。");
+            });
+        });
+    }
+
+    /// <summary>
+    /// FixtureSpec.Standard のフィクスチャを一時領域に作り、<paramref name="action"/> を実行してから後始末する。
+    /// </summary>
+    private static void WithStandardFixture(Action<string> action)
+    {
+        string root = CreateTempFixtureRoot();
+        var builder = new FixtureBuilder();
+
+        try
+        {
+            var buildResult = builder.Build(FixtureSpec.Standard, root);
+            SelfAssert.That(
+                buildResult.IsComplete,
+                $"前提となるフィクスチャ生成が完了しませんでした。未生成: {string.Join(", ", buildResult.Omissions.Select(o => o.RelativePath))}");
+
+            action(root);
+        }
+        finally
+        {
+            try
+            {
+                builder.TearDown(FixtureSpec.Standard, root);
+            }
+            catch
+            {
+                // フォールバックへ進む。
+            }
+
+            // 通常経路では実質的に何もしない最終手段（既存の項目と同じ後始末）
+            ForceCleanupFixtureResidue(root);
+        }
     }
 
     /// <summary>
