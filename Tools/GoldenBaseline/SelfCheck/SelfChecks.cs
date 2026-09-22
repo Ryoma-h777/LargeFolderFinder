@@ -55,6 +55,7 @@ internal static class SelfChecks
         RegisterWin32DeclarationChecks(runner);
         RegisterConcurrentTreeReadChecks(runner);
         RegisterRenderCancellationChecks(runner);
+        RegisterConfigLoadErrorChecks(runner);
     }
 
     /// <summary>
@@ -4626,6 +4627,61 @@ internal static class SelfChecks
             SelfAssert.That(
                 outcome.RestoredPath == @"C:\probe" && outcome.RestoredFilterText == "probe",
                 $"保存する欄が読み戻せていません（Path={outcome.RestoredPath}、FilterText={outcome.RestoredFilterText}）。");
+        });
+    }
+
+    /// <summary>
+    /// 設定ファイル（<c>Config.txt</c>）の解析の失敗の記録・保持・一度だけの通知の検証項目を登録する
+    /// （scan-correctness タスク2.7、要件5.2, 5.4）。
+    /// 本体に触れる呼び出しは Scan 層の <see cref="ConfigLoadProbe"/> を通し、読み込み元は一時フォルダのファイルに限る。
+    /// </summary>
+    private static void RegisterConfigLoadErrorChecks(SelfCheckRunner runner)
+    {
+        runner.Add("壊れた設定ファイルを読むと既定の設定が返り、理由が保持・記録され、未通知の失敗が一度だけ取り出せ、成功で記録が消える（scan-correctness 要件5.2, 5.4）", () =>
+        {
+            ConfigLoadOutcome o = ConfigLoadProbe.Run();
+
+            SelfAssert.That(!o.PendingAtStart, "正しい設定を読んだ直後に未通知の失敗が取り出せました。");
+
+            // 壊れた設定: 既定の設定が返り、理由が保持され、ファイルは上書きされない
+            SelfAssert.That(o.BrokenValues == o.DefaultValues, $"壊れた設定を読んだ結果が既定の設定と違います（{o.BrokenValues}、既定 {o.DefaultValues}）。");
+            SelfAssert.That(!string.IsNullOrWhiteSpace(o.BrokenError), "壊れた設定を読んだ後も、直近の失敗の理由が保持されていません。");
+            SelfAssert.That(o.BrokenFileUnchanged, "壊れた設定ファイルが書き換えられました（利用者が直せるよう残す必要があります）。");
+            SelfAssert.That(o.LogMentionsBrokenPath, "壊れた設定ファイルのパスがログに記録されていません。");
+
+            // 一度だけ取り出せる
+            SelfAssert.That(o.FirstTake, "壊れた設定を読んだ後に、未通知の失敗が取り出せません。");
+            SelfAssert.That(o.FirstTakeError == o.BrokenError, $"取り出した失敗が保持している理由と違います（取り出し {o.FirstTakeError}、保持 {o.BrokenError}）。");
+            SelfAssert.That(!o.SecondTake, "同じ失敗が2回取り出せました。");
+
+            // 同じ内容の失敗は再び通知しない
+            SelfAssert.That(o.RepeatedError == o.BrokenError, $"同じ壊れ方で理由が変わりました（1回目 {o.BrokenError}、2回目 {o.RepeatedError}）。");
+            SelfAssert.That(!o.TakeAfterRepeat, "同じ内容の失敗が、読み直しただけで再び通知の対象になりました。");
+
+            // 内容の違う失敗は通知する
+            SelfAssert.That(!string.IsNullOrWhiteSpace(o.OtherError) && o.OtherError != o.BrokenError, $"別の壊れ方の理由が保持されていないか、最初の理由と同じです（{o.OtherError}）。");
+            SelfAssert.That(o.TakeAfterOther && o.OtherTakeError == o.OtherError, "内容の違う失敗が取り出せません。");
+
+            // 成功で記録が消え、その後の同じ失敗は再び通知する
+            SelfAssert.That(o.ValidValues == new ConfigValues(7, false, true, false, 12), $"正しい設定の値が読めていません（{o.ValidValues}）。");
+            SelfAssert.That(o.ErrorAfterValid == null, $"正しい設定を読んだ後も失敗の理由が残っています（{o.ErrorAfterValid}）。");
+            SelfAssert.That(!o.TakeAfterValid, "正しい設定を読んだ後に未通知の失敗が取り出せました。");
+            SelfAssert.That(o.TakeAfterSuccessThenBroken && o.ReTakeError == o.BrokenError, "成功の後に同じ壊れ方を読んでも、再び通知の対象になりません。");
+
+            // ファイルが無いときは失敗ではなく、そのパスに既定の設定を書き出す
+            SelfAssert.That(o.MissingValues == o.DefaultValues, $"ファイルが無いときの結果が既定の設定と違います（{o.MissingValues}）。");
+            SelfAssert.That(o.ErrorAfterMissing == null && !o.TakeAfterMissing, $"ファイルが無いことが失敗として扱われました（{o.ErrorAfterMissing}）。");
+            SelfAssert.That(o.MissingFileWritten, "ファイルが無いときに、指定したパスへ既定の設定が書き出されていません。");
+            SelfAssert.That(o.WrittenDefaultValues == o.DefaultValues, $"書き出した既定の設定を読み戻した値が既定の設定と違います（{o.WrittenDefaultValues}）。");
+
+            // 書き出しの失敗は例外を外に出さず、読み込みの失敗にもせず、ログに記録する
+            SelfAssert.That(o.UnwritableExceptionType == null, $"書き出せないパスで例外が外に出ました（{o.UnwritableExceptionType}）。");
+            SelfAssert.That(o.ErrorAfterUnwritable == null, $"書き出しの失敗が読み込みの失敗として扱われました（{o.ErrorAfterUnwritable}）。");
+            SelfAssert.That(o.LogMentionsUnwritablePath, "設定の書き出しの失敗がログに記録されていません。");
+
+            // 後始末と、既定のパスに触れていないこと
+            SelfAssert.That(!o.PendingAtEnd && o.ErrorAtEnd == null, "検証の終わりに失敗の記録が成功の状態へ戻っていません。");
+            SelfAssert.That(o.DefaultPathUnchanged, "任意のパスからの読み込みで、既定のパスの設定ファイルが作られたか書き換えられました。");
         });
     }
 
