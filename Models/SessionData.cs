@@ -215,6 +215,10 @@ namespace LargeFolderFinder
         [IgnoreMember]
         public LatestOnlyCancellation RenderCancellation { get; } = new LatestOnlyCancellation();
 
+        /// <summary>
+        /// 走査が取り消し・失敗で終わったときの状態表示の文言。状態表示を戻すとき「完了」や「待機中」より優先する。
+        /// 走査の開始時に消す。保存しない
+        /// </summary>
         [IgnoreMember]
         public string? LastStatus { get; set; }
 

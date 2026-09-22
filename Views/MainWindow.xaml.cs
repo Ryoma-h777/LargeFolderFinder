@@ -457,7 +457,12 @@ namespace LargeFolderFinder
             if (!session.IsScanning)
             {
                 var lm = LocalizationManager.Instance;
-                if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
+                if (session.LastStatus != null)
+                {
+                    // 前回の走査が取り消し・失敗で終わったときは、その表示を保つ
+                    view.StatusTextBlock.Text = session.LastStatus;
+                }
+                else if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
                 {
                     string countText = session.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {(session.Result?.CountFolderRecursive() ?? 0):N0}";
                     view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(session.LastScanDuration))} ({session.TotalFilesScanned:N0} files){countText}";

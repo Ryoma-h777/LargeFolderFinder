@@ -98,7 +98,7 @@ Large Folder Finder v1.0.3 は、2025年11月〜2026年1月ごろの旧世代 AI
 - [x] requirements-preservation -- `docs/` 配下42フォルダの設計ドキュメントから要望・仕様・設計判断の要点を抽出し、`.kiro/steering/` へ保全する。Dependencies: none
 - [x] localization-completeness -- 11言語で欠落している翻訳キーを補完し、`LanguageKey` と全13言語の YAML の網羅を機械的に検証する仕組みを設ける。Dependencies: none
 - [x] dotnet10-migration -- .NET 10 への移行、Costura.Fody の除去と PublishSingleFile 化、Ookii.Dialogs.Wpf の削除、依存バージョンの更新、`global.json` による SDK 固定、2形態の発行・起動確認・梱包のスクリプト化。Dependencies: scan-golden-baseline
-- [ ] scan-correctness -- 事前カウントの長いパス対応（本スキャンの長いパスは移行で解消済み）と事前カウント用 P/Invoke の除去、描画のタブごとの取り消し、開発用ダイアログの除去、例外の握りつぶし方針の是正と `Config.txt` の解析の失敗の通知。Dependencies: dotnet10-migration
+- [x] scan-correctness -- 事前カウントの長いパス対応（本スキャンの長いパスは移行で解消済み）と事前カウント用 P/Invoke の除去、描画のタブごとの取り消し、開発用ダイアログの除去、例外の握りつぶし方針の是正と `Config.txt` の解析の失敗の通知。Dependencies: dotnet10-migration
 - [ ] scan-performance -- `FolderInfo.AddSize` の再設計（祖先への逐次 Interlocked を廃止）、`FileSystemEnumerator<T>` による1パス列挙、並列度の制御。**通常の列挙で WizTree と同等以上**（NAS、および管理者でない・NTFS 以外のローカル）を目標とし、WizTree との比較の計測手順を整える。Dependencies: scan-correctness, scan-golden-baseline
 - [ ] ntfs-mft-scan -- ローカルの NTFS ドライブを管理者として走査するとき、MFT（全ファイルの目録）を直接読む走査方式を加え、**WizTree の最速モードと同等以上**を目指す。使えない条件（NAS・NTFS 以外・管理者でない）では通常の走査に戻る。Dependencies: scan-performance
 - [ ] architecture-refactoring -- `MainWindow.xaml.cs` の分割、MVVM の責務整理、CommunityToolkit.Mvvm の導入、C# の新しい言語機能の適用、定数の二重管理の解消。Dependencies: scan-performance, ntfs-mft-scan

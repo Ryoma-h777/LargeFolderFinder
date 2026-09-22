@@ -113,6 +113,8 @@ namespace LargeFolderFinder.ViewModels
 
             _model.Cts = new CancellationTokenSource();
             _model.IsScanning = true;
+            // 前回の走査の終わり方（取り消し・失敗）の表示を消す
+            _model.LastStatus = null;
 
             _view.OutputListBox.ItemsSource = null;
             _view.ScanProgressBar.Visibility = Visibility.Visible;
@@ -279,13 +281,17 @@ namespace LargeFolderFinder.ViewModels
             catch (OperationCanceledException)
             {
                 Logger.Log("Canceled.");
-                if (_view != null) _view.StatusTextBlock.Text = lm.GetText(LanguageKey.CancelledStatus);
+                // 直後の描画が状態表示を戻しても消えないよう、タブのデータに残す
+                _model.LastStatus = lm.GetText(LanguageKey.CancelledStatus);
+                if (_view != null) _view.StatusTextBlock.Text = _model.LastStatus;
             }
             catch (Exception ex)
             {
                 Logger.Log(AppConstants.LogScanError, ex);
+                // 直後の描画が状態表示を戻しても消えないよう、タブのデータに残す
+                _model.LastStatus = lm.GetText(LanguageKey.LabelError) + ex.Message;
                 if (_view != null)
-                    _view.StatusTextBlock.Text = lm.GetText(LanguageKey.LabelError) + ex.Message;
+                    _view.StatusTextBlock.Text = _model.LastStatus;
                 // Restore global settings if error
                 SyncViewToSession(path, true);
             }
@@ -403,7 +409,12 @@ namespace LargeFolderFinder.ViewModels
             if (!_model.IsScanning)
             {
                 var lm = LocalizationManager.Instance;
-                if (_model.LastScanDuration != TimeSpan.Zero || _model.TotalFilesScanned > 0)
+                if (_model.LastStatus != null)
+                {
+                    // 前回の走査が取り消し・失敗で終わったときは、その表示を保つ
+                    _view.StatusTextBlock.Text = _model.LastStatus;
+                }
+                else if (_model.LastScanDuration != TimeSpan.Zero || _model.TotalFilesScanned > 0)
                 {
                     string countText = _model.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {(_model.Result?.CountFolderRecursive() ?? 0):N0}";
                     _view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(_model.LastScanDuration))} ({_model.TotalFilesScanned:N0} files){countText}";
@@ -615,7 +626,12 @@ namespace LargeFolderFinder.ViewModels
 
                     // Restore status if not scanning
                     var lm = LocalizationManager.Instance;
-                    if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
+                    if (session.LastStatus != null)
+                    {
+                        // 前回の走査が取り消し・失敗で終わったときは、その表示を保つ
+                        view.StatusTextBlock.Text = session.LastStatus;
+                    }
+                    else if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
                     {
                         string countText = session.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {root.CountFolderRecursive():N0}";
                         view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(session.LastScanDuration))} ({session.TotalFilesScanned:N0} files){countText}";
