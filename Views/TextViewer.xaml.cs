@@ -13,6 +13,11 @@ namespace LargeFolderFinder
         private DateTime _lastModified;
         private long _lastSize;
 
+        /// <summary>
+        /// 再読み込みの失敗を記録済みか。失敗が続く間の記録を1回に抑える（成功で戻す）
+        /// </summary>
+        private bool _reloadFailureLogged;
+
         public TextViewer(string filePath)
         {
             // InitializeComponent is auto-generated from TextViewer.xaml
@@ -57,7 +62,7 @@ namespace LargeFolderFinder
                 }
                 catch
                 {
-                    // Ignore transient errors
+                    // 意図して無視: 監視の中の一時的な失敗（書き込み中のファイルの情報の取得など）は、次のログの書き込みの通知で再び確かめる
                 }
             });
         }
@@ -77,11 +82,17 @@ namespace LargeFolderFinder
                 {
                     ContentTextBox.ScrollToEnd();
                 }
+                _reloadFailureLogged = false;
             }
             catch (Exception ex)
             {
-                // Optionally update status or ignore
-                System.Diagnostics.Debug.WriteLine($"Error reloading file: {ex.Message}");
+                // 表示中の内容はそのまま残す。表示中のファイルが現在のログのとき、記録がさらに再読み込みを呼んで
+                // 記録が続かないよう、失敗が続く間は最初の1回だけ記録する
+                if (!_reloadFailureLogged)
+                {
+                    _reloadFailureLogged = true;
+                    Logger.Log($"テキスト表示の再読み込みに失敗しました: {Path.GetFileName(_filePath)}", ex);
+                }
             }
         }
 
@@ -102,6 +113,7 @@ namespace LargeFolderFinder
             }
             catch (Exception ex)
             {
+                Logger.Log($"テキスト表示の読み込みに失敗しました: {Path.GetFileName(_filePath)}", ex);
                 ContentTextBox.Text = $"Error loading file: {ex.Message}";
             }
         }

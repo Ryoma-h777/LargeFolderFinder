@@ -219,7 +219,7 @@ namespace LargeFolderFinder
             }
             catch
             {
-                // エラー時は0を返す
+                // 意図して無視: クラスタサイズを得られないときは0を返し、物理サイズに換算しない（既定の動き）
             }
             return 0;
         }

@@ -694,7 +694,10 @@ namespace LargeFolderFinder
                     Win32.SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, -1, -1);
                 }
             }
-            catch { }
+            catch
+            {
+                // 意図して無視: メモリの切り詰めは1分ごとの補助的な処理で、失敗しても動作に影響しない。次の周期で再び試みる
+            }
         }
 
         private void InitializeMemoryTimer()
@@ -803,6 +806,7 @@ namespace LargeFolderFinder
                     }
                     catch
                     {
+                        // 意図して無視: 権限の不足や消えた項目で所有者を得られないのは想定内で、"(Unknown)" と表示する
                         owner = "(Unknown)";
                     }
 
@@ -1123,7 +1127,10 @@ namespace LargeFolderFinder
                         if (!Directory.Exists(logDir)) Directory.CreateDirectory(logDir);
                         Process.Start("explorer.exe", logDir);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"ログのフォルダを開けませんでした: {logDir}", ex);
+                    }
                 };
                 MenuOpenLogSub.Items.Add(openFolderItem);
             }

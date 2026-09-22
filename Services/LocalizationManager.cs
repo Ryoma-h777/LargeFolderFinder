@@ -190,7 +190,7 @@ namespace LargeFolderFinder
                         }
                         catch
                         {
-                            // CultureInfo が取得できない場合はファイル名をそのまま使用
+                            // 意図して無視: CultureInfo が取得できない言語コードは、表示名にファイル名（言語コード）をそのまま使う
                         }
                         _availableLanguages.Add(new LanguageConfig { Code = code, MenuText = menuText });
                     }

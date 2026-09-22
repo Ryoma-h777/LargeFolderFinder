@@ -628,7 +628,7 @@ namespace LargeFolderFinder.ViewModels
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
-                // 新しい描画またはタブを閉じたことによる取り消し。意図した終了のため記録しない
+                // 意図して無視: 新しい描画またはタブを閉じたことによる取り消しで、失敗ではない。意図した終了のため記録しない
             }
             catch (Exception ex)
             {

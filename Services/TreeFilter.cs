@@ -31,18 +31,8 @@ namespace LargeFolderFinder
             }
             catch
             {
-                // Fallback for invalid regex: treat as empty or partial match? 
-                // Let's treat as partial match (contains) if regex fails? 
-                // Or just match nothing?
-                // For safety, let's treat invalid regex as "no match" or just ignore filter?
-                // Let's assume no match if invalid.
+                // 意図して無視: 入力途中の不正な式は打ち間違いとして扱い、記録しない。_regex を空にして何にも一致させない
                 _regex = null;
-                // Actually, if it's invalid input, maybe we shouldn't filter anything? 
-                // But usually that implies user made a mistake.
-                // Let's just catch and leave _regex null, effectively 'IsEmpty' false but matches nothing.
-                // Or maybe simple string contains?
-                // Let's stick to safe defaults: Invalid pattern -> Match nothing (or everything?)
-                // User requirement is usually "if I type garbage, show nothing".
             }
         }
 

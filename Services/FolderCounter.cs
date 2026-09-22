@@ -61,7 +61,7 @@ namespace LargeFolderFinder
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is SecurityException)
             {
-                // 列挙できないフォルダは自身だけを数え、配下は数えない（本スキャンと同じ）。
+                // 意図して無視: 列挙できないフォルダは自身だけを数え、配下は数えない（本スキャンと同じ）。
                 // スキップの記録は本スキャンが同じ対象について行うため、ここでは記録しない
             }
 

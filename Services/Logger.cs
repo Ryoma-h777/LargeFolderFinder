@@ -33,6 +33,7 @@ namespace LargeFolderFinder
             }
             catch
             {
+                // 意図して無視: ログの準備の失敗はログに書けない（循環する）。ログのパスを空にして以降の書き込みを止め、アプリは続ける
                 _logFilePath = string.Empty;
             }
         }
@@ -59,7 +60,7 @@ namespace LargeFolderFinder
             }
             catch
             {
-                // 無視
+                // 意図して無視: 古いログの削除の失敗をログに書くと循環する。削除できなかったログは次回の起動で再び削除を試みる
             }
         }
 
@@ -93,7 +94,7 @@ namespace LargeFolderFinder
             }
             catch
             {
-                // 無視
+                // 意図して無視: ログの書き込みの失敗をログに書くと循環する。ログが残らないだけでアプリは続ける
             }
         }
 
@@ -114,7 +115,7 @@ namespace LargeFolderFinder
             }
             catch
             {
-                // 無視
+                // 意図して無視: ログを開く失敗をログに書くと循環する（開発用の機能で、開けなくてもアプリは続ける）
             }
         }
 
