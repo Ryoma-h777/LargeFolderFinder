@@ -50,6 +50,7 @@ internal static class SelfChecks
         RegisterBaseFolderPathLengthChecks(runner);
         RegisterPathLengthBoundaryChecks(runner);
         RegisterScanReportParityChecks(runner);
+        RegisterFolderCounterChecks(runner);
     }
 
     /// <summary>
@@ -4247,6 +4248,91 @@ internal static class SelfChecks
     private static void AssertScanReportPrecedesUpdateLine(List<ScanReportSection> sections, string stdOut)
     {
         AssertScanReportPrecedesLine("update", sections, stdOut, "更新しました");
+    }
+
+    /// <summary>
+    /// 本体の事前カウント（Scanner.CountFoldersAsync）の検証項目を登録する（scan-correctness タスク2.1）。
+    /// 本体に触れる呼び出しは Scan 層の <see cref="ScanRunner.CountFolders"/> を通す。
+    /// </summary>
+    private static void RegisterFolderCounterChecks(SelfCheckRunner runner)
+    {
+        runner.Add("事前カウントが、深さの上限6で FixtureSpec.Standard から導いたフォルダ数（ASCII と日本語の長い連鎖の全階層を含む）と一致する（scan-correctness 要件1.1, 1.2, 1.5, 2.1）", () =>
+        {
+            const int MaxDepth = 6;
+            string root = CreateTempFixtureRoot();
+            var builder = new FixtureBuilder();
+            bool cleanedUp = false;
+
+            try
+            {
+                var buildResult = builder.Build(FixtureSpec.Standard, root);
+                SelfAssert.That(
+                    buildResult.IsComplete,
+                    $"前提となるフィクスチャ生成が完了しませんでした。未生成: {string.Join(", ", buildResult.Omissions.Select(o => o.RelativePath))}");
+
+                int expected = CountExpectedFolders(FixtureSpec.Standard, MaxDepth);
+                int actual = new ScanRunner().CountFolders(root, MaxDepth);
+
+                SelfAssert.That(
+                    actual == expected,
+                    $"事前カウントの数が定義から導いた数と一致しません（期待: {expected}, 実際: {actual}, 深さの上限: {MaxDepth}）。");
+            }
+            finally
+            {
+                if (!cleanedUp)
+                {
+                    try
+                    {
+                        builder.TearDown(FixtureSpec.Standard, root);
+                        cleanedUp = true;
+                    }
+                    catch
+                    {
+                        // フォールバックへ進む。
+                    }
+                }
+
+                ForceCleanupFixtureResidue(root);
+            }
+        });
+    }
+
+    /// <summary>
+    /// フィクスチャの定義から、本スキャンと同じ規則で数えたときのフォルダ数を導く。
+    /// 起点（基準フォルダ）を深さ0として1と数え、深さが <paramref name="maxDepth"/> 以下のフォルダを数える。
+    /// 読み取り拒否（<see cref="FixtureTrait.AccessDenied"/>）のフォルダは自身を数え、配下は数えない。
+    /// </summary>
+    private static int CountExpectedFolders(FixtureSpec spec, int maxDepth)
+    {
+        var deniedFolders = spec.Items
+            .Where(i => i.Kind == GoldenEntryKind.Folder && i.Traits.Contains(FixtureTrait.AccessDenied))
+            .Select(i => i.RelativePath)
+            .ToList();
+
+        int count = 1; // 起点
+        foreach (var item in spec.Items)
+        {
+            if (item.Kind != GoldenEntryKind.Folder)
+            {
+                continue;
+            }
+
+            int depth = item.RelativePath.Split('\\').Length;
+            if (depth > maxDepth)
+            {
+                continue;
+            }
+
+            bool underDenied = deniedFolders.Any(d => item.RelativePath.StartsWith(d + "\\", StringComparison.Ordinal));
+            if (underDenied)
+            {
+                continue;
+            }
+
+            count++;
+        }
+
+        return count;
     }
 
     /// <summary>

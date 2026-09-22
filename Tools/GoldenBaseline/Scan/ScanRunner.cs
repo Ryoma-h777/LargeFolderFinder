@@ -213,6 +213,36 @@ public sealed class ScanRunner : IScanRunner
     }
 
     /// <summary>
+    /// 本体の事前カウント（<see cref="global::LargeFolderFinder.Scanner.CountFoldersAsync"/>）を
+    /// 深さの上限 <paramref name="maxDepth"/> で呼び、その数をそのまま返す（scan-correctness 要件1.1, 1.2, 2.1）。
+    /// 本体に触れる呼び出しをこの層に閉じ込めるための入口であり、数に手を加えない。
+    /// </summary>
+    /// <param name="rootPath">数える起点のフォルダのパス。実在している必要がある。</param>
+    /// <param name="maxDepth">深さの上限。起点を深さ0とする。</param>
+    /// <returns>起点を含む、深さ0〜<paramref name="maxDepth"/> のフォルダ数。</returns>
+    public int CountFolders(string rootPath, int maxDepth)
+    {
+        if (string.IsNullOrEmpty(rootPath))
+        {
+            throw new ArgumentException("基準フォルダのパスが空です。", nameof(rootPath));
+        }
+
+        if (!Directory.Exists(rootPath))
+        {
+            throw new DirectoryNotFoundException($"基準フォルダが見つかりません: {rootPath}");
+        }
+
+        // RunScan の呼び出しと同じく、呼び出し元のコンテキストに関わらずデッドロックしないよう
+        // スレッドプール上に切り離してから同期的に待機する。
+        var countTask = Task.Run(() => global::LargeFolderFinder.Scanner.CountFoldersAsync(
+            rootPath,
+            maxDepth,
+            CancellationToken.None));
+
+        return countTask.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
     /// 本体の <c>Scanner.GetClusterSize</c> と同じ計算式で、独立にクラスタサイズを測定する。
     /// </summary>
     private static long MeasureClusterSize(string path)

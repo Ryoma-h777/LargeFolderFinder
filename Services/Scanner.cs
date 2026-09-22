@@ -23,53 +23,13 @@ namespace LargeFolderFinder
 
     public class Scanner
     {
+        /// <summary>
+        /// 事前カウント。深さ0〜maxDepth のフォルダ数（起点を含む）を返す。
+        /// 数え方は本スキャンと同じ集合になるよう FolderCounter に委ねる
+        /// </summary>
         public static async Task<int> CountFoldersAsync(string path, int maxDepth, CancellationToken token)
         {
-            return await Task.Run(() =>
-            {
-                return CountFoldersRecursive(path, 0, maxDepth, token);
-            }, token);
-        }
-
-        private static int CountFoldersRecursive(string path, int currentDepth, int maxDepth, CancellationToken token)
-        {
-            token.ThrowIfCancellationRequested();
-            int count = 1;
-
-            if (currentDepth >= maxDepth) return count;
-
-            string searchPath = Path.Combine(path, "*");
-            IntPtr hFind = Win32.FindFirstFileEx(
-                searchPath,
-                Win32.FINDEX_INFO_LEVELS.FindExInfoBasic,
-                out Win32.WIN32_FIND_DATA findData,
-                Win32.FINDEX_SEARCH_OPS.FindExSearchNameMatch,
-                IntPtr.Zero,
-                Win32.FIND_FIRST_EX_LARGE_FETCH);
-
-            if (hFind == (IntPtr)(-1)) return count;
-
-            try
-            {
-                do
-                {
-                    if ((findData.dwFileAttributes & Win32.FILE_ATTRIBUTE_DIRECTORY) != 0)
-                    {
-                        if (findData.cFileName != "." && findData.cFileName != ".." &&
-                            (findData.dwFileAttributes & Win32.FILE_ATTRIBUTE_REPARSE_POINT) == 0)
-                        {
-                            string subPath = Path.Combine(path, findData.cFileName);
-                            count += CountFoldersRecursive(subPath, currentDepth + 1, maxDepth, token);
-                        }
-                    }
-                } while (Win32.FindNextFile(hFind, out findData));
-            }
-            finally
-            {
-                Win32.FindClose(hFind);
-            }
-
-            return count;
+            return await Task.Run(() => FolderCounter.Count(path, maxDepth, token), token);
         }
 
         public static async Task<FolderInfo?> RunScan(string path, long thresholdBytes, int totalFolders, int maxDepth, bool useParallel, bool usePhysicalSize, IProgress<ScanProgress> progress, CancellationToken token)
