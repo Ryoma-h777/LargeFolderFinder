@@ -44,21 +44,31 @@ namespace LargeFolderFinder
                 clusterSize = GetClusterSize(path);
             }
 
-            return await Task.Run(() =>
+            // 列挙できなかった対象を集め、完了・取り消し・中断のいずれでも finally で1回だけログへ書く
+            var skipRecorder = new ScanSkipRecorder();
+
+            try
             {
-                var dir = new DirectoryInfo(path);
-                // ルートノードを先行作成
-                var rootNode = new FolderInfo(dir.FullName, 0, false, dir.LastWriteTime);
-                progressCounter.RootNode = rootNode;
+                return await Task.Run(() =>
+                {
+                    var dir = new DirectoryInfo(path);
+                    // ルートノードを先行作成
+                    var rootNode = new FolderInfo(dir.FullName, 0, false, dir.LastWriteTime);
+                    progressCounter.RootNode = rootNode;
 
-                ScanRecursiveInternal(dir, thresholdBytes, totalFolders, 0, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, rootNode);
+                    ScanRecursiveInternal(dir, thresholdBytes, totalFolders, 0, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, rootNode, skipRecorder);
 
-                // 最終的に閾値未満の枝を剪定
-                // 最終的に閾値未満の枝を剪定しない（全ノード保持）
-                // PruneTree(rootNode, thresholdBytes);
+                    // 最終的に閾値未満の枝を剪定
+                    // 最終的に閾値未満の枝を剪定しない（全ノード保持）
+                    // PruneTree(rootNode, thresholdBytes);
 
-                return rootNode; // 閾値に関わらずルートノードを返す
-            }, token);
+                    return rootNode; // 閾値に関わらずルートノードを返す
+                }, token);
+            }
+            finally
+            {
+                skipRecorder.Flush(path);
+            }
         }
 
         private static long ScanRecursiveInternal(
@@ -74,7 +84,8 @@ namespace LargeFolderFinder
             DateTime startTime,
             IProgress<ScanProgress> progress,
             CancellationToken token,
-            FolderInfo currentNode)
+            FolderInfo currentNode,
+            ScanSkipRecorder skipRecorder)
         {
             token.ThrowIfCancellationRequested();
 
@@ -104,7 +115,12 @@ namespace LargeFolderFinder
                     }
                 }
             }
-            catch { /* アクセス拒否は無視 */ }
+            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException)
+            {
+                // このフォルダのファイルの残りを飛ばして続ける（旧来と同じ動き）。
+                // それ以外の例外は走査の想定外の失敗として上へ伝える
+                skipRecorder.Record(dir.FullName, ex);
+            }
 
             // 見つかったファイルサイズを即座に加算(親まで波及)
             currentNode.AddSize(myFilesSize);
@@ -122,7 +138,7 @@ namespace LargeFolderFinder
                         var childNode = new FolderInfo(subDir.Name, 0, false, subDir.LastWriteTime) { Parent = currentNode };
                         lock (currentNode.Children) { currentNode.Children.Add(childNode); }
 
-                        ScanRecursiveInternal(subDir, thresholdBytes, totalFolders, currentDepth + 1, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, childNode);
+                        ScanRecursiveInternal(subDir, thresholdBytes, totalFolders, currentDepth + 1, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, childNode, skipRecorder);
                     });
                 }
                 else
@@ -132,11 +148,27 @@ namespace LargeFolderFinder
                         var childNode = new FolderInfo(subDir.Name, 0, false, subDir.LastWriteTime) { Parent = currentNode };
                         lock (currentNode.Children) { currentNode.Children.Add(childNode); }
 
-                        ScanRecursiveInternal(subDir, thresholdBytes, totalFolders, currentDepth + 1, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, childNode);
+                        ScanRecursiveInternal(subDir, thresholdBytes, totalFolders, currentDepth + 1, maxDepth, useParallel, usePhysicalSize, clusterSize, progressCounter, startTime, progress, token, childNode, skipRecorder);
                     }
                 }
             }
-            catch { /* 無視 */ }
+            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException)
+            {
+                // このフォルダの子フォルダの残りを飛ばして続ける（旧来と同じ動き）。
+                // 子フォルダ内の列挙の失敗は各子の呼び出しの中で記録されるため、ここで記録するのは主にこのフォルダ自身の子フォルダの列挙の失敗。
+                // それ以外の例外（取り消しや想定外の失敗）は上へ伝える
+                skipRecorder.Record(dir.FullName, ex);
+            }
+            catch (AggregateException ex) when (ex.Flatten().InnerExceptions.All(e => e is UnauthorizedAccessException || e is IOException))
+            {
+                // 並列の走査では、子フォルダの遅延列挙（MoveNext）の失敗が Parallel.ForEach により AggregateException に包まれる。
+                // 中身がすべて列挙の失敗なら、逐次の走査と同じく記録して子フォルダの残りを飛ばして続ける。
+                // 取り消しや想定外の例外が1件でも混じっていれば、捕まえずに上へ伝える
+                foreach (var inner in ex.Flatten().InnerExceptions)
+                {
+                    skipRecorder.Record(dir.FullName, inner);
+                }
+            }
 
             if (currentDepth <= maxDepth)
             {
