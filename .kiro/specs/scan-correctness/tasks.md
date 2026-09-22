@@ -3,7 +3,7 @@
 > 試験・起動確認の前に、利用者のアプリデータ（`%LOCALAPPDATA%\Cat & Chocolate Laboratory\LargeFolderFinder`）を退避し、終わったら復元する（テストと検証ツールは本体の `Logger` 経由でそこへログを書く）。ビルドは `dotnet build LargeFolderFinder.sln -c Release -warnaserror`、テストは `dotnet test --solution LargeFolderFinder.sln -c Release --no-build`（自己検証はこのテストから実行される）。
 
 - [ ] 1. 基盤: 変更前の状態の記録と、報告の型
-- [ ] 1.1 変更前の版で、物理サイズ換算ありの期待値を作って控える
+- [x] 1.1 変更前の版で、物理サイズ換算ありの期待値を作って控える
   - 変更に入る前の版で検証ツールを `--physical-size` つきで走査し、期待値データをリポジトリの外（`artifacts/` 配下）に書き出す
   - 物理サイズ換算なしの既存の期待値との比較が、変更前の版で差分なしであることも確かめておく
   - 完了の状態: 変更前の物理サイズ換算ありの期待値ファイルが `artifacts/` にあり、その作成条件（コミット・フィクスチャの版・クラスタサイズ）が Implementation Notes に記録されている
@@ -116,3 +116,4 @@
   - _Requirements: 2.3, 2.4, 2.5, 3.1, 3.3, 4.1, 5.5, 5.6, 6.2_
 
 ## Implementation Notes
+- 1.1: 変更前の物理サイズ換算ありの期待値を `artifacts/scan-correctness/pre-change-physical.golden.txt` に控えた（コミット fc41971、FormatVersion 2、fixture-v1、ClusterSizeInBytes 4096、エントリ21件、FixtureComplete true）。同じ版で `compare --golden baselines/fixture-v1.golden.txt` は一致（終了コード0）。`artifacts/` は Git 管理外のため、1.1 の成果物はコミットされない
