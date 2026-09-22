@@ -91,8 +91,14 @@ namespace LargeFolderFinder
                 // VM Sessions collection change?
                 // We rely on VM to manage sessions.
 
-                // 初回描画完了後にメモリを絞る
-                this.ContentRendered += (s, e) => OptimizeMemory();
+                // 初回描画完了後にメモリを絞り、設定を明示的に読み込んで解析の失敗があれば知らせる。
+                // Config.Instance の最初の読み込みはバインディング経由で時点が決まらないため、ここで読み直して判定する
+                this.ContentRendered += (s, e) =>
+                {
+                    OptimizeMemory();
+                    Config.Load();
+                    SessionViewModel.NotifyConfigLoadErrorIfAny();
+                };
 
                 // アイドル時のメモリ最適化実行
                 InitializeMemoryTimer();

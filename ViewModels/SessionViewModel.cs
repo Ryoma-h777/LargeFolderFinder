@@ -42,6 +42,23 @@ namespace LargeFolderFinder.ViewModels
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
+        /// <summary>
+        /// 設定ファイルの読み込みに未通知の失敗があれば、理由を添えて利用者にダイアログで知らせる。
+        /// 起動の後と走査の開始時の両方から呼ぶ。通知済みの同じ失敗では何もしない。
+        /// </summary>
+        internal static void NotifyConfigLoadErrorIfAny()
+        {
+            if (!Config.TryTakeUnnotifiedError(out string error)) return;
+
+            var lm = LocalizationManager.Instance;
+            // 既定の設定で動作を続けられるため、アイコンは警告にする
+            MessageBox.Show(
+                string.Format(lm.GetText(LanguageKey.ConfigParseError), error),
+                lm.GetText(LanguageKey.LabelError),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+
         // MainWindow.xaml.cs から移行したロジック
 
         /// <summary>
@@ -82,6 +99,9 @@ namespace LargeFolderFinder.ViewModels
             long thresholdBytes = (long)(thresholdVal * AppConstants.GetBytesPerUnit(selectedUnit));
 
             var config = Config.Load();
+
+            // 設定の解析に失敗していれば知らせる。走査は既定の設定で続ける（同じ失敗は一度だけ知らせる）
+            NotifyConfigLoadErrorIfAny();
 
             // Update session timestamp and rename file
             if (!string.IsNullOrEmpty(_model.FileName))
