@@ -52,6 +52,7 @@ internal static class SelfChecks
         RegisterScanReportParityChecks(runner);
         RegisterFolderCounterChecks(runner);
         RegisterFinalProgressChecks(runner);
+        RegisterWin32DeclarationChecks(runner);
     }
 
     /// <summary>
@@ -4505,6 +4506,46 @@ internal static class SelfChecks
         {
             // ここで失敗した場合は、呼び出し側（自己検証の最終確認）が残留として検出する。
         }
+    }
+
+    /// <summary>
+    /// 本体の OS 呼び出しの宣言の整理の検証項目を登録する（scan-correctness タスク2.4）。
+    /// 本体に触れる呼び出しは Scan 層の <see cref="ScanRunner.GetWin32DeclaredMemberNames"/> を通す。
+    /// </summary>
+    private static void RegisterWin32DeclarationChecks(SelfCheckRunner runner)
+    {
+        runner.Add("本体の OS 呼び出しの宣言の型に、事前カウント用の宣言と未使用の宣言が無く、クラスタサイズの取得とメモリの切り詰めの宣言だけが残っている（scan-correctness 要件2.1, 2.2）", () =>
+        {
+            IReadOnlySet<string> declared = ScanRunner.GetWin32DeclaredMemberNames();
+
+            // 除いたはずの宣言（事前カウント用の列挙の API・構造体・定数・列挙と、未使用の宣言）
+            string[] removed =
+            {
+                "FindFirstFileEx",
+                "FindNextFile",
+                "FindClose",
+                "WIN32_FIND_DATA",
+                "FINDEX_INFO_LEVELS",
+                "FINDEX_SEARCH_OPS",
+                "FILE_ATTRIBUTE_DIRECTORY",
+                "FILE_ATTRIBUTE_REPARSE_POINT",
+                "FIND_FIRST_EX_LARGE_FETCH",
+                "ShowWindow",
+                "GetCompressedFileSize",
+            };
+
+            string[] remaining = removed.Where(declared.Contains).ToArray();
+            SelfAssert.That(
+                remaining.Length == 0,
+                $"除いたはずの宣言が残っています: {string.Join(", ", remaining)}");
+
+            // 反射が空振りしていないことを、残すべき宣言が見えることで確かめる。
+            string[] kept = { "GetDiskFreeSpace", "SetProcessWorkingSetSize" };
+            string[] missing = kept.Where(name => !declared.Contains(name)).ToArray();
+            SelfAssert.That(
+                missing.Length == 0,
+                $"残すべき宣言が見つかりません: {string.Join(", ", missing)}（宣言されているメンバー: {string.Join(", ", declared.OrderBy(n => n, StringComparer.Ordinal))}）");
+        });
     }
 
     /// <summary>

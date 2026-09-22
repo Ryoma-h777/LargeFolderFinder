@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -268,6 +269,32 @@ public sealed class ScanRunner : IScanRunner
             CancellationToken.None));
 
         return countTask.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// 本体の OS 呼び出しの宣言をまとめた型（<c>LargeFolderFinder.Win32</c>）が宣言している
+    /// メンバー（メソッド・フィールド・入れ子の型）の名前を、反射で取得して返す（scan-correctness 要件2.1, 2.2）。
+    /// 型は internal のため、本体のアセンブリから型名で取得する（InternalsVisibleTo は使わない）。
+    /// 本体に触れる呼び出しをこの層に閉じ込めるための入口であり、名前に手を加えない。
+    /// </summary>
+    /// <returns>宣言されたメンバーの名前の集合（継承したメンバーは含まない）。</returns>
+    /// <exception cref="TypeLoadException">本体のアセンブリに型が見つからないとき。</exception>
+    public static IReadOnlySet<string> GetWin32DeclaredMemberNames()
+    {
+        const BindingFlags DeclaredOnly = BindingFlags.Public | BindingFlags.NonPublic
+            | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+
+        Type win32 = typeof(global::LargeFolderFinder.Scanner).Assembly.GetType(
+            "LargeFolderFinder.Win32",
+            throwOnError: true)!;
+
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (MemberInfo member in win32.GetMembers(DeclaredOnly))
+        {
+            names.Add(member.Name);
+        }
+
+        return names;
     }
 
     /// <summary>
