@@ -4,23 +4,23 @@
 
 ## 処理の全体像
 
-スキャンは 2 段構えです。**それぞれ列挙方式が違う**ことに注意してください。
+スキャンは 2 段構えです。どちらも BCL の列挙を使います（事前カウントは `scan-correctness` で Win32 API から置き換えた。長いパスを数え損ねていたため。tech.md の「Win32 API 直接呼び出し」）。
 
 | 段階 | 実装 | 列挙方式 | 目的 |
 |---|---|---|---|
-| ① 事前カウント | `Scanner.CountFoldersAsync` | **Win32 API**（`FindFirstFileEx` / `FindNextFile`） | 進捗率の分母を得る |
+| ① 事前カウント | `Scanner.CountFoldersAsync` → `FolderCounter` | **`DirectoryInfo.EnumerateDirectories`**（`EnumerationOptions` を明示） | 進捗率の分母を得る |
 | ② 本スキャン | `Scanner.RunScan` → `ScanRecursiveInternal` | **`DirectoryInfo.EnumerateFiles` / `EnumerateDirectories`** | サイズ集計とツリー構築 |
 
-### ① 事前カウント（Win32）
-- `FindExInfoBasic`（代替名を取得しない）+ `FIND_FIRST_EX_LARGE_FETCH`（バッファ拡大）で列挙コストを下げる
-- `Config.MaxDepthForCount`（既定 3）で**深さを打ち切る**。全階層を数えると事前カウント自体が本スキャン並みの時間になるため
-- ハンドルは `try` / `finally` で必ず `FindClose`
+### ① 事前カウント
+- 1階層ずつ自前の再帰で列挙し、`Config.MaxDepthForCount`（既定 3）で**深さを打ち切る**。全階層を数えると事前カウント自体が本スキャン並みの時間になるため（`RecurseSubdirectories = true` の一括列挙は上限より下まで潜るので使わない）
+- 本スキャンと同じ集合を数えるため、`AttributesToSkip = ReparsePoint`（既定の隠し・システムの除外を外す）、`IgnoreInaccessible = true` を指定する
+- 速度の作り込み（Win32 時代の `FIND_FIRST_EX_LARGE_FETCH` 相当など）はしていない。置き換えの前後の速度は計測していない（`scan-performance` の範囲）
 - `Config.SkipFolderCount = true` でこの段階を丸ごと省略できる（起動は速いが進捗率が出ない）
 
 ### ② 本スキャン
 - ファイルは `EnumerateFiles`、サブディレクトリは `EnumerateDirectories` で列挙
 - **リパースポイント（`FileAttributes.ReparsePoint`）は必ず除外**する。シンボリックリンク経由の無限再帰を防ぐため
-- アクセス拒否は `catch { }` で握りつぶして走査を継続する。1 フォルダーの権限不足で全体を止めない
+- 列挙の失敗は、アクセス拒否・見つからない・入出力の失敗に限って捕まえ、そのフォルダの残りを飛ばして走査を継続する。1 フォルダーの権限不足で全体を止めない。スキップは `ScanSkipRecorder`（並行の集合）に集め、走査の終わりに1回だけログに書く（1件ごとにログを書くと走査が遅くなるため）
 
 ## 並列処理のパターン
 
@@ -55,7 +55,8 @@ else
 - **`IProgress<ScanProgress>` の報告は 5 秒間隔**（初回のみ即時）。二重チェックロック（`lock (progressCounter)` の前後で条件判定）で多重報告を抑止
 - **ログ出力は 20 秒間隔**（`Logger`）
 - 残り時間は **指数移動平均（`Alpha = 0.1`）** で、直近の速度を重視して推定する。スキャンの進み具合によって速度が変わり、開始時からの平均速度では予測が不安定になるため
-- 進捗には暫定ツリー（`ProgressCounter.RootNode`）を載せ、走査中でも途中結果を見せる
+- 進捗には暫定ツリー（`ProgressCounter.RootNode`）を載せ、走査中でも途中結果を見せる。暫定ツリーを読む処理は、子の一覧を `lock (node.Children)` の下で写し取ってから使う（`ResultFormatter` の規約。自己検証で並行に読んで確かめている）
+- 走査が正常に完了したときだけ、間隔とは別に最後の報告（`IsFinal = true`、最後の数とスキップの一覧、暫定ツリーは載せない）を1回送る
 
 **新しい進捗表示を足す場合も、この 5 秒 / 20 秒の枠内に相乗りさせてください。**独自の高頻度通知を追加しないこと。
 

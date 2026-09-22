@@ -31,17 +31,16 @@ WPF による単一プロセスのデスクトップアプリ。**MVVM を部分
 
 ### Win32 API 直接呼び出し
 
-`Helpers/Win32.cs` に `kernel32.dll` の P/Invoke を集約しています。用途は限定的で、**列挙処理のすべてが Win32 経由なわけではありません**。
+`Helpers/Win32.cs` に `kernel32.dll` の P/Invoke を集約しています。**本体に残る宣言は次の2つだけ**で、フォルダやファイルの列挙には使いません（`scan-correctness` で事前カウント用と未使用の宣言を除いた。自己検証が反射で、除いた宣言が戻っていないことを確かめる）。
 
-| 用途 | API | 使用箇所 |
-|---|---|---|
-| 進捗率の分母となるフォルダー数の事前カウント | `FindFirstFileEx` / `FindNextFile` / `FindClose` | `Scanner.CountFoldersRecursive` |
-| クラスタサイズ取得（ディスク上のサイズ計算用） | `GetDiskFreeSpace` | `Scanner.GetClusterSize` |
-| ワーキングセットの切り詰め | `SetProcessWorkingSetSize` | `MainWindow.OptimizeMemory` |
+| 用途 | API | 使用箇所 | パスの長さの制約を受けない理由 |
+|---|---|---|---|
+| クラスタサイズ取得（ディスク上のサイズ計算用） | `GetDiskFreeSpace` | `Scanner.GetClusterSize` | 渡すのはドライブや共有のルート（`C:\`、`\\server\share\`）だけ。BCL にクラスタサイズを得る API が無いので残す |
+| ワーキングセットの切り詰め | `SetProcessWorkingSetSize` | `MainWindow.OptimizeMemory` | パスを扱わない |
 
-本スキャン（`Scanner.ScanRecursiveInternal`）は `DirectoryInfo.EnumerateFiles` / `EnumerateDirectories` を使っています。.NET 10 のこの経路は 260 文字を超えるパスも列挙できますが、**Win32 を直接呼ぶ事前カウントは移行後も MAX_PATH の制約を受けます**（「既知の制約」参照）。
+事前カウント（`Scanner.CountFoldersAsync` → `FolderCounter`）と本スキャン（`Scanner.ScanRecursiveInternal`）は、どちらも BCL の列挙（`DirectoryInfo.EnumerateDirectories` / `EnumerateFiles`）を使い、260 文字を超えるパスも数え・列挙できます。**列挙の処理に手書きの P/Invoke を足さないこと**。OS の設定（`LongPathsEnabled=1`）が有効でも、長いパスの宣言（`longPathAware`）の無い実行ファイルから呼ぶ手書きの P/Invoke は MAX_PATH の制限を受け、旧来の事前カウントは長いパスの配下を数え損ねていた（`scan-correctness` 2.1 で実測）。
 
-Win32 側では `FindExInfoBasic`（代替名を取得しない）と `FIND_FIRST_EX_LARGE_FETCH`（バッファ拡大）を指定し、ハンドルは必ず `try` / `finally` で `FindClose` します。リパースポイントは両経路とも除外します。
+事前カウントは本スキャンと同じ集合を数えます（深さ0〜上限、リパースポイントを除く、隠し・システム属性を含む、アクセスできないフォルダは自身を数えて配下は数えない）。そのため `EnumerationOptions` の `AttributesToSkip` を `ReparsePoint` だけに明示している（既定は隠し・システムも除く）。走査が正常に完了すると、最後の数とスキップの一覧を載せた最後の進捗（`ScanProgress.IsFinal`）を1回報告する。
 
 走査性能に関わる変更を行う場合は、**performance.md を必ず参照してください。**
 
@@ -55,11 +54,17 @@ Win32 側では `FindExInfoBasic`（代替名を取得しない）と `FIND_FIRS
 
 ### コメント・命名
 - **XML ドキュメントコメント（`///`）は日本語で記述**。コードベース全体で徹底されています（248 箇所）
-- ただし **`Logger` に出すログメッセージは英語**。定数として `AppConstants` に集約する（`LogScanStart` など）
+- `Logger` に出すログメッセージは、既存の多くが英語（定数は `AppConstants` に集約。`LogScanStart` など）だが、`SessionFileManager` や `scan-correctness` で足した記録（走査のスキップ、`Config.txt` の失敗）は日本語で、両方が混在している
 
 ### エラーハンドリング
-- 永続化・IO 系は例外を握って `Logger.Log(メッセージ, ex)` に流し、既定値を返す（アプリを落とさない）
-- ユーザー向け表示は必ずローカライズ経由
+`catch` は次のいずれかに分けて扱う（`scan-correctness` で本体の全件に適用。経緯は decisions.md の「失敗の扱いを4つに分ける」）。
+
+- **意図して無視**: 捨ててよい失敗だけ。空の `catch` にせず、`// 意図して無視: <理由>` の書式で理由を残す（ログ自身の失敗、クラスタサイズの取得、入力途中の正規表現など）。この書式を持たない空の `catch` を本体に置かない
+- **記録する**: 永続化・IO 系は例外を捕まえて `Logger.Log(メッセージ, ex)` に流し、既定値を返す（アプリを落とさない）
+- **走査のスキップ**: 走査中の列挙の失敗は、アクセス拒否・見つからない・入出力の失敗（`UnauthorizedAccessException` / `IOException`）に限って捕まえ、`ScanSkipRecorder` に集めて走査の終わり（完了・取り消し・中断のいずれでも）に1回でログに書く（`走査のスキップ: N 件`）。1件ごとにログに書かない（走査を遅くする）。それ以外の例外は捨てずに上に伝える
+- **利用者に知らせる**: `Config.txt` の解析の失敗は、既定の設定で動かしたうえで、起動の後と走査の開始時にダイアログで知らせる（同じ失敗は1回だけ）
+- 走査の取り消しは `OperationCanceledException` として上に伝え、画面は「取り消し」の状態を出す。描画の取り消しは記録しない
+- ユーザー向け表示は必ずローカライズ経由。開発用の固定文言のダイアログを残さない
 
 ### テスト
 `Tests/LargeFolderFinder.Tests`（xunit.v3）を `dotnet test` の1コマンドで実行します。テストは判定を自前で組み立てず、**2つの検証ツールの実行ファイルを子プロセスで呼び、終了コードで成否を決めます**（走査結果の期待値データとの比較と自己検証、翻訳の網羅の検証と自己検証）。
@@ -122,7 +127,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build/Package.ps1
 
 - アプリの出力は `bin/<構成>/net10.0-windows/win-x64/`（RID を指定しているため）。検証ツールの出力には RID が付かない
 - 検証ツールの終了コードは 0 = 一致・問題なし / 1 = 差異・問題あり / 2 = 検証不能（引数の誤り、言語フォルダが無い、環境の制約など）
-- `LocalizationCheck` は期待するキーの一覧を**アプリのビルド出力から得る**。`LanguageKey` を変えたら、ソリューションをビルドし直してから `check` を実行する。出力が古いかどうかは、報告の要約のキー数（`問題はありません（言語 13、キー 81）` など）で確かめられる
+- `LocalizationCheck` は期待するキーの一覧を**アプリのビルド出力から得る**。`LanguageKey` を変えたら、ソリューションをビルドし直してから `check` を実行する。出力が古いかどうかは、報告の要約のキー数（`問題はありません（言語 13、キー 82）` など）で確かめられる
 
 ## 発行と配布
 
@@ -140,9 +145,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build/Package.ps1
 ## 既知の制約
 
 - **自己完結版は約140MB**。WPF がトリミングに非対応（dotnet/wpf#3811）のため削れない。軽さが要る利用者にはフレームワーク依存版を案内する
-- **フォルダ数の事前カウントに長さの制限が残る**。本スキャンは長いパスを列挙できるが、事前カウントの P/Invoke は MAX_PATH の制約を受け、長いパスの配下を数え損ねる（進捗率の分母がずれる）。解消は `scan-correctness` の範囲
 - **ビルドはコードを変えていなくても失敗しうる**。警告を失敗として扱うため、使っているパッケージ（.NET 10 では推移的な依存も監査の対象）に脆弱性が新たに公表されただけで、NuGet の監査の警告（`NU1901`〜`NU1904`）が出てビルドが失敗する。失敗の原因がこの警告かどうかを警告の番号で見分け、コードの変更による失敗と取り違えない
 - **梱包は構成外のファイルを黙って除く**。発行の設定を変えるときは、発行フォルダに exe 以外の dll が出ていないかを確かめる（出ても zip から黙って抜ける。現状は `IncludeNativeLibrariesForSelfExtract=true` でネイティブ DLL も exe に入るので出ない）
+- **起動確認は、発行先の `Config.txt` が壊れていると失敗する**。解析の失敗を知らせるダイアログが起動の後に出て、`Test-Launch.ps1` がそれを検知するため。起動確認の前に、発行先の `Config.txt` がリポジトリのものと同じであることを確かめる
 - **手元の起動確認で、閉じたアプリのプロセスが消えずに残ったことが1回ある**（終了済みのままスレッドが残り、発行先の exe がロックされる。OS 側の I/O の完了待ちとみられ、PC の再起動で解消する）。起動確認の出力は管で受けず、ファイルに取る
 
 ## 主要な技術判断とその理由

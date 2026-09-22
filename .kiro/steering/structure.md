@@ -16,7 +16,7 @@
 ### Services — 処理ロジック
 **場所**: `Services/`
 **入るもの**: UI に依存しない処理。1 クラス 1 責務
-**例**: `Scanner`（走査）、`ResultFormatter`（テキスト整形）、`TreeFilter`（絞り込み）、`SessionFileManager`（永続化）、`LocalizationManager`、`Logger`
+**例**: `Scanner`（走査）、`FolderCounter`（事前カウント）、`ScanSkipRecorder`（走査のスキップの記録）、`ResultFormatter`（テキスト整形）、`TreeFilter`（絞り込み）、`SessionFileManager`（永続化）、`LocalizationManager`、`Logger`
 
 **判断基準**: WPF の型（`Window`、`Control` 等）を参照せずに書けるものは Services に置きます。
 
@@ -30,7 +30,7 @@
 
 ### Helpers — 横断的な小道具
 **場所**: `Helpers/`
-**入るもの**: どのレイヤーからも呼ばれる補助。P/Invoke（`Win32`）、`RelayCommand`、`TextMeasurer`、`AppSettings`、`AppInfo`
+**入るもの**: どのレイヤーからも呼ばれる補助。P/Invoke（`Win32`）、`LatestOnlyCancellation`（最新の要求だけを有効にする取り消し）、`RelayCommand`、`TextMeasurer`、`AppSettings`、`AppInfo`
 
 ### Resources — 配布物に含めるファイル
 **場所**: `Resources/`
