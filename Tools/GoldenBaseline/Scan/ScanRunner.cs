@@ -144,6 +144,44 @@ public sealed class FinalProgressOutcome
 }
 
 /// <summary>
+/// <see cref="ScanRunner.RunWithConcurrentFilterReads"/> の結果。走査の戻り値と、走査と並行に行った読み取りの記録を持つ。
+/// </summary>
+public sealed class ConcurrentReadOutcome
+{
+    /// <summary>本体の RunScan の戻り値（走査結果のルートノード）。</summary>
+    public global::LargeFolderFinder.FolderInfo? Root { get; }
+
+    /// <summary>進捗で渡り、読み取りに使った途中のツリーのルートノード。渡らなければ null。</summary>
+    public global::LargeFolderFinder.FolderInfo? ReadRoot { get; }
+
+    /// <summary>フィルタの前処理をかけた回数。</summary>
+    public int ReadCount { get; }
+
+    /// <summary>そのうち、始まりから終わりまで走査が続いていた（走査と並行に読めた）回数。</summary>
+    public int ReadsWhileScanning { get; }
+
+    /// <summary>読み取りで起きた例外（上限まで）。壊れずに読めていれば空。</summary>
+    public IReadOnlyList<Exception> ReadFailures { get; }
+
+    /// <summary>
+    /// ConcurrentReadOutcome を構築する。
+    /// </summary>
+    public ConcurrentReadOutcome(
+        global::LargeFolderFinder.FolderInfo? root,
+        global::LargeFolderFinder.FolderInfo? readRoot,
+        int readCount,
+        int readsWhileScanning,
+        IReadOnlyList<Exception> readFailures)
+    {
+        Root = root;
+        ReadRoot = readRoot;
+        ReadCount = readCount;
+        ReadsWhileScanning = readsWhileScanning;
+        ReadFailures = readFailures;
+    }
+}
+
+/// <summary>
 /// 列挙・属性取得に失敗した理由の分類（タスク7.2）。
 /// 記録先の振り分けを1箇所に集約するために用いる。
 /// </summary>
@@ -375,6 +413,163 @@ public sealed class ScanRunner : IScanRunner
             {
                 _lastFinal = value;
                 _finalCount++;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 本体の走査（<see cref="global::LargeFolderFinder.Scanner.RunScan"/>）を実行しながら、進捗で渡る途中のツリー（<c>CurrentResult</c>）に
+    /// 結果の整形のフィルタの前処理（<see cref="global::LargeFolderFinder.ResultFormatter.BuildFilterCache"/>）を
+    /// 走査が終わるまで別のスレッドで繰り返しかけ、読み取りで起きた例外と回数を返す（scan-correctness 要件3.1, 3.2）。
+    /// 本体に触れる呼び出しをこの層に閉じ込めるための入口であり、整形の中身には手を加えない。
+    /// </summary>
+    /// <remarks>
+    /// 途中のツリーは、走査が最初のフォルダを終えたときの最初の報告（その後は5秒ごと）で渡る。
+    /// 読み取りはその時点から走査の完了まで続けるため、走査が5秒以内に終わっても並行の読み取りが起きる。
+    /// 読み取りのたびに並べ替えの鍵・向き・ファイルを含めるかを切り替え、整形の全ての並べ替えの経路を通す。
+    /// </remarks>
+    /// <param name="rootPath">走査の起点のフォルダのパス。実在している必要がある。</param>
+    /// <param name="useParallel">並列で走査するかどうか。</param>
+    public ConcurrentReadOutcome RunWithConcurrentFilterReads(string rootPath, bool useParallel)
+    {
+        if (string.IsNullOrEmpty(rootPath))
+        {
+            throw new ArgumentException("基準フォルダのパスが空です。", nameof(rootPath));
+        }
+
+        if (!Directory.Exists(rootPath))
+        {
+            throw new DirectoryNotFoundException($"基準フォルダが見つかりません: {rootPath}");
+        }
+
+        var tap = new PartialTreeTap();
+
+        // Run と同じく、呼び出し元のコンテキストに関わらずデッドロックしないようスレッドプール上に切り離して走らせる
+        var scanTask = Task.Run(() => global::LargeFolderFinder.Scanner.RunScan(
+            rootPath,
+            thresholdBytes: 0L,
+            totalFolders: 0,
+            maxDepth: ConcurrentReadMaxDepth,
+            useParallel: useParallel,
+            usePhysicalSize: false,
+            progress: tap,
+            token: CancellationToken.None));
+
+        // 読み取りは走査と並行に進めるため、専用のスレッドで行う
+        var readTask = Task.Factory.StartNew(
+            () => ReadPartialTreeUntilScanEnds(tap, scanTask),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        global::LargeFolderFinder.FolderInfo? root = scanTask.GetAwaiter().GetResult();
+        ConcurrentReadOutcome reads = readTask.GetAwaiter().GetResult();
+
+        return new ConcurrentReadOutcome(root, reads.ReadRoot, reads.ReadCount, reads.ReadsWhileScanning, reads.ReadFailures);
+    }
+
+    /// <summary>並行の読み取りの検証で走査に渡す深さの上限。本体の走査は深さで打ち切らず、数え方にだけ使う</summary>
+    private const int ConcurrentReadMaxDepth = 64;
+
+    /// <summary>並行の読み取りで控えておく例外の件数の上限（同じ例外が大量に続く場合に備える）</summary>
+    private const int ConcurrentReadMaxRecordedFailures = 20;
+
+    /// <summary>
+    /// 途中のツリーが渡るのを待ち、走査が終わるまでそのツリーに結果の整形のフィルタの前処理を繰り返しかける。
+    /// </summary>
+    private static ConcurrentReadOutcome ReadPartialTreeUntilScanEnds(PartialTreeTap tap, Task scanTask)
+    {
+        // 途中のツリーが渡るか、走査が（渡す前に）終わるまで待つ
+        while (!tap.TreeAvailable.Wait(1))
+        {
+            if (scanTask.IsCompleted)
+            {
+                break;
+            }
+        }
+
+        global::LargeFolderFinder.FolderInfo? tree = tap.Tree;
+        var failures = new List<Exception>();
+        int readCount = 0;
+        int readsWhileScanning = 0;
+
+        if (tree == null)
+        {
+            return new ConcurrentReadOutcome(null, null, readCount, readsWhileScanning, failures);
+        }
+
+        var formatter = new global::LargeFolderFinder.ResultFormatter();
+        var sortTargets = (global::LargeFolderFinder.AppConstants.SortTarget[])Enum.GetValues(typeof(global::LargeFolderFinder.AppConstants.SortTarget));
+        var sortDirections = (global::LargeFolderFinder.AppConstants.SortDirection[])Enum.GetValues(typeof(global::LargeFolderFinder.AppConstants.SortDirection));
+
+        while (true)
+        {
+            bool scanningBefore = !scanTask.IsCompleted;
+
+            try
+            {
+                // 描画と同じく、読み取りのたびに新しい写しの入れ物を作る
+                var cache = new System.Collections.Concurrent.ConcurrentDictionary<global::LargeFolderFinder.FolderInfo, List<global::LargeFolderFinder.FolderInfo>>();
+                formatter.BuildFilterCache(
+                    tree,
+                    cache,
+                    thresholdBytes: 0L,
+                    includeFiles: readCount % 2 == 0,
+                    sortTarget: sortTargets[readCount % sortTargets.Length],
+                    sortDirection: sortDirections[(readCount / sortTargets.Length) % sortDirections.Length],
+                    token: CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                if (failures.Count < ConcurrentReadMaxRecordedFailures)
+                {
+                    failures.Add(ex);
+                }
+            }
+
+            readCount++;
+
+            // 読み取りの始まりから終わりまで走査が続いていた回だけを、並行に読めた回として数える
+            bool scanningAfter = !scanTask.IsCompleted;
+            if (scanningBefore && scanningAfter)
+            {
+                readsWhileScanning++;
+            }
+
+            if (!scanningAfter)
+            {
+                break;
+            }
+        }
+
+        return new ConcurrentReadOutcome(null, tree, readCount, readsWhileScanning, failures);
+    }
+
+    /// <summary>
+    /// 進捗の報告のうち、途中のツリー（<c>CurrentResult</c>）が載った最初の報告からツリーを受け取る受け手。
+    /// 報告は走査のスレッドで呼ばれるため、ここでは受け取って知らせるだけにし、走査を止めない。
+    /// </summary>
+    private sealed class PartialTreeTap : IProgress<global::LargeFolderFinder.ScanProgress>
+    {
+        private global::LargeFolderFinder.FolderInfo? _tree;
+
+        /// <summary>途中のツリーを受け取ったときに立つ印</summary>
+        public ManualResetEventSlim TreeAvailable { get; } = new ManualResetEventSlim(false);
+
+        /// <summary>受け取った途中のツリー。まだ受け取っていなければ null</summary>
+        public global::LargeFolderFinder.FolderInfo? Tree => Volatile.Read(ref _tree);
+
+        /// <inheritdoc />
+        public void Report(global::LargeFolderFinder.ScanProgress value)
+        {
+            if (value is null || value.IsFinal || value.CurrentResult is null)
+            {
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref _tree, value.CurrentResult, null) == null)
+            {
+                TreeAvailable.Set();
             }
         }
     }

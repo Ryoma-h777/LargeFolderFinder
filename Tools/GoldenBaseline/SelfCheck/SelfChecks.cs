@@ -53,6 +53,7 @@ internal static class SelfChecks
         RegisterFolderCounterChecks(runner);
         RegisterFinalProgressChecks(runner);
         RegisterWin32DeclarationChecks(runner);
+        RegisterConcurrentTreeReadChecks(runner);
     }
 
     /// <summary>
@@ -4546,6 +4547,138 @@ internal static class SelfChecks
                 missing.Length == 0,
                 $"残すべき宣言が見つかりません: {string.Join(", ", missing)}（宣言されているメンバー: {string.Join(", ", declared.OrderBy(n => n, StringComparer.Ordinal))}）");
         });
+    }
+
+    /// <summary>
+    /// 走査中の途中のツリーを結果の整形が並行に読んでも壊れないことの検証項目を登録する（scan-correctness タスク2.5）。
+    /// 本体に触れる呼び出しは Scan 層の <see cref="ScanRunner.RunWithConcurrentFilterReads"/> を通す。
+    /// </summary>
+    private static void RegisterConcurrentTreeReadChecks(SelfCheckRunner runner)
+    {
+        runner.Add("大きめの合成の木を走査しながら、進捗で渡る途中のツリーに結果の整形のフィルタの前処理を繰り返しかけても例外が起きない（逐次・並列。scan-correctness 要件3.1, 3.2）", () =>
+        {
+            WithSyntheticTree(SyntheticTreeFanOut, SyntheticTreeDepth, SyntheticTreeFilesPerFolder, SyntheticTreeWideFolderFiles, root =>
+            {
+                foreach (bool useParallel in new[] { false, true })
+                {
+                    string mode = useParallel ? "並列" : "逐次";
+                    int readsWhileScanning = 0;
+
+                    // 走査が速すぎて並行の読み取りが一度も起きない回に備え、決めた回数まで走査をやり直す
+                    for (int round = 0; round < ConcurrentReadMaxRounds && readsWhileScanning < ConcurrentReadMinReads; round++)
+                    {
+                        var outcome = new ScanRunner().RunWithConcurrentFilterReads(root, useParallel);
+
+                        SelfAssert.That(
+                            outcome.ReadFailures.Count == 0,
+                            $"走査中の途中のツリーの読み取りで例外が起きました（{mode}、{outcome.ReadFailures.Count}件）: {string.Join(" / ", outcome.ReadFailures.Select(e => $"{e.GetType().Name}: {e.Message}"))}");
+                        SelfAssert.That(outcome.Root != null, $"走査が結果の木を返しませんでした（{mode}）。");
+
+                        // 読み取りが途中のツリーを見ていたことを、走査の後の木と同じノードであることで確かめる
+                        SelfAssert.That(
+                            outcome.ReadCount == 0 || ReferenceEquals(outcome.ReadRoot, outcome.Root),
+                            $"進捗で渡った途中のツリーが走査の結果の木と別のものでした（{mode}）。");
+
+                        readsWhileScanning += outcome.ReadsWhileScanning;
+                    }
+
+                    // 空振り（一度も走査と並行に読めなかった）で通らないようにする
+                    SelfAssert.That(
+                        readsWhileScanning >= ConcurrentReadMinReads,
+                        $"走査と並行に読み取れた回数が足りません（{mode}、回数: {readsWhileScanning}, 必要: {ConcurrentReadMinReads}）。合成の木を大きくしてください。");
+                }
+            });
+        });
+    }
+
+    /// <summary>合成の木の各フォルダの子フォルダの数</summary>
+    private const int SyntheticTreeFanOut = 6;
+
+    /// <summary>合成の木の深さ（起点を深さ0とし、この深さまで子フォルダを作る）</summary>
+    private const int SyntheticTreeDepth = 4;
+
+    /// <summary>合成の木の各フォルダに置くファイルの数</summary>
+    private const int SyntheticTreeFilesPerFolder = 2;
+
+    /// <summary>
+    /// 合成の木の起点の直下に置く「幅の広いフォルダ」のファイルの数。
+    /// 走査がこのフォルダの子の一覧に長く書き込み続けるあいだに読み取りが重なるようにし、読み書きの競合が起きる窓を広げる
+    /// </summary>
+    private const int SyntheticTreeWideFolderFiles = 3000;
+
+    /// <summary>並行の読み取りの検証で走査をやり直す回数の上限</summary>
+    private const int ConcurrentReadMaxRounds = 5;
+
+    /// <summary>並行の読み取りの検証で、走査と並行に読み取れたとみなすのに必要な回数</summary>
+    private const int ConcurrentReadMinReads = 3;
+
+    /// <summary>
+    /// 一時領域に、各フォルダが <paramref name="fanOut"/> 個の子フォルダと <paramref name="filesPerFolder"/> 個のファイルを持つ
+    /// 深さ <paramref name="depth"/> の合成の木と、起点の直下に <paramref name="wideFolderFiles"/> 個のファイルを持つ幅の広いフォルダを作り、
+    /// <paramref name="action"/> を実行してから後始末する。
+    /// フィクスチャ（FixtureSpec）とは別の、走査の量を稼ぐための木である。
+    /// </summary>
+    private static void WithSyntheticTree(int fanOut, int depth, int filesPerFolder, int wideFolderFiles, Action<string> action)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "gb_syn_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+
+        try
+        {
+            var current = new List<string> { root };
+            Directory.CreateDirectory(root);
+
+            for (int level = 0; level <= depth; level++)
+            {
+                var next = new List<string>();
+                foreach (string folder in current)
+                {
+                    // ファイルごとに大きさを変え、並べ替えの鍵に差が出るようにする
+                    for (int f = 0; f < filesPerFolder; f++)
+                    {
+                        File.WriteAllBytes(Path.Combine(folder, $"file_{f}.bin"), new byte[(f + 1) * (level + 1)]);
+                    }
+
+                    if (level == depth)
+                    {
+                        continue;
+                    }
+
+                    for (int c = 0; c < fanOut; c++)
+                    {
+                        string child = Path.Combine(folder, $"d{c}");
+                        Directory.CreateDirectory(child);
+                        next.Add(child);
+                    }
+                }
+
+                current = next;
+            }
+
+            string wideFolder = Path.Combine(root, "wide");
+            Directory.CreateDirectory(wideFolder);
+            for (int f = 0; f < wideFolderFiles; f++)
+            {
+                File.WriteAllBytes(Path.Combine(wideFolder, $"w_{f}.bin"), new byte[f % 97]);
+            }
+
+            action(root);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+            catch
+            {
+                // ここで失敗した場合は、次の後始末の手段へ進む（既存の項目と同じ最終手段）
+            }
+
+            ForceCleanupFixtureResidue(root);
+        }
     }
 
     /// <summary>
