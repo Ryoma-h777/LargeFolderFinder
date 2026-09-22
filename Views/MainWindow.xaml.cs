@@ -473,13 +473,16 @@ namespace LargeFolderFinder
 
             try
             {
-                // バックグラウンド生成待ち
-                if (session.CopyTextGenerationTask != null && !session.CopyTextGenerationTask.IsCompleted)
+                // バックグラウンド生成待ち。待っている間に次の描画が始まると待ち先が差し替わるため、
+                // 最新の描画のテキストが揃うまで待ち直す
+                bool waited = false;
+                while (session.CopyTextGenerationTask is { IsCompleted: false } pending)
                 {
                     System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
-                    await session.CopyTextGenerationTask;
-                    System.Windows.Input.Mouse.OverrideCursor = null;
+                    waited = true;
+                    await pending;
                 }
+                if (waited) System.Windows.Input.Mouse.OverrideCursor = null;
 
                 string? text = session.CachedCopyText;
                 if (string.IsNullOrWhiteSpace(text)) return;

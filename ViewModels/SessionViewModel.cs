@@ -386,6 +386,9 @@ namespace LargeFolderFinder.ViewModels
         /// <summary>
         /// セッションの結果（SessionData.Result）を元に、UI（リストボックス等）を再描画します。
         /// フィルタリング、ソート、クリップボード用テキスト生成もここで行います。
+        /// 同じタブで進行中の以前の描画は取り消し、最新の描画だけを画面に反映します。
+        /// 取り消しによる終了は記録せず、それ以外の失敗はログに記録して一覧を直前の状態のまま残します
+        /// （投げっぱなしで呼ばれても失敗が消えないよう、例外を呼び出し元へ投げません）。
         /// </summary>
         public async Task RenderResult()
         {
@@ -395,99 +398,130 @@ namespace LargeFolderFinder.ViewModels
             if (view == null || session?.Result == null) return;
             if (view.OutputListBox == null) return;
 
-            // Update Progress Bar
-            if (!session.IsScanning)
+            // 同じタブの前の描画を取り消し、この描画の取り消しの通知を得る（別のタブの描画には触れない）
+            CancellationToken token = session.RenderCancellation.Begin();
+
+            // 描画の途中で結果が差し替えられても一貫した木を描くよう、開始時点の根を控える
+            FolderInfo root = session.Result;
+
+            // コピーの操作が、この描画のクリップボード用テキストの完成を待てるよう、開始の時点（UI スレッド）で
+            // 待ち先を差し替える。生成を始める前に描画が終わった場合（取り消し・失敗）は finally で完了にする
+            var copyTextReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            session.CopyTextGenerationTask = copyTextReady.Task;
+            bool copyTextStarted = false;
+
+            try
             {
-                view.ScanProgressBar.Visibility = Visibility.Visible;
-                view.ScanProgressBar.IsIndeterminate = true;
-                view.StatusTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.RenderingStatus);
-            }
+                // Update Progress Bar
+                if (!session.IsScanning)
+                {
+                    view.ScanProgressBar.Visibility = Visibility.Visible;
+                    view.ScanProgressBar.IsIndeterminate = true;
+                    view.StatusTextBlock.Text = LocalizationManager.Instance.GetText(LanguageKey.RenderingStatus);
+                }
 
-            // UI設定読み込み
-            long sizeThreshold;
-            if (!long.TryParse(view.MinSizeTextBox.Text, out sizeThreshold) || sizeThreshold < 0) sizeThreshold = 0;
-            AppConstants.SizeUnit unit = (AppConstants.SizeUnit)view.UnitComboBox.SelectedIndex;
-            sizeThreshold = (long)(sizeThreshold * AppConstants.GetBytesPerUnit(unit));
+                // UI設定読み込み
+                long sizeThreshold;
+                if (!long.TryParse(view.MinSizeTextBox.Text, out sizeThreshold) || sizeThreshold < 0) sizeThreshold = 0;
+                AppConstants.SizeUnit unit = (AppConstants.SizeUnit)view.UnitComboBox.SelectedIndex;
+                sizeThreshold = (long)(sizeThreshold * AppConstants.GetBytesPerUnit(unit));
 
-            // Filtering
-            string filterText = view.FilterTextBox?.Text ?? "";
-            bool isRegex = view.FilterModeComboBox?.SelectedIndex == 1; // 0:Normal, 1:Regex
-            var filter = new TreeFilter(filterText, isRegex);
+                // Filtering
+                string filterText = view.FilterTextBox?.Text ?? "";
+                bool isRegex = view.FilterModeComboBox?.SelectedIndex == 1; // 0:Normal, 1:Regex
+                var filter = new TreeFilter(filterText, isRegex);
 
-            bool includeFiles = view.IncludeFilesCheckBox.IsChecked == true;
-            int tabWidth = 4;
-            int.TryParse(view.TabWidthTextBox.Text, out tabWidth);
-            if (tabWidth < 1) tabWidth = 1;
-            var sortTarget = session.SortTarget;
-            var sortDirection = session.SortDirection;
-            bool useSpaces = view.SeparatorComboBox.SelectedIndex == (int)AppConstants.Separator.Space;
+                bool includeFiles = view.IncludeFilesCheckBox.IsChecked == true;
+                int tabWidth = 4;
+                int.TryParse(view.TabWidthTextBox.Text, out tabWidth);
+                if (tabWidth < 1) tabWidth = 1;
+                var sortTarget = session.SortTarget;
+                var sortDirection = session.SortDirection;
+                bool useSpaces = view.SeparatorComboBox.SelectedIndex == (int)AppConstants.Separator.Space;
 
-            // Run on background thread
-            await Task.Run(() =>
-            {
-                try
+                // 整形はバックグラウンドで行い、すべての段階に取り消しの通知を渡す
+                var items = await Task.Run(() =>
                 {
                     // Filter Cache構築
                     var filterCache = new ConcurrentDictionary<FolderInfo, System.Collections.Generic.List<FolderInfo>>();
 
                     _formatter.BuildFilterCache(
-                        session.Result,
+                        root,
                         filterCache,
                         sizeThreshold,
                         includeFiles,
                         sortTarget,
                         sortDirection,
-                        CancellationToken.None,
+                        token,
                         filter);
-
-                    // Clipboard Text Generation (Async)
-                    session.CopyCts?.Cancel();
-                    session.CopyCts = new CancellationTokenSource();
-                    var copyToken = session.CopyCts.Token;
+                    token.ThrowIfCancellationRequested();
 
                     // Calculate max length for alignment if needed
                     int targetColumn = 0;
                     if (useSpaces)
                     {
                         targetColumn = _formatter.CalculateMaxLineLength(
-                            session.Result,
+                            root,
                             filterCache,
                             0,
                             true,
                             true,
                             sizeThreshold,
-                            includeFiles);
+                            includeFiles,
+                            token);
                         targetColumn += 4;
                     }
+                    token.ThrowIfCancellationRequested();
 
-                    session.CopyTextGenerationTask = Task.Run(() =>
+                    // クリップボード用テキストの生成（非同期）。次の描画が始まるかタブを閉じると取り消される。
+                    // 待つ側（コピーの操作）が取り消しの例外を受けないよう、Task.Run には通知を渡さず中で確かめる。
+                    // 取り消し元は次の Begin で破棄されるため、通知の確かめは IsCancellationRequested と IsLatest だけで行う
+                    copyTextStarted = true;
+                    _ = Task.Run(() =>
                     {
-                        if (copyToken.IsCancellationRequested) return;
-                        var sb = new StringBuilder();
-                        _formatter.PrintTreeRecursive(
-                           sb,
-                           session.Result,
-                           filterCache,
-                           "",
-                           true, // isLast
-                           true, // isRoot
-                           targetColumn,
-                           useSpaces,
-                           tabWidth,
-                           sizeThreshold,
-                           unit,
-                           includeFiles,
-                           copyToken);
-
-                        if (!copyToken.IsCancellationRequested)
+                        try
                         {
-                            session.CachedCopyText = sb.ToString();
+                            if (token.IsCancellationRequested) return;
+                            var sb = new StringBuilder();
+                            _formatter.PrintTreeRecursive(
+                               sb,
+                               root,
+                               filterCache,
+                               "",
+                               true, // isLast
+                               true, // isRoot
+                               targetColumn,
+                               useSpaces,
+                               tabWidth,
+                               sizeThreshold,
+                               unit,
+                               includeFiles,
+                               token);
+
+                            // 最新の描画のものだけを残し、古い描画のテキストで上書きしない
+                            if (session.RenderCancellation.IsLatest(token))
+                            {
+                                session.CachedCopyText = sb.ToString();
+                            }
                         }
-                    }, copyToken);
+                        catch (OperationCanceledException) when (token.IsCancellationRequested)
+                        {
+                            // 意図して無視: 次の描画が始まったかタブを閉じたための取り消しで、失敗ではない
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log("クリップボード用テキストの生成に失敗しました。", ex);
+                        }
+                        finally
+                        {
+                            // コピーの操作の待ちを解く（取り消し・失敗でも待ち続けさせない）
+                            copyTextReady.TrySetResult();
+                        }
+                    });
 
                     // ListView Items Generation
-                    var items = _formatter.GenerateListItemsRecursive(
-                        session.Result,
+                    var generated = _formatter.GenerateListItemsRecursive(
+                        root,
                         filterCache,
                         "",
                         false,
@@ -497,75 +531,95 @@ namespace LargeFolderFinder.ViewModels
                         tabWidth,
                         sizeThreshold,
                         unit,
-                        includeFiles
+                        includeFiles,
+                        token
                     ).ToList();
+                    token.ThrowIfCancellationRequested();
+                    return generated;
+                });
+                // 注: Task.Run に通知を渡すと内部で処理が登録されるため渡さない（取り消し元は次の Begin で破棄される）。
+                // 取り消しは中の各段階で確かめる
 
-                    // UI Update
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        // Preserve selection and focus state
-                        var previousNode = (view.OutputListBox.SelectedItem as FolderRowItem)?.Node;
-                        bool hadFocus = view.OutputListBox.IsKeyboardFocusWithin;
+                // UI スレッドに戻った後、画面へ反映する直前に最新かを確かめる。最新でなければ反映しない
+                if (!session.RenderCancellation.IsLatest(token)) return;
 
-                        if (view.OutputListBox is ListView lv)
-                        {
-                            lv.ItemsSource = items;
-                        }
-                        else
-                        {
-                            view.OutputListBox.ItemsSource = items;
-                        }
+                // Preserve selection and focus state
+                var previousNode = (view.OutputListBox.SelectedItem as FolderRowItem)?.Node;
+                bool hadFocus = view.OutputListBox.IsKeyboardFocusWithin;
 
-                        // Restore selection
-                        if (previousNode != null)
-                        {
-                            var newItem = items.FirstOrDefault(x => x.Node == previousNode);
-                            if (newItem != null)
-                            {
-                                view.OutputListBox.SelectedItem = newItem;
-                                view.OutputListBox.ScrollIntoView(newItem);
-
-                                if (hadFocus)
-                                {
-                                    view.OutputListBox.UpdateLayout();
-                                    if (view.OutputListBox.ItemContainerGenerator.ContainerFromItem(newItem) is ListBoxItem container)
-                                    {
-                                        container.Focus();
-                                    }
-                                }
-                            }
-                        }
-
-                        if (!session.IsScanning)
-                        {
-                            view.ScanProgressBar.Visibility = Visibility.Collapsed;
-                            view.ScanProgressBar.IsIndeterminate = false;
-
-                            // Restore status if not scanning
-                            var lm = LocalizationManager.Instance;
-                            if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
-                            {
-                                string countText = session.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {session.Result.CountFolderRecursive():N0}";
-                                view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(session.LastScanDuration))} ({session.TotalFilesScanned:N0} files){countText}";
-                            }
-                            else
-                            {
-                                view.StatusTextBlock.Text = lm.GetText(LanguageKey.ReadyStatus);
-                            }
-                        }
-                    });
-                }
-                catch (Exception ex)
+                if (view.OutputListBox is ListView lv)
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        var lm = LocalizationManager.Instance;
-                        view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.LabelError)}{ex.Message}";
-                        Logger.Log($"Render error: {ex}");
-                        view.ScanProgressBar.Visibility = Visibility.Collapsed;
-                    });
+                    lv.ItemsSource = items;
                 }
-            });
+                else
+                {
+                    view.OutputListBox.ItemsSource = items;
+                }
+
+                // Restore selection
+                if (previousNode != null)
+                {
+                    var newItem = items.FirstOrDefault(x => x.Node == previousNode);
+                    if (newItem != null)
+                    {
+                        view.OutputListBox.SelectedItem = newItem;
+                        view.OutputListBox.ScrollIntoView(newItem);
+
+                        if (hadFocus)
+                        {
+                            view.OutputListBox.UpdateLayout();
+                            if (view.OutputListBox.ItemContainerGenerator.ContainerFromItem(newItem) is ListBoxItem container)
+                            {
+                                container.Focus();
+                            }
+                        }
+                    }
+                }
+
+                if (!session.IsScanning)
+                {
+                    view.ScanProgressBar.Visibility = Visibility.Collapsed;
+                    view.ScanProgressBar.IsIndeterminate = false;
+
+                    // Restore status if not scanning
+                    var lm = LocalizationManager.Instance;
+                    if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
+                    {
+                        string countText = session.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {root.CountFolderRecursive():N0}";
+                        view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(session.LastScanDuration))} ({session.TotalFilesScanned:N0} files){countText}";
+                    }
+                    else
+                    {
+                        view.StatusTextBlock.Text = lm.GetText(LanguageKey.ReadyStatus);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                // 新しい描画またはタブを閉じたことによる取り消し。意図した終了のため記録しない
+            }
+            catch (Exception ex)
+            {
+                // 想定外の失敗。内容と処理を記録し、一覧は直前の状態のまま残す
+                Logger.Log($"結果の描画に失敗しました（対象: {session.Path}）。一覧は直前の状態のまま残します。", ex);
+
+                // 最新の描画の失敗のときだけ、状態表示に失敗を示して描画中の表示を戻す
+                if (session.RenderCancellation.IsLatest(token))
+                {
+                    var lm = LocalizationManager.Instance;
+                    view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.LabelError)}{ex.Message}";
+                    if (!session.IsScanning)
+                    {
+                        view.ScanProgressBar.Visibility = Visibility.Collapsed;
+                        view.ScanProgressBar.IsIndeterminate = false;
+                    }
+                }
+            }
+            finally
+            {
+                // 生成を始める前に描画が終わった（取り消し・失敗）ときは、コピーの操作の待ちをここで解く
+                if (!copyTextStarted) copyTextReady.TrySetResult();
+            }
         }
     }
 }

@@ -17,8 +17,12 @@ namespace LargeFolderFinder
             bool isRoot,
             bool isLast,
             long thresholdBytes,
-            bool includeFiles)
+            bool includeFiles,
+            CancellationToken token = default)
         {
+            // 取り消された描画の途中なら計算を打ち切る（結果は使われない）
+            if (token.IsCancellationRequested) return 0;
+
             if (node == null ||
                 (!isRoot && node.Size < thresholdBytes) ||
                 (!isRoot && node.IsFile && !includeFiles)) return 0;
@@ -63,7 +67,8 @@ namespace LargeFolderFinder
                             isRoot: false,
                             isLast: i == list.Count - 1,
                             thresholdBytes,
-                            includeFiles);
+                            includeFiles,
+                            token);
                         if (childMax > max) max = childMax;
                     }
                 }
@@ -180,8 +185,12 @@ namespace LargeFolderFinder
             int tabWidth,
             long thresholdBytes,
             AppConstants.SizeUnit unit,
-            bool includeFiles)
+            bool includeFiles,
+            CancellationToken token = default)
         {
+            // 取り消された描画の途中なら行の組み立てを打ち切る（結果は画面に反映されない）
+            if (token.IsCancellationRequested) yield break;
+
             if (node == null ||
                 (!isRoot && node.Size < thresholdBytes) ||
                 (!isRoot && node.IsFile && !includeFiles))
@@ -277,7 +286,8 @@ namespace LargeFolderFinder
                             tabWidth,
                             thresholdBytes,
                             unit,
-                            includeFiles))
+                            includeFiles,
+                            token))
                         {
                             yield return item;
                         }

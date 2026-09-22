@@ -221,9 +221,6 @@ namespace LargeFolderFinder
         [IgnoreMember]
         public Task? CopyTextGenerationTask { get; set; }
 
-        [IgnoreMember]
-        public System.Threading.CancellationTokenSource? CopyCts { get; set; }
-
         [Key(12)]
         public TimeSpan LastScanDuration { get; set; }
 

@@ -328,6 +328,8 @@ namespace LargeFolderFinder.ViewModels
 
                 // Cancel operations
                 session.Cts?.Cancel();
+                // このタブの進行中の描画を取り消す（他のタブの描画には触れない）
+                session.RenderCancellation.CancelAll();
                 if (session.ViewModel is SessionViewModel vm)
                 {
                     vm.CancelScan();
