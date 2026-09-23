@@ -193,14 +193,14 @@ sequenceDiagram
 internal sealed class DirectoryWalker
 {
     /// <summary>ルートのノードから木を組み立てる。すべてのフォルダを処理し終えるまで戻らない。</summary>
-    /// <param name="onFolderCompleted">フォルダを1つ処理し終えるたびに、その深さを渡して呼ぶ（ワーカーのスレッドから並行に呼ばれる）。</param>
+    /// <param name="onFolderCompleted">フォルダを1つ処理し終えるたびに、その深さと完全パスを渡して呼ぶ（ワーカーのスレッドから並行に呼ばれる）。パスは20秒ごとのログに出す。</param>
     /// <exception cref="OperationCanceledException">取り消されたとき。</exception>
     public static DirectoryWalkResult Walk(
         FolderInfo rootNode,
         string rootPath,
         DirectoryWalkOptions options,
         ScanSkipRecorder skipRecorder,
-        Action<int> onFolderCompleted,
+        Action<int, string> onFolderCompleted,
         CancellationToken token);
 }
 
@@ -235,7 +235,7 @@ public static Task<FolderInfo?> RunScan(
     ScanTuning? tuning = null);   // 追加。省略時は Config の値に依らない既定（ThreadCount = 0 = 自動）
 ```
 - 並列度は `ScanParallelism.Resolve(path, useParallel, tuning?.ThreadCount ?? 0)`
-- 進捗: `onFolderCompleted(depth)` で、深さが `maxDepth` 以下のときだけ数える（従来と同じ）。報告の判定は単調で安価な時計で行い、5秒・20秒の間隔と EMA は変えない
+- 進捗: `onFolderCompleted(depth, path)` で、深さが `maxDepth` 以下のときだけ数える（従来と同じ）。パスは20秒ごとのログに出す。報告の判定は単調で安価な時計で行い、5秒・20秒の間隔と EMA は変えない
 - 最後の報告に `WorkerCount` と `PeakConcurrentEnumerations` を載せ、スキップの Flush と同じく走査の終わりに1回だけログに書く
 - `ScanRecursiveInternal` は削除する。`GetClusterSize`・`PruneTree`（未使用のまま）・`CountFoldersAsync` は変えない
 

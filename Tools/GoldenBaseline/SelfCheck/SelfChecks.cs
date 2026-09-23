@@ -57,6 +57,243 @@ internal static class SelfChecks
         RegisterRenderCancellationChecks(runner);
         RegisterConfigLoadErrorChecks(runner);
         RegisterScanParallelismChecks(runner);
+        RegisterScanWorkerChecks(runner);
+    }
+
+    /// <summary>
+    /// 新しい走査の方式（決まった数のワーカーで木を組み立てる）が満たすべきことの検証項目を登録する
+    /// （scan-performance タスク3.1、要件1.3, 1.6, 3.1, 3.2）。
+    /// 本体に触れる呼び出しは Scan 層の <see cref="ScanRunner"/> を通す。
+    /// </summary>
+    /// <remarks>
+    /// 置き換えの前の実装は走査の調整値を無視し、最後の報告のワーカー数と同時の列挙の最大に 0 を載せるため、
+    /// 並列度の情報を確かめる2項目（上限・逐次）はこの時点では失敗する（RED）。
+    /// 一致と取り消しの項目は置き換えの前後のどちらでも通る。
+    /// </remarks>
+    private static void RegisterScanWorkerChecks(SelfCheckRunner runner)
+    {
+        runner.Add("フィクスチャと合成の木を、ワーカー数1・2・8と逐次で走査すると、パスとサイズの一覧が一致する（scan-performance 要件1.3）", () =>
+        {
+            WithStandardFixture(root => AssertSameTreeAcrossWorkerCounts(root, "フィクスチャ"));
+
+            WithWorkerCheckTree(root => AssertSameTreeAcrossWorkerCounts(root, "合成の木"));
+        });
+
+        runner.Add("深く広い合成の木をワーカー数3で走査すると、最後の報告のワーカー数が3で、同時の列挙の最大が3以下になる（scan-performance 要件3.1）", () =>
+        {
+            WithWorkerCheckTree(root =>
+            {
+                var outcome = new ScanRunner().RunForFinalProgress(
+                    root,
+                    maxDepth: int.MaxValue,
+                    useParallel: true,
+                    tuning: new global::LargeFolderFinder.ScanTuning(WorkerCheckThreadCount));
+
+                SelfAssert.That(outcome.Root != null, "走査が結果の木を返しませんでした。");
+                SelfAssert.That(
+                    outcome.FinalReportCount == 1,
+                    $"最後の報告（IsFinal）がちょうど1回届きませんでした（届いた回数: {outcome.FinalReportCount}）。");
+
+                var final = outcome.FinalProgress!;
+
+                // 空振り（木がほとんど無い状態で通る）を防ぐため、走査した量も確かめる
+                int expectedFolders = ExpectedWorkerCheckFolderCount();
+                SelfAssert.That(
+                    final.ProcessedFolders == expectedFolders,
+                    $"合成の木のフォルダ数が期待と違います（期待: {expectedFolders}, 最後の報告: {final.ProcessedFolders}）。");
+
+                SelfAssert.That(
+                    final.WorkerCount == WorkerCheckThreadCount,
+                    $"最後の報告のワーカー数が、走査の調整値で渡した {WorkerCheckThreadCount} になりません（実際: {final.WorkerCount}）。");
+                SelfAssert.That(
+                    final.PeakConcurrentEnumerations >= 1,
+                    $"同時の列挙の最大が1以上になりません（実際: {final.PeakConcurrentEnumerations}）。フォルダを{expectedFolders}個列挙した走査で0は、数えていないことを表します。");
+                SelfAssert.That(
+                    final.PeakConcurrentEnumerations <= WorkerCheckThreadCount,
+                    $"同時の列挙の最大がワーカー数 {WorkerCheckThreadCount} を超えました（実際: {final.PeakConcurrentEnumerations}）。深さや広さに関わらず上限以内に保つ必要があります。");
+            });
+        });
+
+        runner.Add("逐次の設定で走査すると、最後の報告のワーカー数が1になる（scan-performance 要件3.2）", () =>
+        {
+            WithStandardFixture(root =>
+            {
+                // 逐次の設定は走査の調整値の並列度より優先される（ScanParallelism.Resolve と同じ規則）
+                var outcome = new ScanRunner().RunForFinalProgress(
+                    root,
+                    maxDepth: int.MaxValue,
+                    useParallel: false,
+                    tuning: new global::LargeFolderFinder.ScanTuning(8));
+
+                SelfAssert.That(outcome.Root != null, "走査が結果の木を返しませんでした。");
+                SelfAssert.That(
+                    outcome.FinalReportCount == 1,
+                    $"最後の報告（IsFinal）がちょうど1回届きませんでした（届いた回数: {outcome.FinalReportCount}）。");
+
+                var final = outcome.FinalProgress!;
+                SelfAssert.That(
+                    final.WorkerCount == 1,
+                    $"逐次の設定なのに最後の報告のワーカー数が1になりません（実際: {final.WorkerCount}, 渡した調整値の並列度: 8）。");
+                SelfAssert.That(
+                    final.PeakConcurrentEnumerations == 1,
+                    $"逐次の設定なのに同時の列挙の最大が1になりません（実際: {final.PeakConcurrentEnumerations}）。");
+            });
+        });
+
+        runner.Add("走査の途中で取り消すと取り消しの例外になり、最後の報告が送られない（逐次・並列。scan-performance 要件1.6）", () =>
+        {
+            WithWorkerCheckTree(root =>
+            {
+                foreach (bool useParallel in new[] { false, true })
+                {
+                    string mode = useParallel ? "並列" : "逐次";
+
+                    var outcome = new ScanRunner().RunUntilCancelled(
+                        root,
+                        useParallel,
+                        new global::LargeFolderFinder.ScanTuning(WorkerCheckThreadCount));
+
+                    // 取り消しは最初の途中の報告の中で行うため、報告が届いていないなら走査の途中で取り消せていない
+                    SelfAssert.That(
+                        outcome.ProgressReportCount >= 1,
+                        $"取り消しの引き金となる途中の報告が届きませんでした（{mode}）。走査の途中で取り消せていません。");
+                    SelfAssert.That(
+                        outcome.Failure == null,
+                        $"取り消し以外の例外で走査が終わりました（{mode}）: {outcome.Failure?.GetType().Name}: {outcome.Failure?.Message}");
+                    SelfAssert.That(
+                        outcome.Cancelled,
+                        $"走査の途中で取り消したのに OperationCanceledException になりませんでした（{mode}）。");
+                    SelfAssert.That(
+                        outcome.FinalReportCount == 0,
+                        $"取り消したのに最後の報告（IsFinal）が届きました（{mode}、回数: {outcome.FinalReportCount}）。");
+                }
+            });
+        });
+    }
+
+    /// <summary>並列度の情報を確かめる項目で走査に渡すワーカー数</summary>
+    private const int WorkerCheckThreadCount = 3;
+
+    /// <summary>一致の項目で走査に渡すワーカー数の並び</summary>
+    private static readonly int[] WorkerCheckThreadCounts = new[] { 1, 2, 8 };
+
+    /// <summary>新しい走査の方式の検証に使う合成の木の、各フォルダの子フォルダの数</summary>
+    private const int WorkerCheckTreeFanOut = 4;
+
+    /// <summary>新しい走査の方式の検証に使う合成の木の深さ（起点を深さ0とし、この深さまで子フォルダを作る）</summary>
+    private const int WorkerCheckTreeDepth = 5;
+
+    /// <summary>新しい走査の方式の検証に使う合成の木の、各フォルダに置くファイルの数</summary>
+    private const int WorkerCheckTreeFilesPerFolder = 1;
+
+    /// <summary>新しい走査の方式の検証に使う合成の木の、起点の直下の幅の広いフォルダのファイルの数</summary>
+    private const int WorkerCheckTreeWideFolderFiles = 800;
+
+    /// <summary>
+    /// 新しい走査の方式の検証に使う「深く広い」合成の木を作り、<paramref name="action"/> を実行してから後始末する。
+    /// 深さと枝分かれで木を深く広くしつつ、自己検証の実行時間を伸ばしすぎない大きさに抑える。
+    /// </summary>
+    private static void WithWorkerCheckTree(Action<string> action)
+    {
+        WithSyntheticTree(
+            WorkerCheckTreeFanOut,
+            WorkerCheckTreeDepth,
+            WorkerCheckTreeFilesPerFolder,
+            WorkerCheckTreeWideFolderFiles,
+            action);
+    }
+
+    /// <summary>
+    /// <see cref="WithWorkerCheckTree"/> が作る合成の木のフォルダ数（起点と、幅の広いフォルダを含む）を定義から導く。
+    /// </summary>
+    private static int ExpectedWorkerCheckFolderCount()
+    {
+        int count = 0;
+        int levelFolders = 1; // 起点
+
+        for (int level = 0; level <= WorkerCheckTreeDepth; level++)
+        {
+            count += levelFolders;
+            levelFolders *= WorkerCheckTreeFanOut;
+        }
+
+        return count + 1; // 起点の直下の幅の広いフォルダ
+    }
+
+    /// <summary>
+    /// 同じ対象を、ワーカー数を変えた並列の走査と逐次の走査で走査し、パスとサイズの一覧が
+    /// すべて一致することを確かめる（scan-performance 要件1.3）。
+    /// </summary>
+    /// <param name="root">走査の起点のフォルダ。</param>
+    /// <param name="target">食い違ったときの説明に使う対象の呼び名。</param>
+    private static void AssertSameTreeAcrossWorkerCounts(string root, string target)
+    {
+        var scanRunner = new ScanRunner();
+        Dictionary<string, (bool IsFile, long Size)>? baseline = null;
+        string baselineLabel = string.Empty;
+
+        foreach (int threads in WorkerCheckThreadCounts)
+        {
+            var outcome = scanRunner.RunForFinalProgress(
+                root,
+                maxDepth: int.MaxValue,
+                useParallel: true,
+                tuning: new global::LargeFolderFinder.ScanTuning(threads));
+
+            SelfAssert.That(outcome.Root != null, $"走査が結果の木を返しませんでした（{target}、ワーカー数{threads}）。");
+
+            var map = FlattenScanTree(outcome.Root!);
+            SelfAssert.That(map.Count > 0, $"走査の結果が空でした（{target}、ワーカー数{threads}）。");
+
+            if (baseline == null)
+            {
+                baseline = map;
+                baselineLabel = $"ワーカー数{threads}";
+                continue;
+            }
+
+            AssertSameFlattenedTree(baseline, map, baselineLabel, $"ワーカー数{threads}", target);
+        }
+
+        // 逐次の走査とも一致する（要件3.2 の経路でも集計値が変わらないこと）
+        var sequential = scanRunner.RunForFinalProgress(
+            root,
+            maxDepth: int.MaxValue,
+            useParallel: false,
+            tuning: new global::LargeFolderFinder.ScanTuning(1));
+
+        SelfAssert.That(sequential.Root != null, $"逐次の走査が結果の木を返しませんでした（{target}）。");
+        AssertSameFlattenedTree(baseline!, FlattenScanTree(sequential.Root!), baselineLabel, "逐次", target);
+    }
+
+    /// <summary>
+    /// 2つの走査結果の平坦なマップが一致することを確かめ、食い違えばその中身を示して失敗させる。
+    /// </summary>
+    private static void AssertSameFlattenedTree(
+        Dictionary<string, (bool IsFile, long Size)> expected,
+        Dictionary<string, (bool IsFile, long Size)> actual,
+        string expectedLabel,
+        string actualLabel,
+        string target)
+    {
+        const int MaxShown = 5;
+
+        var missing = expected.Keys.Where(k => !actual.ContainsKey(k)).OrderBy(k => k, StringComparer.Ordinal).Take(MaxShown).ToList();
+        var extra = actual.Keys.Where(k => !expected.ContainsKey(k)).OrderBy(k => k, StringComparer.Ordinal).Take(MaxShown).ToList();
+        var differing = expected
+            .Where(kv => actual.TryGetValue(kv.Key, out var other) && (other.IsFile != kv.Value.IsFile || other.Size != kv.Value.Size))
+            .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Take(MaxShown)
+            .Select(kv => $"{kv.Key}（{expectedLabel}: ファイル={kv.Value.IsFile} サイズ={kv.Value.Size} / {actualLabel}: ファイル={actual[kv.Key].IsFile} サイズ={actual[kv.Key].Size}）")
+            .ToList();
+
+        SelfAssert.That(
+            expected.Count == actual.Count && missing.Count == 0 && extra.Count == 0 && differing.Count == 0,
+            $"{target}のパスとサイズの一覧が {expectedLabel} と {actualLabel} で一致しません"
+                + $"（件数: {expected.Count} と {actual.Count}"
+                + $"／{actualLabel}に無い: {string.Join(", ", missing)}"
+                + $"／{actualLabel}にだけある: {string.Join(", ", extra)}"
+                + $"／中身が違う: {string.Join(", ", differing)}）。");
     }
 
     /// <summary>

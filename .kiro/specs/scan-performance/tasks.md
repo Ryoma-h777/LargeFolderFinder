@@ -49,7 +49,7 @@
   - _Boundary: Config, SessionViewModel_
 
 - [ ] 3. 新しい走査の方式
-- [ ] 3.1 新しい走査の方式が満たすべきことを自己検証に先に書く
+- [x] 3.1 新しい走査の方式が満たすべきことを自己検証に先に書く
   - フィクスチャと合成の木を、ワーカー数1・2・8（走査の調整値の並列度で渡す）で走査し、パスとサイズの一覧が一致する項目
   - 深く広い合成の木をワーカー数3で走査し、最後の報告のワーカー数が3、同時の列挙の最大が3以下である項目
   - 逐次の設定で走査すると、最後の報告のワーカー数が1である項目
@@ -58,7 +58,7 @@
   - _Depends: 2.1_
   - _Requirements: 1.3, 1.6, 3.1, 3.2_
 
-- [ ] 3.2 決まった数のワーカーで木を組み立てる走査の方式に置き換える
+- [x] 3.2 決まった数のワーカーで木を組み立てる走査の方式に置き換える
   - 1フォルダを1回の列挙で処理し、ファイルは列挙の結果の長さと更新日時を使う（ファイルごとの情報の取り直しと完全パスの文字列を作らない）。隠し・システムの項目を含め、リパースポイントのフォルダには潜らない。走査の調整値の列挙のバッファの大きさを列挙に渡す（0 なら .NET の既定）
   - 子のノードは1フォルダにつき1回のロックで一括して足し、フォルダの合計はそのフォルダの処理の終わりに1回だけ祖先へ伝える。サブフォルダは親に足してから作業の列に積む
   - 決まった数の専用ワーカーが共有の作業の列から取り出し、未処理が0になったら終わる。取り消しは取り出しの前に確かめ、想定外の例外は最初の1件で全体を止めて投げ直す。列挙の失敗はスキップとして記録して続ける
@@ -133,3 +133,11 @@
 - 2.1: `Models/ScanTuning.cs`（`record ScanTuning(int ThreadCount = 0, int EnumerationBufferSize = 0)`）。`RunScan` の末尾に `ScanTuning? tuning = null`（既存の呼び出し元は無修正で通った）。`ScanProgress` に `WorkerCount` と `PeakConcurrentEnumerations`。`ReportFinalProgress` は今は 0 を載せる（3.2 で実際の値に差し替える）。確認は親が差分を読んで行った
 - 2.2: `Services/ScanParallelism.cs`（public。`Resolve` と `IsNetworkPath`）。上限64・ネットワーク16・ローカルは論理プロセッサ数を4〜16に丸めた値は private const で、自己検証は期待値を直接書く（値を変えると試験が落ちて気づける）。2.3 で `Config.txt` に上限を書くときはこの定数と食い違わせないこと。selfcheck は 143 件
 - 2.3: `Config.ScanThreads`（既定 0）と `Config.txt` の行・日英の説明。画面は `new ScanTuning(config.ScanThreads)` を渡す。古い `Config.txt`（この行が無い）を新しいアプリが読んでも既定値 0 になる。逆に**新しい `Config.txt` を古い版のアプリが読むと未知のキーで解析に失敗し、設定が既定に戻って警告が出る**（版を戻したときの注意。README で触れる）。selfcheck は 144 件
+- 3.1: 検証ツールの入口 `ScanRunner.RunForFinalProgress(rootPath, maxDepth, useParallel, ScanTuning? tuning = null)` と `RunUntilCancelled(rootPath, useParallel, ScanTuning?)` → `CancelledScanOutcome`。自己検証 `RegisterScanWorkerChecks`（4項目）。合成の木は fanOut 4・深さ5・幅の広いフォルダ800ファイル（1366フォルダ）。selfcheck は 148 件、所要は約11秒→約13秒
+- 3.1: RED の出力（置き換えの前の実装）: 「148 件中 2 件が失敗しました。」`[NG] 深く広い合成の木をワーカー数3で走査すると…（実際: 0）`、`[NG] 逐次の設定で走査すると、最後の報告のワーカー数が1になる（実際: 0, 渡した調整値の並列度: 8）`。一致と取り消しの項目は置き換えの前でも通る（調整値を無視するため）
+- 3.2: `Services/DirectoryWalker.cs`（internal。`Walk` / `DirectoryWalkOptions` / `DirectoryWalkResult`）。1フォルダを `FileSystemEnumerable` で1回だけ列挙（`AttributesToSkip = 0`、`IgnoreInaccessible = false`、`BufferSize` は調整値）。子は局所の一覧に集めて `lock (Children)` 1回で `AddRange`。専用スレッド＋`ConcurrentStack`（後入れ先出し）＋`SemaphoreSlim`、未処理0で終了。取り消しは取り出しの前、想定外の例外は最初の1件を `ExceptionDispatchInfo` で投げ直す（`AggregateException` に包まない）
+- 3.2: `onFolderCompleted` は設計の `Action<int>` ではなく `Action<int, string>`（20秒ごとのログの `Checking:` にパスが必要。設計の記述を実装に合わせて更新済み）。フォルダごとの時刻は `Environment.TickCount64`（未報告は `long.MinValue` の番兵）。`AppConstants.LogScanSuccess` に `Workers: {1}` を追加。逐次も専用スレッド1本になった（旧来はスレッドプール）
+- 3.2: 確認役が実データ（`C:\Program Files`、730,139ノード）で旧実装と集合・サイズ・更新日時の完全一致を確かめ、ワーカー数1/2/8/16/逐次で要約値が一致、空のフォルダ・ワーカー数超過・各種の取り消し・想定外の例外を640回超繰り返して固まりも誤りも無いことを確かめた
+- 3.2: **フィクスチャには隠し・システム・リパースポイントの項目が無い**ため、その3種の集合の一致は自動の検証で覆われていない（確認役が手で作った木で一致を確認した）。3.3 以降で項目を足すか、この記録を残すこと
+- 3.2: 取り消しの粒度が旧実装より粗い（作業の取り出しの前だけ）。1フォルダに数百万の項目があると、その列挙が終わるまで取り消しが効かない（設計どおり）。`走査の並列度: …` のログは正常完了の経路だけに出る
+- 3.2: 参考の速さ（`C:\Windows`、温まった）: 変更の後は並列 約2,350ms・逐次 約5,563ms（変更の前は並列 4,022ms・逐次 9,614ms）。約1.7倍速い。記録は 3.4 で measurements.md に残す

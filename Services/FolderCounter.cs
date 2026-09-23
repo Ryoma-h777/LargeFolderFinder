@@ -9,7 +9,7 @@ namespace LargeFolderFinder
     /// 事前カウント。深さの上限まで、本スキャンと同じ集合のフォルダを数える
     /// </summary>
     /// <remarks>
-    /// 本スキャン（Scanner.ScanRecursiveInternal）と同じく BCL の列挙を使うため、
+    /// 本スキャン（DirectoryWalker）と同じく BCL の列挙を使うため、
     /// 長いパス（日本語を含む）も OS の設定や実行ファイルの宣言に関わらず数えられる
     /// </remarks>
     internal static class FolderCounter

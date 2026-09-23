@@ -144,6 +144,36 @@ public sealed class FinalProgressOutcome
 }
 
 /// <summary>
+/// <see cref="ScanRunner.RunUntilCancelled"/> の結果。走査がどう終わったかと、届いた報告の件数を持つ
+/// （scan-performance 要件1.6）。
+/// </summary>
+public sealed class CancelledScanOutcome
+{
+    /// <summary>走査が <see cref="OperationCanceledException"/>（およびその派生）で終わったかどうか。</summary>
+    public bool Cancelled { get; }
+
+    /// <summary>取り消し以外の例外で終わったときの、その例外。取り消しまたは正常終了なら null。</summary>
+    public Exception? Failure { get; }
+
+    /// <summary>受け取った最後の報告（<c>IsFinal</c> が真）の件数。取り消されたなら0のはず。</summary>
+    public int FinalReportCount { get; }
+
+    /// <summary>受け取った途中の報告の件数。取り消しの引き金が実際に引かれたことの裏づけに用いる。</summary>
+    public int ProgressReportCount { get; }
+
+    /// <summary>
+    /// CancelledScanOutcome を構築する。
+    /// </summary>
+    public CancelledScanOutcome(bool cancelled, Exception? failure, int finalReportCount, int progressReportCount)
+    {
+        Cancelled = cancelled;
+        Failure = failure;
+        FinalReportCount = finalReportCount;
+        ProgressReportCount = progressReportCount;
+    }
+}
+
+/// <summary>
 /// <see cref="ScanRunner.RunWithConcurrentFilterReads"/> の結果。走査の戻り値と、走査と並行に行った読み取りの記録を持つ。
 /// </summary>
 public sealed class ConcurrentReadOutcome
@@ -348,7 +378,15 @@ public sealed class ScanRunner : IScanRunner
     /// <param name="rootPath">走査の起点のフォルダのパス。実在している必要がある。</param>
     /// <param name="maxDepth">深さの上限。起点を深さ0とする。事前カウントと同じ値を渡す。</param>
     /// <param name="useParallel">並列で走査するかどうか。</param>
-    public FinalProgressOutcome RunForFinalProgress(string rootPath, int maxDepth, bool useParallel)
+    /// <param name="tuning">
+    /// 走査の調整値（ワーカー数・列挙のバッファの大きさ）。null なら本体の既定（自動）。
+    /// 並列度を指定して確かめる項目（scan-performance 要件1.3, 3.1, 3.2）のために渡す。
+    /// </param>
+    public FinalProgressOutcome RunForFinalProgress(
+        string rootPath,
+        int maxDepth,
+        bool useParallel,
+        global::LargeFolderFinder.ScanTuning? tuning = null)
     {
         if (string.IsNullOrEmpty(rootPath))
         {
@@ -371,11 +409,142 @@ public sealed class ScanRunner : IScanRunner
             useParallel: useParallel,
             usePhysicalSize: false,
             progress: recorder,
-            token: CancellationToken.None));
+            token: CancellationToken.None,
+            tuning: tuning));
 
         global::LargeFolderFinder.FolderInfo? root = scanTask.GetAwaiter().GetResult();
 
         return new FinalProgressOutcome(root, recorder.LastFinal, recorder.FinalCount);
+    }
+
+    /// <summary>
+    /// 本体の走査（<see cref="global::LargeFolderFinder.Scanner.RunScan"/>）を走らせ、
+    /// **走査が途中である時点**（最初の途中の報告が届いた時点）で取り消して、その終わり方を返す
+    /// （scan-performance 要件1.6）。本体に触れる呼び出しをこの層に閉じ込めるための入口である。
+    /// </summary>
+    /// <remarks>
+    /// 取り消しは進捗の受け手の中で行う。途中の報告は走査のスレッドの上でその場で呼ばれるため、
+    /// 「走査がまだ続いている時点で取り消す」ことが時間に頼らずに決まる
+    /// （最初の報告は最初のフォルダを終えた時点で送られる）。
+    /// 報告は <see cref="Progress{T}"/> ではなく同期の受け手で受ける。理由は
+    /// <see cref="RunForFinalProgress"/> と同じ（スレッドプールへ投げると届く時点が競合する）。
+    /// </remarks>
+    /// <param name="rootPath">走査の起点のフォルダのパス。実在している必要がある。取り消しが確実に途中で起きるよう、十分な大きさの木を渡す。</param>
+    /// <param name="useParallel">並列で走査するかどうか。</param>
+    /// <param name="tuning">走査の調整値。null なら本体の既定（自動）。</param>
+    public CancelledScanOutcome RunUntilCancelled(
+        string rootPath,
+        bool useParallel,
+        global::LargeFolderFinder.ScanTuning? tuning = null)
+    {
+        if (string.IsNullOrEmpty(rootPath))
+        {
+            throw new ArgumentException("基準フォルダのパスが空です。", nameof(rootPath));
+        }
+
+        if (!Directory.Exists(rootPath))
+        {
+            throw new DirectoryNotFoundException($"基準フォルダが見つかりません: {rootPath}");
+        }
+
+        using (var cts = new CancellationTokenSource())
+        {
+            var recorder = new CancellingProgressRecorder(cts);
+
+            // 走らせる側は取り消さない（取り消すのは走査に渡した token のみ）ため、
+            // Task.Run には CancellationToken.None を渡す
+            var scanTask = Task.Run(
+                () => global::LargeFolderFinder.Scanner.RunScan(
+                    rootPath,
+                    thresholdBytes: 0L,
+                    totalFolders: 0,
+                    maxDepth: int.MaxValue,
+                    useParallel: useParallel,
+                    usePhysicalSize: false,
+                    progress: recorder,
+                    token: cts.Token,
+                    tuning: tuning),
+                CancellationToken.None);
+
+            bool cancelled = false;
+            Exception? failure = null;
+
+            try
+            {
+                _ = scanTask.GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException)
+            {
+                // 取り消しの例外（TaskCanceledException を含む）。期待する終わり方
+                cancelled = true;
+            }
+            catch (Exception ex)
+            {
+                // 取り消し以外の終わり方は隠さず、そのまま呼び出し元へ事実として渡す
+                failure = ex;
+            }
+
+            return new CancelledScanOutcome(cancelled, failure, recorder.FinalCount, recorder.ProgressCount);
+        }
+    }
+
+    /// <summary>
+    /// 最初の途中の報告を受け取った時点で走査を取り消す受け手。報告の件数も数える。
+    /// </summary>
+    private sealed class CancellingProgressRecorder : IProgress<global::LargeFolderFinder.ScanProgress>
+    {
+        private readonly CancellationTokenSource _cts;
+
+        /// <summary>並列の走査から並行に呼ばれうるため、件数をこのロックで守る</summary>
+        private readonly object _gate = new object();
+
+        private int _finalCount;
+        private int _progressCount;
+
+        /// <summary>取り消しを1回だけ行うための印（0 なら未実行）</summary>
+        private int _cancelRequested;
+
+        public CancellingProgressRecorder(CancellationTokenSource cts)
+        {
+            _cts = cts ?? throw new ArgumentNullException(nameof(cts));
+        }
+
+        /// <summary>受け取った最後の報告（<c>IsFinal</c>）の件数</summary>
+        public int FinalCount
+        {
+            get { lock (_gate) { return _finalCount; } }
+        }
+
+        /// <summary>受け取った途中の報告の件数</summary>
+        public int ProgressCount
+        {
+            get { lock (_gate) { return _progressCount; } }
+        }
+
+        /// <inheritdoc />
+        public void Report(global::LargeFolderFinder.ScanProgress value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                if (value.IsFinal)
+                {
+                    _finalCount++;
+                    return;
+                }
+
+                _progressCount++;
+            }
+
+            if (Interlocked.Exchange(ref _cancelRequested, 1) == 0)
+            {
+                _cts.Cancel();
+            }
+        }
     }
 
     /// <summary>
@@ -656,7 +825,7 @@ public sealed class ScanRunner : IScanRunner
 
             if ((attributes & FileAttributes.ReparsePoint) != 0)
             {
-                // 本体も再解析ポイントは辿らない（Scanner.ScanRecursiveInternal 参照）。
+                // 本体も再解析ポイントは辿らない（DirectoryWalker 参照）。
                 continue;
             }
 

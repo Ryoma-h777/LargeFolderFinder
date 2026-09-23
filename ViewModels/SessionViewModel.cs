@@ -127,6 +127,10 @@ namespace LargeFolderFinder.ViewModels
             try
             {
                 int totalFolders = config.SkipFolderCount ? 0 : await Scanner.CountFoldersAsync(path, config.MaxDepthForCount, _model.Cts.Token);
+
+                // 走査に実際に使ったワーカー数。最後の報告で受け取り、完了のログに載せる
+                int scanWorkerCount = 0;
+
                 var progress = new Progress<ScanProgress>(p =>
                 {
                     try
@@ -138,6 +142,9 @@ namespace LargeFolderFinder.ViewModels
                         // 最終結果の描画は成功の経路の RenderResult（最新の要求だけを反映する仕組み）に任せる
                         if (p.IsFinal)
                         {
+                            // 並列度は最後の報告だけで意味を持つ
+                            scanWorkerCount = p.WorkerCount;
+
                             if (hasTotal)
                             {
                                 // 事前カウントを行った走査はバーを埋める
@@ -272,7 +279,7 @@ namespace LargeFolderFinder.ViewModels
                     _view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} " +
                         $"{string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(sw.Elapsed))}";
                 }
-                Logger.Log(string.Format(AppConstants.LogScanSuccess, _formatter.FormatDuration(sw.Elapsed)));
+                Logger.Log(string.Format(AppConstants.LogScanSuccess, _formatter.FormatDuration(sw.Elapsed), scanWorkerCount));
 
                 // SaveCache is skipped here as per Plan
 

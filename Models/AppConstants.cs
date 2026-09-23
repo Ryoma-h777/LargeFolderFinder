@@ -129,7 +129,8 @@ namespace LargeFolderFinder
         public const string LogUpdateMenuError = "Failed to update language menu.";
         public const string LogLangChangeStart = "Changing language to: {0}";
         public const string LogScanStart = "Scan started. Path: {0}, Threshold: {1}";
-        public const string LogScanSuccess = "Scan finished successfully. Time: {0}";
+        /// <summary>走査の完了のログ。{0} は所要時間、{1} は実際に使ったワーカー数（並列度）</summary>
+        public const string LogScanSuccess = "Scan finished successfully. Time: {0}, Workers: {1}";
         public const string LogScanError = "Scan error occurred.";
         public const string LogScanProgressError = "Progress handler error occurred.";
         public const string LogRenderError = "RenderResult error occurred.";
