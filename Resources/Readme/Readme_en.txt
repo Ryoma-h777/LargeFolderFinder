@@ -62,6 +62,13 @@ Configuration must follow the YAML format. If you want to add your own comments,
         Description: Enable parallel processing
         Expected value (true): Effective for NAS (network storage). Local SSDs are fast, so parallelization overhead may be larger.
 
+    ScanThreads: 0
+        Type: int (Non-negative integer)
+        Description: Scan parallelism (how many folders are read at the same time)
+        0 means automatic: the number of logical processors clamped to 4~8 for a local drive, and 16 for a network target (NAS/UNC).
+        1 or more fixes the worker count to that value. The maximum is 64, and larger values are capped to 64. When UseParallelScan: false, folders are scanned one at a time regardless of this value.
+        Expected value (0): A larger value is not always faster. On a local SSD, going above 8 made repeated scans slower in our measurements. On a NAS, a larger value can help.
+
     SkipFolderCount: false
         Type: bool (true/false)
         Description: Whether to skip pre-counting for progress display and start scanning immediately

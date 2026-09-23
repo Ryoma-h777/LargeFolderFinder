@@ -16,15 +16,17 @@ Extracts and lists only folders larger than the specified size (e.g., 10 GB) in 
 
 ## ✨ Features
 
-- **Fast Multi-thread Scan**: Parallel processing allows for rapid scanning of drives containing a large number of files.
+- **Fast Multi-thread Scan**: A fixed number of workers read folders at the same time, so drives containing a large number of files are scanned quickly.
   - PC Example: **Approx. 400GB (approx. 1.17M files) on PC → 5 ~ 13 seconds**
   - NAS Example 1: **Approx. 1TB (approx. 70K files) on NAS → 23 seconds**
   - NAS Example 2: **Approx. 20TB (approx. 1.4M files) on NAS → Approx. 18 ~ 30 minutes**
+  - Measured in 2026-09 with the automatic parallelism: **a whole system drive, approx. 725GiB (approx. 1.78M files) → approx. 7.1 seconds** (approx. 11.6 seconds before this update), and **the OS folder, approx. 210K files → approx. 2.4 seconds** (approx. 4.0 seconds before).
+    - Environment: Intel Core i7-12700H (20 logical processors) / NVMe SSD (local) / Windows 11, run without administrator rights, median of the second and later runs. This was measured on a **different PC and different targets** from the examples above, so it is listed alongside them instead of replacing them.
 - **Server Support**: Supports scanning via network (NAS, etc.).
 - **Tabs and History Saving**: Scan results are saved locally and can be viewed in multiple tab windows.
   - Once scanned, you can easily modify the display results anytime—such as filtering or sorting—to make them easier to view.
 - **Advanced Customization**:
-  - Enable/disable parallel processing, sector size consideration, skip pre-scan counting, etc.
+  - Enable/disable parallel processing and set the number of parallel workers (see "Scan Speed Settings" below), sector size consideration, skip pre-scan counting, etc.
   - Output format & copy results to clipboard
     - Show/hide files
     - Filter function (wildcard or regular expression)
@@ -44,6 +46,21 @@ Extracts and lists only folders larger than the specified size (e.g., 10 GB) in 
 6. **Utilize**: Copy the results using the button and use them for disk space management.
 
 ※For details, please refer to the Resources/Readme/Readme_{language}.txt file for each language.
+
+## ⚙️ Scan Speed Settings (`Config.txt`)
+
+`Config.txt` sits next to `LargeFolderFinder.exe` and can be opened with Notepad. Two items decide how many folders are read at the same time.
+
+| Item | Values | What it does |
+|---|---|---|
+| `UseParallelScan` | `true` (default) / `false` | `false` reads folders one at a time. **This wins over `ScanThreads`**: while it is `false`, the scan is sequential no matter what `ScanThreads` says. |
+| `ScanThreads` | `0` (default) / `1` to `64` | `0` means automatic. `1` or more fixes the number of workers. A value above `64` is capped to `64`. |
+
+- **Leave `ScanThreads` at `0` (automatic) unless you have a reason to change it.** Automatic uses the number of logical processors clamped to **4 – 8** for a local drive, and **16** for a network target (a `\\server\share` path, or a mapped network drive).
+- **A larger value is not always faster.** On a local SSD, going above 8 did not shorten the scan in our measurements, and on a laptop that cannot hold a high CPU clock for long, a large value made repeated scans nearly twice as slow. On a NAS, where most of the time is spent waiting for the network, a larger value can help — try `16`, `24` or `32` on your own share and keep the fastest.
+- When you compare settings, scan the same folder two or more times in a row and compare the **second and later** runs. The first run is slower with any setting, because Windows has not cached the folder yet.
+- `UseParallelScan: false` (sequential) is kept on purpose: for an HDD-based NAS where many requests at once cause seek thrashing, and for checking whether a problem is caused by parallel scanning.
+- **If you go back to an older version of the app, also restore the `Config.txt` that came with that version.** An older version cannot read the `ScanThreads` line, falls back to the default settings, and shows a warning.
 
 ## 📦 Which Download to Choose
 
@@ -89,7 +106,7 @@ If you are unable to display the MIT License attribution, you may use it under t
 
 Windows上でフォルダーを高速に検索し、構造とサイズをTree状に視覚化するデスクトップアプリです。
 特にNASなどのネットワークドライブでの探索で活躍しており、ディスク容量の圧迫原因を素早く特定するのに役立ちます。
-Win32 API (kernel32.dll) を使用しC++並に爆速で動くことを目指して作成されています。
+決まった数のワーカーが同時にフォルダーを読む方式で、C++並に爆速で動くことを目指して作成されています。
 
 ## 🔍 スキャン結果の表示例
 
@@ -101,15 +118,17 @@ Win32 API (kernel32.dll) を使用しC++並に爆速で動くことを目指し�
 
 ## ✨ 特徴
 
-- **高速マルチスレッドスキャン**: 並列処理により、大量のファイルを含むドライブも迅速にスキャンします。
+- **高速マルチスレッドスキャン**: 決まった数のワーカーが同時にフォルダーを読むため、大量のファイルを含むドライブも迅速にスキャンします。
   - PC実績例  : **約400GB (約117万ファイル) PC上のデータ   → 5 ~ 13秒**
   - NAS実績例1: **約1TB   (約7万ファイル)   NAS上のデータ  → 23秒**
   - NAS実績例2: **約20TB  (約140万ファイル) NAS上のデータ  → 約18 ~ 30分**
+  - 2026-09 の計測（並列度は自動）: **システムドライブ全体 約725GiB (約178万ファイル) → 約7.1秒**（この更新の前は約11.6秒）、**OS本体のフォルダ (約21万ファイル) → 約2.4秒**（前は約4.0秒）
+    - 計測した環境: Intel Core i7-12700H（20論理プロセッサ）/ NVMe SSD（ローカル）/ Windows 11。管理者ではない状態で、2回目以降の中央値。**上の実績例とはPCも対象も異なる**ため、置き換えずに併記しています
 - **サーバー対応**: ネットワーク経由（NAS等）のスキャンも可能です。
 - **履歴の保存**: スキャン結果はローカル内に保存され、複数のタブWindowで閲覧できます。
   - 一度スキャンすれば、フィルタリングやソートなど表示結果をいつでも見やすく変更できます。
 - **高度なカスタマイズ**:
-  - 並列処理・セクタサイズの配慮・事前スキャンのスキップなど有効化/無効化
+  - 並列処理の有効化/無効化と並列度の指定（下の「スキャンの速さの設定」を参照）、セクタサイズの配慮、事前スキャンのスキップなど
   - 出力フォーマット & 結果のクリップボードへのコピー
     - ファイルの表示/非表示
     - フォルダの折りたたみ機能(クリップボード出力にも反映)
@@ -128,6 +147,21 @@ Win32 API (kernel32.dll) を使用しC++並に爆速で動くことを目指し�
 6. **活用**: 結果をコピーボタンで取得し、容量整理の資料として利用できます。
 
 ※詳しくは各言語の Resources/Readme/Readme_{language}.txt に記載されています。
+
+## ⚙️ スキャンの速さの設定（`Config.txt`）
+
+`Config.txt` は `LargeFolderFinder.exe` の隣にあり、メモ帳で開いて編集できます。同時にいくつのフォルダーを読むかは、次の2つで決まります。
+
+| 項目 | 設定できる値 | 意味 |
+|---|---|---|
+| `UseParallelScan` | `true`（既定） / `false` | `false` にすると1つずつ順に読みます。**こちらが優先**で、`false` の間は `ScanThreads` の値に関わらず逐次でスキャンします。 |
+| `ScanThreads` | `0`（既定） / `1` 〜 `64` | `0` は自動。`1` 以上にするとワーカーの数をその値に固定します。`64` を超える値は `64` に丸めます。 |
+
+- **理由がなければ `ScanThreads` は `0`（自動）のままで使ってください。** 自動のときは、ローカルのドライブでは論理プロセッサ数を **4〜8** に丸めた値、ネットワーク（`\\サーバー\共有` のパスやネットワークドライブ）では **16** を使います。
+- **大きくすれば速くなるとは限りません。** ローカルのSSDでは8を超えて増やしても計測では速くならず、CPUの高いクロックを長く保てないノートPCでは、スキャンを続けるうちに大きい値ほど2倍近く遅くなりました。一方、待ち時間が多いNASでは大きいほうが効く場合があります。お使いの共有で `16`・`24`・`32` などを試し、速かった値を使ってください。
+- 設定を比べるときは、同じフォルダーを続けて2回以上スキャンし、**2回目以降**の時間で比べてください。1回目はWindowsがまだ内容を覚えていないため、どの設定でも遅くなります。
+- `UseParallelScan: false`（逐次）は意図して残しています。HDDのNASなど、同時に読みに行くとかえって遅くなる環境や、不具合が並列処理のせいかどうかを切り分けたいときに使えます。
+- **古い版のアプリに戻すときは、`Config.txt` もその版に付属のものに戻してください。** 古い版は `ScanThreads` の行を読めず、設定が既定に戻って警告が表示されます。
 
 ## 📦 配布物の選び方
 

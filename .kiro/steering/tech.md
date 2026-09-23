@@ -38,7 +38,7 @@ WPF による単一プロセスのデスクトップアプリ。**MVVM を部分
 | クラスタサイズ取得（ディスク上のサイズ計算用） | `GetDiskFreeSpace` | `Scanner.GetClusterSize` | 渡すのはドライブや共有のルート（`C:\`、`\\server\share\`）だけ。BCL にクラスタサイズを得る API が無いので残す |
 | ワーキングセットの切り詰め | `SetProcessWorkingSetSize` | `MainWindow.OptimizeMemory` | パスを扱わない |
 
-事前カウント（`Scanner.CountFoldersAsync` → `FolderCounter`）と本スキャン（`Scanner.ScanRecursiveInternal`）は、どちらも BCL の列挙（`DirectoryInfo.EnumerateDirectories` / `EnumerateFiles`）を使い、260 文字を超えるパスも数え・列挙できます。**列挙の処理に手書きの P/Invoke を足さないこと**。OS の設定（`LongPathsEnabled=1`）が有効でも、長いパスの宣言（`longPathAware`）の無い実行ファイルから呼ぶ手書きの P/Invoke は MAX_PATH の制限を受け、旧来の事前カウントは長いパスの配下を数え損ねていた（`scan-correctness` 2.1 で実測）。
+事前カウント（`Scanner.CountFoldersAsync` → `FolderCounter`）は `DirectoryInfo.EnumerateDirectories`、本スキャン（`Scanner.RunScan` → `DirectoryWalker.Walk`）は `System.IO.Enumeration.FileSystemEnumerable<T>` と、どちらも BCL の列挙を使い、260 文字を超えるパスも数え・列挙できます。**列挙の処理に手書きの P/Invoke を足さないこと**。OS の設定（`LongPathsEnabled=1`）が有効でも、長いパスの宣言（`longPathAware`）の無い実行ファイルから呼ぶ手書きの P/Invoke は MAX_PATH の制限を受け、旧来の事前カウントは長いパスの配下を数え損ねていた（`scan-correctness` 2.1 で実測）。
 
 事前カウントは本スキャンと同じ集合を数えます（深さ0〜上限、リパースポイントを除く、隠し・システム属性を含む、アクセスできないフォルダは自身を数えて配下は数えない）。そのため `EnumerationOptions` の `AttributesToSkip` を `ReparsePoint` だけに明示している（既定は隠し・システムも除く）。走査が正常に完了すると、最後の数とスキップの一覧を載せた最後の進捗（`ScanProgress.IsFinal`）を1回報告する。
 
@@ -50,6 +50,7 @@ WPF による単一プロセスのデスクトップアプリ。**MVVM を部分
 - 長時間処理は `async` / `await` + `Task.Run`
 - **`CancellationToken` を必ず引き回す**（走査は中断できることが要件）
 - 集計は `System.Collections.Concurrent` 系で受ける
+- **走査のワーカーだけは例外**で、スレッドプールではなく専用のスレッドを使う（`Services/DirectoryWalker.cs`。ブロックする入出力を行うため）。決まった数のワーカーが共有の作業の列からフォルダを取り出す方式で、同時の列挙の数はワーカー数を超えない。並列度の決め方（逐次は 1、`Config.ScanThreads` は 1〜64、自動はローカル 4〜8・ネットワーク 16）は `Services/ScanParallelism.cs` が1箇所で持つ。詳しくは performance.md の「並列処理のパターン」
 - UI 更新は `Dispatcher` 経由。進捗通知は間引く（`ProgressCounter` が最終報告時刻を保持して抑制する）
 
 ### コメント・命名
@@ -82,7 +83,7 @@ WPF による単一プロセスのデスクトップアプリ。**MVVM を部分
 | アプリ設定 | `Settings.msgpack` | 言語・レイアウト・ウィンドウの位置・サイズ・状態・タブ構成。ただし言語とウィンドウの位置・サイズ・状態は保存されるだけで、現状は起動時に読み戻していない（`architecture-refactoring` で復元する） |
 | スキャン結果 | `Sessions/Scan{日時}.msgpack` | タブ 1 つ = 1 ファイル |
 | ログ | `Logs/` | 世代数上限 `LogFilesMax` |
-| 動作設定 | `Config.txt`（exe と同階層） | **ユーザーが手で編集する**前提。並列処理の有無、事前カウントのスキップ等。拡張子が `.txt` なのは、アプリが関連付けられていなくてもダブルクリックでメモ帳などですぐ開けるようにするため。中身を YAML にしたのは、コメントを書けるので外部の文書を見なくても設定の意味が分かるようにするためだった（現行の `Config.txt` は各項目の説明を同梱の Readme に委ねており、アプリが生成する既定のファイルにもコメントはない） |
+| 動作設定 | `Config.txt`（exe と同階層） | **ユーザーが手で編集する**前提。並列処理の有無（`UseParallelScan`）、走査の並列度（`ScanThreads`。0 は自動、1〜64 で固定）、事前カウントのスキップ等。拡張子が `.txt` なのは、アプリが関連付けられていなくてもダブルクリックでメモ帳などですぐ開けるようにするため。中身を YAML にしたのは、コメントを書けるので外部の文書を見なくても設定の意味が分かるようにするためだった（現行の `Config.txt` は各項目の説明を同梱の Readme に委ねており、アプリが生成する既定のファイルにもコメントはない） |
 
 **アプリの起動だけでなく、検証ツールとテストの実行もこのフォルダのログを書き、古いログを消します**（走査の部品を同じプロセスで使うため）。手元でアプリを起動する確認（`build/Test-Launch.ps1` など）は、このフォルダを退避してから行い、終わったら戻します。
 

@@ -62,6 +62,13 @@ La configuración debe seguir el formato YAML. Si desea agregar sus propios come
         Descripción: Habilitar procesamiento paralelo
         Valor esperado (true): Efectivo para NAS (almacenamiento en red), etc. Los SSD locales son rápidos, por lo que la sobrecarga de paralelización puede ser mayor.
 
+    ScanThreads: 0
+        Tipo: int (Entero no negativo)
+        Descripción: Grado de paralelismo del escaneo (número de carpetas leídas simultáneamente)
+        0 significa automático: el número de procesadores lógicos ajustado a 4~8 para una unidad local, y 16 para un destino de red (NAS/UNC).
+        Con 1 o más se fija el número de trabajadores en ese valor. El máximo es 64 y los valores mayores se limitan a 64. Si UseParallelScan: false, las carpetas se escanean una a una independientemente de este valor.
+        Valor esperado (0): Un valor mayor no siempre es más rápido. En un SSD local, superar 8 hizo que los escaneos repetidos fueran más lentos en nuestras mediciones. En un NAS, un valor mayor puede ayudar.
+
     SkipFolderCount: false
         Tipo: bool (true/false)
         Descripción: Si omitir el recuento previo para la visualización del progreso e iniciar el escaneo inmediatamente

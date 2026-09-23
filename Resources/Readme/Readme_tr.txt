@@ -62,6 +62,13 @@ Yapılandırma YAML formatını takip etmelidir. Kendi yorumlarınızı eklemek 
         Açıklama: Paralel işlemeyi etkinleştir
         Beklenen değer (true): NAS (ağ depolama) vb. için etkilidir. Yerel SSD'ler hızlıdır, bu nedenle paralelleştirme yükü daha büyük olabilir.
 
+    ScanThreads: 0
+        Tür: int (Negatif olmayan tam sayı)
+        Açıklama: Taramanın paralellik derecesi (aynı anda okunan klasör sayısı)
+        0 otomatik anlamına gelir: yerel sürücüde mantıksal işlemci sayısı 4~8 aralığına sınırlanır, ağ hedefinde (NAS/UNC) ise 16 olur.
+        1 ve üzeri, çalışan sayısını o değere sabitler. Üst sınır 64'tür ve daha büyük değerler 64'e indirilir. UseParallelScan: false olduğunda, bu değerden bağımsız olarak klasörler tek tek taranır.
+        Beklenen değer (0): Daha büyük bir değer her zaman daha hızlı değildir. Yerel SSD'de 8'in üzerine çıkmak, ölçümlerimizde art arda yapılan taramaları yavaşlattı. NAS'ta daha büyük bir değer yardımcı olabilir.
+
     SkipFolderCount: false
         Tür: bool (true/false)
         Açıklama: İlerleme görüntüsü için ön sayımı atlayıp taramayı hemen başlatıp başlatmayacağı

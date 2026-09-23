@@ -62,6 +62,13 @@ Die Konfiguration muss dem YAML-Format folgen. Wenn Sie eigene Kommentare hinzuf
         Beschreibung: Parallele Verarbeitung aktivieren
         Erwarteter Wert (true): Effektiv für NAS (Netzwerkspeicher) usw. Lokale SSDs sind schnell, daher kann der Overhead der Parallelisierung größer sein.
 
+    ScanThreads: 0
+        Typ: int (Nicht-negative ganze Zahl)
+        Beschreibung: Parallelitätsgrad des Scans (Anzahl der gleichzeitig gelesenen Ordner)
+        0 bedeutet automatisch: die Anzahl der logischen Prozessoren, begrenzt auf 4~8 bei einem lokalen Laufwerk, und 16 bei einem Netzwerkziel (NAS/UNC).
+        Ab 1 wird die Anzahl der Worker auf diesen Wert festgelegt. Das Maximum ist 64, größere Werte werden auf 64 begrenzt. Bei UseParallelScan: false werden Ordner unabhängig von diesem Wert nacheinander gescannt.
+        Erwarteter Wert (0): Ein größerer Wert ist nicht immer schneller. Auf einer lokalen SSD wurden wiederholte Scans oberhalb von 8 in unseren Messungen langsamer. Bei einem NAS kann ein größerer Wert helfen.
+
     SkipFolderCount: false
         Typ: bool (true/false)
         Beschreibung: Ob die Vorzählung für die Fortschrittsanzeige übersprungen und sofort mit dem Scannen begonnen werden soll

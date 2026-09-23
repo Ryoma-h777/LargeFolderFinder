@@ -9,7 +9,7 @@
 | 段階 | 実装 | 列挙方式 | 目的 |
 |---|---|---|---|
 | ① 事前カウント | `Scanner.CountFoldersAsync` → `FolderCounter` | **`DirectoryInfo.EnumerateDirectories`**（`EnumerationOptions` を明示） | 進捗率の分母を得る |
-| ② 本スキャン | `Scanner.RunScan` → `ScanRecursiveInternal` | **`DirectoryInfo.EnumerateFiles` / `EnumerateDirectories`** | サイズ集計とツリー構築 |
+| ② 本スキャン | `Scanner.RunScan` → `DirectoryWalker.Walk` | **`System.IO.Enumeration.FileSystemEnumerable<T>`**（1フォルダにつき1回だけ列挙） | サイズ集計とツリー構築 |
 
 ### ① 事前カウント
 - 1階層ずつ自前の再帰で列挙し、`Config.MaxDepthForCount`（既定 3）で**深さを打ち切る**。全階層を数えると事前カウント自体が本スキャン並みの時間になるため（`RecurseSubdirectories = true` の一括列挙は上限より下まで潜るので使わない）
@@ -18,35 +18,45 @@
 - `Config.SkipFolderCount = true` でこの段階を丸ごと省略できる（起動は速いが進捗率が出ない）
 
 ### ② 本スキャン
-- ファイルは `EnumerateFiles`、サブディレクトリは `EnumerateDirectories` で列挙
+- **1フォルダにつき列挙は1回だけ**（`Services/DirectoryWalker.cs`）。`FileSystemEnumerable<T>` で列挙し、名前・属性・サイズ・更新日時を列挙の結果から直接読む。ファイルごとに `FileInfo` を作らず、完全パスの文字列も作らない（`EnumerateFiles` と `EnumerateDirectories` で2回列挙し、ファイルごとに `FileInfo.Length` を取っていた旧来の方式より速い。1.63〜1.74 倍。measurements.md 3.5）
+- `EnumerationOptions` は `AttributesToSkip = 0`（隠し・システムも含める）、`IgnoreInaccessible = false`（失敗を自分で捕まえてスキップに記録するため）。`BufferSize` は既定（指定しない。measurements.md 4.4）
 - **リパースポイント（`FileAttributes.ReparsePoint`）は必ず除外**する。シンボリックリンク経由の無限再帰を防ぐため
 - 列挙の失敗は、アクセス拒否・見つからない・入出力の失敗に限って捕まえ、そのフォルダの残りを飛ばして走査を継続する。1 フォルダーの権限不足で全体を止めない。スキップは `ScanSkipRecorder`（並行の集合）に集め、走査の終わりに1回だけログに書く（1件ごとにログを書くと走査が遅くなるため）
 
 ## 並列処理のパターン
 
-`Config.UseParallelScan`（既定 true）で切り替えます。
+本スキャンは **決まった数の専用ワーカーが共有の作業の列からフォルダを取り出す方式**です（`Services/DirectoryWalker.cs`）。再帰の階層ごとに並列化を入れ子にする方式ではありません（`scan-performance` で置き換えた）。
 
-```csharp
-if (useParallel)
-{
-    Parallel.ForEach(directories, new ParallelOptions { CancellationToken = token }, subDir => { ... 再帰 ... });
-}
-else
-{
-    foreach (var subDir in directories) { ... 再帰 ... }
-}
-```
+**方式**:
 
-**方針と制約**:
+- 作業の列は `ConcurrentStack<WorkItem>`（**後入れ先出し**）。深さ優先に近い順で取り出し、列に溜まる未処理のフォルダの数を抑える
+- ワーカーは**スレッドプールではなく専用のスレッド**。ブロックする入出力を行うため、スレッドプールの注入の遅れに引きずられないようにする
+- 取り出せる仕事の合図は `SemaphoreSlim`。未処理のフォルダが 0 になったら全ワーカーを起こして終わる
+- **同時に行われる列挙の数はワーカー数を超えない**（深さ・広さに関わらず。要件 3.1）。実際の値は走査の最後の進捗（`ScanProgress.WorkerCount` / `PeakConcurrentEnumerations`）に載るので、計測の道具で確かめられる
+- 取り消しは**作業の取り出しの前**に見る。1フォルダの列挙が終わるまでは効かない（粒度は旧来より粗い）。想定外の例外は最初の1件を `ExceptionDispatchInfo` で投げ直す（`AggregateException` に包まない）
 
-- 並列度は明示指定せず **スレッドプールに委ねる**（`MaxDegreeOfParallelism` は設定していない）。再帰の各階層で `Parallel.ForEach` が入れ子になるため、階層が深いと並列度が読みにくい。**並列度を触る変更は、必ず実測とセットで行うこと**
-- `CancellationToken` は `ParallelOptions` に渡し、再帰の入口で `ThrowIfCancellationRequested()` する
-- **共有状態の保護は 2 通りを使い分ける**
-  - 子ノードのリスト追加 → `lock (currentNode.Children)`
-  - サイズの加算 → `Interlocked.Add`（`FolderInfo.AddSize` が親へ波及させる）
-- 逐次実行は、HDD のシークの詰まりを避けるために設けた経路で、「並列が原因の不具合か」を切り分けるための退避経路でもある。消さないこと
+**並列度の決め方**（`Services/ScanParallelism.cs` の `Resolve` が1箇所で決める。画面・計測の道具・検証ツールが同じ規則を使う）:
 
-**低速なネットワーク越し（NAS）では並列が効きます**が、ローカル SSD では過剰なスレッドが逆効果になり得ます。HDD ベースの NAS などでシークの詰まりが疑われる場合は、上の逐次実行を試す余地があります。既定値を変える判断は実測で行ってください。
+| 条件 | ワーカー数 |
+|---|---|
+| `Config.UseParallelScan: false`（逐次） | **1**（`ScanThreads` の値に関わらず。要件 3.2） |
+| `Config.ScanThreads` が 1 以上 | その値（**上限 64**。超えたら丸めてログに記録する） |
+| `Config.ScanThreads` が 0（自動）・ローカル | 論理プロセッサ数を **4〜8** に丸めた値 |
+| `Config.ScanThreads` が 0（自動）・ネットワーク（UNC・ネットワークドライブ） | **16**（**利用者の NAS の計測まで仮の値**。確定は `scan-performance` のタスク 6） |
+
+- ネットワークかどうかの判定（`ScanParallelism.IsNetworkPath`）は**接続を試みず**、パスの形（`\\` 始まり、`\\?\UNC\`）と `DriveInfo.DriveType` だけで行う。判定できないものはローカル扱い
+- 既定値を変えるときは `ScanParallelism` の private const を変え、**検証ツールの自己検証の期待値も合わせる**（期待値は実装の式を共有せず直接書いてあるので、変えると落ちて気づける）
+- **ローカルは 8 を超えて増やしても速くならない**。むしろ走査を続けて CPU の高いクロックの余力が尽きると、並列度が高いほど 1.6〜2.2 倍遅くなる（measurements.md 4.2・4.3）。**並列度を触る変更は、必ず実測とセットで行うこと**（バーストと持続の両方を測る。下の「バーストと持続を分けて測る」）
+- 列挙のバッファ（`EnumerationBufferSize`）は**指定しない**のが最も速い。262,144 まで大きくすると明確に遅くなる（measurements.md 4.4）
+
+**共有状態の保護は 2 通りを使い分ける**:
+
+- 子ノードのリスト追加 → `lock (node.Children)`。1フォルダにつき**1回だけ**取り、局所の一覧に集めた子を一括で足す（途中の木を読む `ResultFormatter` の規約を守るため）
+- サイズの加算 → `Interlocked.Add`（`FolderInfo.AddSize` が親へ波及させる）
+
+**逐次（`UseParallelScan: false`）は消さないこと。** HDD のシークの詰まりを避けるための経路であり、「並列が原因の不具合か」を切り分けるための退避経路でもある。置き換えの後も同じ `DirectoryWalker` をワーカー1本で動かす経路として残してある（別の実装を持たない）。
+
+**低速なネットワーク越し（NAS）では並列が効きます**が、ローカル SSD では過剰なワーカーが逆効果になります。利用者は `Config.txt` の `ScanThreads` で 1〜64 を明示できます（README の「スキャンの速さの設定」）。既定値を変える判断は実測で行ってください。
 
 ## 進捗通知のスロットリング
 
@@ -75,6 +85,7 @@ else
 - 呼び出しタイミング: 初回描画完了時（`ContentRendered`）と、`DispatcherTimer` による**1 分間隔**のアイドル時
 - 常駐アプリとして待機中のフットプリントを小さく見せる意図。**走査中の性能改善が目的ではない**ので、走査ループ内から呼ばないこと
 - 永続化は MessagePack + LZ4BlockArray 圧縮でセッション復元を速くしている（圧縮によるデータ量の削減は、コード中のコメントでは 50〜70% とされるが、計測の記録はない）
+- 走査後の管理ヒープは `scan-performance` の置き換えで 0.9〜1.5% 減った。一方で**走査中の最大の作業セットは 1.8〜11.0% 増えた**。作業の列が未処理のフォルダを完全パスの文字列つきで持つためで、一時的なもの（直下に 3 万フォルダを持つフォルダで約 9MB）。作業の列を「親のノード＋名前」にする案は `architecture-refactoring` への申し送り（measurements.md 3.7）
 
 ## 計測の手順
 
@@ -321,17 +332,25 @@ Tools/ScanBench/bin/Release/net10.0-windows/ScanBench.exe "<対象のフォル�
 
 回帰を判定する際の目安です。これを明確に下回る場合は変更を見直します。
 
-| 対象 | 規模 | 所要時間 |
-|---|---|---|
-| PC ローカル | 約 400GB / 約 117 万ファイル | 5 〜 13 秒 |
-| NAS | 約 1TB / 約 7 万ファイル | 23 秒 |
-| NAS | 約 20TB / 約 140 万ファイル | 約 18 〜 30 分 |
+| 対象 | 規模 | 所要時間 | 計測した環境 |
+|---|---|---|---|
+| PC ローカル | 約 400GB / 約 117 万ファイル | 5 〜 13 秒 | 不明（`scan-performance` より前の計測。機と条件の記録が無い） |
+| NAS | 約 1TB / 約 7 万ファイル | 23 秒 | 同上 |
+| NAS | 約 20TB / 約 140 万ファイル | 約 18 〜 30 分 | 同上 |
+| システムドライブ全体 | 約 725GiB / 約 178 万ファイル | 約 7.1 秒（`scan-performance` の前は約 11.6 秒） | i7-12700H（20 論理プロセッサ）/ NVMe SSD / Windows 11、管理者でない、温まった中央値、並列度は自動（測った時点の既定は 16。既定を 8 に下げた後の同じ対象は 6.4 秒〜。measurements.md 4.5） |
+| OS 本体のフォルダ | 約 21 万ファイル | 約 2.4 秒（前は約 4.0 秒） | 同上 |
 
-**README の実測値を更新する場合は、計測環境（CPU・接続方式）も併記してください。**低スペック機での計測値を無条件に置き換えると、性能が退化したように見えます。
+- 下の 2 行は `scan-performance` のローカルの計測（measurements.md 3.5）。**上の 3 行とは機も対象も違う**ので置き換えず、README でも併記している
+- NAS の 2 行は `scan-performance` の変更の後の値では**ない**（利用者の NAS の計測がまだのため、旧来の値のまま。更新はタスク 6、記録は measurements.md 5 章と 8 章）
+
+**README の実測値を更新する場合は、計測環境（CPU・接続方式）も併記してください（要件 5.3）。**低スペック機での計測値を無条件に置き換えると、性能が退化したように見えます。
 
 ## 変更時のチェックリスト
 
 - [ ] 列挙処理にリパースポイントの除外を入れたか
+- [ ] 1 フォルダにつき列挙を 1 回に保ったか（2 回列挙する形に戻していないか）
+- [ ] 同時の列挙の数がワーカー数を超えない形を保ったか（並列化を入れ子にしていないか）
+- [ ] 並列度の既定値を変えたなら、`ScanParallelism` の const と検証ツールの自己検証の期待値、`Config.txt` の説明、README を合わせたか
 - [ ] `CancellationToken` を末端まで引き回したか
 - [ ] 共有状態を `lock` または `Interlocked` で保護したか
 - [ ] 進捗通知を新たに高頻度で発火させていないか

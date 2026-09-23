@@ -62,6 +62,13 @@ La configuration doit suivre le format YAML. Si vous souhaitez ajouter vos propr
         Description : Activer le traitement parallèle
         Valeur attendue (true) : Efficace pour NAS (stockage réseau), etc. Les SSD locaux sont rapides, donc la surcharge de parallélisation peut être plus importante.
 
+    ScanThreads: 0
+        Type : int (Entier non négatif)
+        Description : Degré de parallélisme de l'analyse (nombre de dossiers lus simultanément)
+        0 signifie automatique : le nombre de processeurs logiques ramené à 4~8 pour un lecteur local, et 16 pour une cible réseau (NAS/UNC).
+        À partir de 1, le nombre de workers est fixé à cette valeur. Le maximum est 64, et les valeurs supérieures sont ramenées à 64. Si UseParallelScan: false, les dossiers sont analysés un par un quelle que soit cette valeur.
+        Valeur attendue (0) : Une valeur plus grande n'est pas toujours plus rapide. Sur un SSD local, dépasser 8 a ralenti les analyses répétées dans nos mesures. Sur un NAS, une valeur plus grande peut aider.
+
     SkipFolderCount: false
         Type : bool (true/false)
         Description : S'il faut ignorer le pré-comptage pour l'affichage de la progression et démarrer l'analyse immédiatement

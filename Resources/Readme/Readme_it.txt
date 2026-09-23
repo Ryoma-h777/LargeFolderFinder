@@ -62,6 +62,13 @@ La configurazione deve seguire il formato YAML. Se si desidera aggiungere i prop
         Descrizione: Abilita elaborazione parallela
         Valore previsto (true): Efficace per NAS (archiviazione di rete), ecc. Gli SSD locali sono veloci, quindi l'overhead di parallelizzazione può essere maggiore.
 
+    ScanThreads: 0
+        Tipo: int (Intero non negativo)
+        Descrizione: Grado di parallelismo della scansione (numero di cartelle lette contemporaneamente)
+        0 significa automatico: il numero di processori logici limitato a 4~8 per un'unità locale e 16 per una destinazione di rete (NAS/UNC).
+        Da 1 in su il numero di worker viene fissato a quel valore. Il massimo è 64 e i valori superiori vengono limitati a 64. Con UseParallelScan: false, le cartelle vengono scansionate una alla volta indipendentemente da questo valore.
+        Valore previsto (0): Un valore maggiore non è sempre più veloce. Su un SSD locale, superare 8 ha reso più lente le scansioni ripetute nelle nostre misurazioni. Su un NAS, un valore maggiore può essere utile.
+
     SkipFolderCount: false
         Tipo: bool (true/false)
         Descrizione: Se saltare il pre-conteggio per la visualizzazione dell'avanzamento e avviare immediatamente la scansione
