@@ -32,7 +32,14 @@ namespace LargeFolderFinder
             return await Task.Run(() => FolderCounter.Count(path, maxDepth, token), token);
         }
 
-        public static async Task<FolderInfo?> RunScan(string path, long thresholdBytes, int totalFolders, int maxDepth, bool useParallel, bool usePhysicalSize, IProgress<ScanProgress> progress, CancellationToken token)
+        /// <summary>
+        /// 指定したパスを走査し、結果の木のルートノードを返す。
+        /// </summary>
+        /// <remarks>
+        /// 末尾の tuning は走査の調整値（ワーカー数・列挙のバッファの大きさ）で、省略時は自動と .NET の既定。
+        /// 現時点では受け取るだけで走査の方式には反映せず、値の反映は走査の組み立てを差し替える段で行う。
+        /// </remarks>
+        public static async Task<FolderInfo?> RunScan(string path, long thresholdBytes, int totalFolders, int maxDepth, bool useParallel, bool usePhysicalSize, IProgress<ScanProgress> progress, CancellationToken token, ScanTuning? tuning = null)
         {
             var progressCounter = new ProgressCounter();
             DateTime startTime = DateTime.Now;
@@ -66,7 +73,9 @@ namespace LargeFolderFinder
                     // 取り消し・例外のときは上の呼び出しから例外が伝わるため、ここには来ない。
                     // この報告は走査のスレッドで送る。UI の同期コンテキストへ投げられる報告が、
                     // RunScan の続き（await の後）より先に並ぶようにするため
-                    ReportFinalProgress(progressCounter.Value, totalFolders, skipRecorder, progress);
+                    // ワーカー数と同時の列挙の最大は、走査の組み立てを差し替える段で実際の値を渡す。
+                    // 今の走査の方式はどちらの値も数えないため 0 を載せる。
+                    ReportFinalProgress(progressCounter.Value, totalFolders, skipRecorder, progress, workerCount: 0, peakConcurrentEnumerations: 0);
 
                     return rootNode; // 閾値に関わらずルートノードを返す
                 }, token);
@@ -250,7 +259,7 @@ namespace LargeFolderFinder
         /// 結果の木（CurrentResult）は載せない。完了後の木は RunScan の戻り値で渡るため、
         /// ここで載せると受け手が同じ木の描画を二重に始めてしまう。
         /// </remarks>
-        private static void ReportFinalProgress(int processed, int total, ScanSkipRecorder skipRecorder, IProgress<ScanProgress> progress)
+        private static void ReportFinalProgress(int processed, int total, ScanSkipRecorder skipRecorder, IProgress<ScanProgress> progress, int workerCount, int peakConcurrentEnumerations)
         {
             progress?.Report(new ScanProgress
             {
@@ -259,7 +268,9 @@ namespace LargeFolderFinder
                 EstimatedTimeRemaining = null,
                 CurrentResult = null,
                 IsFinal = true,
-                Skipped = skipRecorder.Snapshot()
+                Skipped = skipRecorder.Snapshot(),
+                WorkerCount = workerCount,
+                PeakConcurrentEnumerations = peakConcurrentEnumerations
             });
         }
 

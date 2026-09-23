@@ -21,5 +21,17 @@ namespace LargeFolderFinder
         /// 走査中に列挙できずにスキップした対象の一覧（既定は空）
         /// </summary>
         public IReadOnlyList<ScanSkip> Skipped { get; set; } = Array.Empty<ScanSkip>();
+
+        /// <summary>
+        /// 走査に実際に使ったワーカーの数。最後の報告（<see cref="IsFinal"/> が真）だけで意味を持ち、
+        /// 途中の報告では 0
+        /// </summary>
+        public int WorkerCount { get; set; }
+
+        /// <summary>
+        /// 走査中に同時に行われた列挙の数の最大。最後の報告（<see cref="IsFinal"/> が真）だけで
+        /// 意味を持ち、途中の報告では 0
+        /// </summary>
+        public int PeakConcurrentEnumerations { get; set; }
     }
 }
