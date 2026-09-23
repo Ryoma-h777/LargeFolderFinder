@@ -774,17 +774,22 @@ internal static class SelfChecks
                 ScanParallelism.Resolve(uncPath, true, 0) == 16,
                 $"UNC パスの自動のワーカー数がネットワークの既定値 16 になりません（{ScanParallelism.Resolve(uncPath, true, 0)}）。");
 
-            // ローカルの判定: 検証ツールの一時フォルダ。自動は論理プロセッサ数を 4〜16 に丸めた値
+            // ローカルの判定: 検証ツールの一時フォルダ。自動は論理プロセッサ数を 4〜8 に丸めた値
+            // （上限 8 はタスク4.1 の計測で決めた値。measurements.md の4章）
             SelfAssert.That(
                 !ScanParallelism.IsNetworkPath(localPath),
                 "一時フォルダのパスがネットワークと判定されました（この検証はローカルの一時フォルダを前提にしています）。");
-            int expectedLocal = Math.Clamp(Environment.ProcessorCount, 4, 16);
+
+            // 期待値は実装の式（Math.Clamp）を共有せず、決めた既定値をこの検証の中に直接書く。
+            // 実装の定数を変えるとここと食い違って落ちるので、既定値を変えたことに気づける
+            int processorCount = Environment.ProcessorCount;
+            int expectedLocal = processorCount < 4 ? 4 : (processorCount > 8 ? 8 : processorCount);
             SelfAssert.That(
                 ScanParallelism.Resolve(localPath, true, 0) == expectedLocal,
-                $"ローカルのパスの自動のワーカー数が、論理プロセッサ数を 4〜16 に丸めた値（{expectedLocal}）になりません（{ScanParallelism.Resolve(localPath, true, 0)}）。");
+                $"ローカルのパスの自動のワーカー数が、論理プロセッサ数を 4〜8 に丸めた値（{expectedLocal}）になりません（{ScanParallelism.Resolve(localPath, true, 0)}）。");
             SelfAssert.That(
-                expectedLocal >= 4 && expectedLocal <= 16,
-                $"ローカルの自動のワーカー数が 4〜16 の範囲から外れています（{expectedLocal}）。");
+                expectedLocal >= 4 && expectedLocal <= 8,
+                $"ローカルの自動のワーカー数が 4〜8 の範囲から外れています（{expectedLocal}）。");
 
             // 判定できないパスはローカルとして扱い、例外を外に出さない
             foreach (string undecidable in new[] { string.Empty, "   ", "relative\\path", @"Z:\not-existing-drive", "\0invalid" })

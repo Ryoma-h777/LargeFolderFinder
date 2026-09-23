@@ -10,8 +10,9 @@ using System.Threading.Tasks;
 namespace LargeFolderFinder.ScanBench;
 
 /// <summary>
-/// 計測の指定（<c>&lt;path&gt; [--runs N] [--sequential] [--physical-size] [--no-digest] [--label TEXT]</c>）の
-/// 解釈の結果を表す不変のデータ型（design.md: Components and Interfaces / Tools / ScanBench「使い方」）。
+/// 計測の指定（<c>&lt;path&gt; [--runs N] [--threads N] [--buffer BYTES] [--sequential] [--physical-size]
+/// [--no-digest] [--label TEXT]</c>）の解釈の結果を表す不変のデータ型
+/// （design.md: Components and Interfaces / Tools / ScanBench「使い方」）。
 /// </summary>
 /// <remarks>
 /// 引数の解釈だけを切り出しているのは、ファイルシステムに触れずに解釈の正しさを確かめられるようにするためである。
@@ -24,6 +25,12 @@ internal sealed class BenchArguments
 
     /// <summary>対象の説明を指定するオプションの名前。</summary>
     private const string LabelOption = "--label";
+
+    /// <summary>走査の並列度（ワーカー数）を指定するオプションの名前。</summary>
+    private const string ThreadsOption = "--threads";
+
+    /// <summary>列挙のバッファの大きさ（バイト）を指定するオプションの名前。</summary>
+    private const string BufferOption = "--buffer";
 
     /// <summary>逐次で走査することを指定するオプションの名前。</summary>
     private const string SequentialOption = "--sequential";
@@ -47,6 +54,8 @@ internal sealed class BenchArguments
         bool sequential,
         bool usePhysicalSize,
         bool computeDigest,
+        int threadCount,
+        int enumerationBufferSize,
         string? errorMessage)
     {
         RootPath = rootPath;
@@ -55,6 +64,8 @@ internal sealed class BenchArguments
         Sequential = sequential;
         UsePhysicalSize = usePhysicalSize;
         ComputeDigest = computeDigest;
+        ThreadCount = threadCount;
+        EnumerationBufferSize = enumerationBufferSize;
         ErrorMessage = errorMessage;
     }
 
@@ -78,6 +89,15 @@ internal sealed class BenchArguments
     /// 要約値を作るための一覧がメモリの列を押し上げるため、メモリを比べたいときは偽にする。
     /// </summary>
     public bool ComputeDigest { get; }
+
+    /// <summary>
+    /// 走査に渡す並列度（ワーカー数）。0 は自動で、本体が対象から既定値を決める。
+    /// 逐次の指定があるときは本体の規則で 1 になる（この値は無視される）。
+    /// </summary>
+    public int ThreadCount { get; }
+
+    /// <summary>走査に渡す列挙のバッファの大きさ（バイト）。0 は .NET の既定。</summary>
+    public int EnumerationBufferSize { get; }
 
     /// <summary>引数の誤りの説明。誤りが無ければ null。</summary>
     public string? ErrorMessage { get; }
@@ -104,6 +124,8 @@ internal sealed class BenchArguments
         bool sequential = false;
         bool usePhysicalSize = false;
         bool computeDigest = true;
+        int threadCount = 0;
+        int enumerationBufferSize = 0;
 
         for (int i = 0; i < args.Count; i++)
         {
@@ -139,6 +161,38 @@ internal sealed class BenchArguments
                     i++;
                     continue;
 
+                case ThreadsOption:
+                    if (i + 1 >= args.Count)
+                    {
+                        return Error($"{ThreadsOption} の値がありません。");
+                    }
+
+                    if (!int.TryParse(args[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedThreads)
+                        || parsedThreads < 0)
+                    {
+                        return Error($"{ThreadsOption} には0以上の整数を指定してください（0 は自動）: {args[i + 1]}");
+                    }
+
+                    threadCount = parsedThreads;
+                    i++;
+                    continue;
+
+                case BufferOption:
+                    if (i + 1 >= args.Count)
+                    {
+                        return Error($"{BufferOption} の値がありません。");
+                    }
+
+                    if (!int.TryParse(args[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedBuffer)
+                        || parsedBuffer < 0)
+                    {
+                        return Error($"{BufferOption} には0以上の整数（バイト）を指定してください（0 は .NET の既定）: {args[i + 1]}");
+                    }
+
+                    enumerationBufferSize = parsedBuffer;
+                    i++;
+                    continue;
+
                 case LabelOption:
                     if (i + 1 >= args.Count)
                     {
@@ -170,12 +224,21 @@ internal sealed class BenchArguments
             return Error("走査の起点のフォルダを指定してください。");
         }
 
-        return new BenchArguments(rootPath, runs, label ?? DefaultLabel, sequential, usePhysicalSize, computeDigest, null);
+        return new BenchArguments(
+            rootPath,
+            runs,
+            label ?? DefaultLabel,
+            sequential,
+            usePhysicalSize,
+            computeDigest,
+            threadCount,
+            enumerationBufferSize,
+            null);
     }
 
     private static BenchArguments Error(string message)
     {
-        return new BenchArguments(null, DefaultRuns, DefaultLabel, false, false, true, message);
+        return new BenchArguments(null, DefaultRuns, DefaultLabel, false, false, true, 0, 0, message);
     }
 }
 
@@ -248,18 +311,6 @@ internal static class Program
     /// <summary>1バイトを MB に直す割る数。</summary>
     private const double BytesPerMegabyte = 1024.0 * 1024.0;
 
-    /// <summary>
-    /// 走査に渡す列挙のバッファの大きさ（バイト）。0 は .NET の既定。
-    /// バッファを変えて試す <c>--buffer</c> の指定はタスク 4.1 で足すため、今は常に既定である。
-    /// </summary>
-    private const int EnumerationBufferSizeBytes = 0;
-
-    /// <summary>
-    /// 走査に渡す並列度。0 は自動（本体がネットワークかローカルかで既定値を決める）。
-    /// 並列度を変えて試す <c>--threads</c> の指定はタスク 4.1 で足すため、今は常に自動である。
-    /// </summary>
-    private const int ThreadCount = 0;
-
     private static int Main(string[] args)
     {
         // 標準出力を UTF-8（BOM なし）へ固定する。既定のままだと出力をリダイレクトして記録に残すときに
@@ -323,7 +374,9 @@ internal static class Program
                 rootPath,
                 parsed.Sequential,
                 parsed.UsePhysicalSize,
-                parsed.ComputeDigest);
+                parsed.ComputeDigest,
+                parsed.ThreadCount,
+                parsed.EnumerationBufferSize);
             PrintMeasurement(parsed, runIndex, measurement);
 
             if (measurement.SkippedCount == null)
@@ -342,12 +395,16 @@ internal static class Program
     /// <param name="sequential">逐次で走査するかどうか。</param>
     /// <param name="usePhysicalSize">物理サイズ換算を適用するかどうか。クラスタサイズの扱いは本体に任せる。</param>
     /// <param name="computeDigest">要約値を作るかどうか。偽でもノードの数とメモリは従来どおり測る。</param>
+    /// <param name="threadCount">走査に渡す並列度。0 は自動。</param>
+    /// <param name="enumerationBufferSize">走査に渡す列挙のバッファの大きさ（バイト）。0 は .NET の既定。</param>
     /// <returns>この回の計測。</returns>
     private static RunMeasurement MeasureOnce(
         string rootPath,
         bool sequential,
         bool usePhysicalSize,
-        bool computeDigest)
+        bool computeDigest,
+        int threadCount,
+        int enumerationBufferSize)
     {
         // 前の回の結果の木と要約値の作業用の一覧を回収してから測る。こうしないと、前の回の残りが
         // この回の管理ヒープに混ざり、回ごとの比較にならない。時計の前に行うので所要時間には入らない。
@@ -374,7 +431,7 @@ internal static class Program
             usePhysicalSize: usePhysicalSize,
             progress: recorder,
             token: CancellationToken.None,
-            tuning: new global::LargeFolderFinder.ScanTuning(ThreadCount, EnumerationBufferSizeBytes)));
+            tuning: new global::LargeFolderFinder.ScanTuning(threadCount, enumerationBufferSize)));
 
         global::LargeFolderFinder.FolderInfo? root = scanTask.GetAwaiter().GetResult();
 
@@ -440,8 +497,8 @@ internal static class Program
             $"\t走査: {(parsed.Sequential ? "逐次" : "並列")}" +
             $"\t物理サイズ換算: {(parsed.UsePhysicalSize ? "あり" : "なし")}" +
             $"\t要約値: {(parsed.ComputeDigest ? "作る" : "作らない（--no-digest。メモリの列を濁さないため）")}" +
-            $"\t並列度: {FormatThreadCount(ThreadCount)}" +
-            $"\t列挙のバッファ: {FormatBufferSize(EnumerationBufferSizeBytes)}" +
+            $"\t並列度: {FormatThreadCount(parsed.ThreadCount)}" +
+            $"\t列挙のバッファ: {FormatBufferSize(parsed.EnumerationBufferSize)}" +
             $"\t回数: {parsed.Runs.ToString(CultureInfo.InvariantCulture)}");
     }
 
@@ -484,7 +541,7 @@ internal static class Program
             $"{runIndex.ToString(CultureInfo.InvariantCulture)}/{phase}",
             measurement.WorkerCount?.ToString(CultureInfo.InvariantCulture) ?? "-",
             measurement.PeakConcurrentEnumerations?.ToString(CultureInfo.InvariantCulture) ?? "-",
-            FormatBufferSize(EnumerationBufferSizeBytes),
+            FormatBufferSize(parsed.EnumerationBufferSize),
             measurement.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture),
             measurement.Digest.FolderCount.ToString(CultureInfo.InvariantCulture),
             measurement.Digest.FileCount.ToString(CultureInfo.InvariantCulture),
@@ -523,13 +580,17 @@ internal static class Program
     {
         Console.WriteLine("ScanBench - Large Folder Finder の走査を繰り返し測る計測の道具（配布物には含まれない）");
         Console.WriteLine();
-        Console.WriteLine("使い方: ScanBench <path> [--runs N] [--sequential] [--physical-size] [--no-digest] [--label TEXT]");
+        Console.WriteLine("使い方: ScanBench <path> [--runs N] [--threads N] [--buffer BYTES] [--sequential] [--physical-size]");
+        Console.WriteLine("                  [--no-digest] [--label TEXT]");
         Console.WriteLine();
         Console.WriteLine("引数:");
         Console.WriteLine("  <path>             走査の起点のフォルダ。読み取りしか行わない");
         Console.WriteLine();
         Console.WriteLine("オプション:");
         Console.WriteLine("  --runs N           同じプロセスで繰り返す回数。省略時は3");
+        Console.WriteLine("  --threads N        走査の並列度（ワーカー数）。0 は自動（本体が対象から既定値を決める）。省略時は0。");
+        Console.WriteLine("                     --sequential と一緒に指定すると、本体の規則で逐次（1）が優先される");
+        Console.WriteLine("  --buffer BYTES     列挙に渡すバッファの大きさ（バイト）。0 は .NET の既定。省略時は0");
         Console.WriteLine("  --sequential       逐次で走査する。省略時は並列");
         Console.WriteLine("  --physical-size    物理サイズ換算を適用する");
         Console.WriteLine("  --no-digest        要約値を作らず、要約値の列を「-」にする。数とメモリは従来どおり測る。");
@@ -545,7 +606,7 @@ internal static class Program
         Console.WriteLine("  同時の列挙の最大      同時に行われた列挙の数の最大。ワーカー数以下になる");
         Console.WriteLine("  バッファ              列挙に渡したバッファの大きさ。「既定」は .NET の既定");
         Console.WriteLine("  条件の行の「並列度: 自動」は、本体が対象から既定値を決めたことを表す。");
-        Console.WriteLine("  並列度とバッファを指定する --threads と --buffer はタスク 4.1 で足す");
+        Console.WriteLine("  --threads で固定したときは、条件の行にその値が出る（実際に使われた数はワーカー数の列で分かる）");
         Console.WriteLine();
         Console.WriteLine("メモリの列の読み方:");
         Console.WriteLine("  最大の作業セット      プロセスの開始からの最大。同じプロセスで繰り返すと前の回の分を含む。");

@@ -16,14 +16,21 @@ namespace LargeFolderFinder
         /// <summary>設定で指定できるワーカー数の上限。これを超える設定値はこの値に丸める</summary>
         private const int MaxConfiguredThreads = 64;
 
-        /// <summary>自動のときのネットワーク（UNC・ネットワークドライブ）の既定のワーカー数</summary>
+        /// <summary>
+        /// 自動のときのネットワーク（UNC・ネットワークドライブ）の既定のワーカー数。
+        /// これは仮の値で、利用者の NAS の計測で確定する（measurements.md の 5.2）。
+        /// </summary>
         private const int NetworkAutoThreads = 16;
 
         /// <summary>自動のときのローカルの下限のワーカー数（論理プロセッサ数がこれより少なくてもここまでは使う）</summary>
         private const int LocalAutoMinThreads = 4;
 
-        /// <summary>自動のときのローカルの上限のワーカー数</summary>
-        private const int LocalAutoMaxThreads = 16;
+        /// <summary>
+        /// 自動のときのローカルの上限のワーカー数。
+        /// 計測で決めた値（measurements.md の4章）。ローカルの SSD では 8 を超えて増やしても速くならず、
+        /// 走査が続いて CPU の一時的な高いクロックの余力が尽きると、多いほど大きく遅くなるため 8 とした。
+        /// </summary>
+        private const int LocalAutoMaxThreads = 8;
 
         /// <summary>
         /// 走査のワーカー数を決める。逐次の設定なら1、設定値が正ならその値（上限を超えたら丸める）、

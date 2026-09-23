@@ -91,10 +91,11 @@ else
 ### 計測の道具（`Tools/ScanBench`）の使い方
 
 ```
-Tools/ScanBench/bin/Release/net10.0-windows/ScanBench.exe <対象のフォルダ> [--runs N] [--sequential] [--physical-size] [--label 対象の説明] [--no-digest]
+Tools/ScanBench/bin/Release/net10.0-windows/ScanBench.exe <対象のフォルダ> [--runs N] [--threads N] [--buffer BYTES] [--sequential] [--physical-size] [--label 対象の説明] [--no-digest]
 ```
 
 - 出力はタブ区切りで、条件の行（`#` で始まる）→ 見出し → 1回ごとの行。**パスは出さない**ので、そのまま記録に貼れる
+- `--threads N` で並列度を、`--buffer BYTES` で列挙のバッファの大きさを固定して試せる（いずれも 0 は既定で、0 のときは本体が決める）。既定値を決めるための振り分けに使う
 - 並列度の列（**ワーカー数**・**同時の列挙の最大**・**バッファ**）で、その回がどの並列度で走ったかを確かめる。
   ワーカー数と同時の列挙の最大は走査の最後の報告から取った実際の値で、バッファの「既定」は .NET の既定の大きさである。
   条件の行の「並列度: 自動」は、本体が対象（ネットワークかローカルか）から既定値を決めたことを表す
