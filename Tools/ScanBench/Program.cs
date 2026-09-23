@@ -189,12 +189,16 @@ internal sealed class RunMeasurement
         long peakWorkingSetBytes,
         long managedHeapBytes,
         int? skippedCount,
+        int? workerCount,
+        int? peakConcurrentEnumerations,
         ResultDigest digest)
     {
         ElapsedMilliseconds = elapsedMilliseconds;
         PeakWorkingSetBytes = peakWorkingSetBytes;
         ManagedHeapBytes = managedHeapBytes;
         SkippedCount = skippedCount;
+        WorkerCount = workerCount;
+        PeakConcurrentEnumerations = peakConcurrentEnumerations;
         Digest = digest;
     }
 
@@ -209,6 +213,12 @@ internal sealed class RunMeasurement
 
     /// <summary>最後の報告が伝えたスキップの件数。報告が届かなかったときは null。</summary>
     public int? SkippedCount { get; }
+
+    /// <summary>最後の報告が伝えた、実際に走査に使ったワーカーの数。報告が届かなかったときは null。</summary>
+    public int? WorkerCount { get; }
+
+    /// <summary>最後の報告が伝えた、同時に行われた列挙の数の最大。報告が届かなかったときは null。</summary>
+    public int? PeakConcurrentEnumerations { get; }
 
     /// <summary>結果の木の要約値とノードの数。</summary>
     public ResultDigest Digest { get; }
@@ -237,6 +247,18 @@ internal static class Program
 
     /// <summary>1バイトを MB に直す割る数。</summary>
     private const double BytesPerMegabyte = 1024.0 * 1024.0;
+
+    /// <summary>
+    /// 走査に渡す列挙のバッファの大きさ（バイト）。0 は .NET の既定。
+    /// バッファを変えて試す <c>--buffer</c> の指定はタスク 4.1 で足すため、今は常に既定である。
+    /// </summary>
+    private const int EnumerationBufferSizeBytes = 0;
+
+    /// <summary>
+    /// 走査に渡す並列度。0 は自動（本体がネットワークかローカルかで既定値を決める）。
+    /// 並列度を変えて試す <c>--threads</c> の指定はタスク 4.1 で足すため、今は常に自動である。
+    /// </summary>
+    private const int ThreadCount = 0;
 
     private static int Main(string[] args)
     {
@@ -351,7 +373,8 @@ internal static class Program
             useParallel: !sequential,
             usePhysicalSize: usePhysicalSize,
             progress: recorder,
-            token: CancellationToken.None));
+            token: CancellationToken.None,
+            tuning: new global::LargeFolderFinder.ScanTuning(ThreadCount, EnumerationBufferSizeBytes)));
 
         global::LargeFolderFinder.FolderInfo? root = scanTask.GetAwaiter().GetResult();
 
@@ -382,9 +405,18 @@ internal static class Program
         // --no-digest のときは要約値のための一覧を持たずに数だけ数える。
         ResultDigest digest = ResultDigest.Compute(root, computeDigest);
 
-        int? skippedCount = recorder.LastFinal?.Skipped.Count;
+        // ワーカー数と同時の列挙の最大は、走査の側が最後の報告にだけ載せる（途中の報告では 0）。
+        global::LargeFolderFinder.ScanProgress? final = recorder.LastFinal;
+        int? skippedCount = final?.Skipped.Count;
 
-        return new RunMeasurement(stopwatch.ElapsedMilliseconds, peakWorkingSet, managedHeap, skippedCount, digest);
+        return new RunMeasurement(
+            stopwatch.ElapsedMilliseconds,
+            peakWorkingSet,
+            managedHeap,
+            skippedCount,
+            final?.WorkerCount,
+            final?.PeakConcurrentEnumerations,
+            digest);
     }
 
     /// <summary>
@@ -408,6 +440,8 @@ internal static class Program
             $"\t走査: {(parsed.Sequential ? "逐次" : "並列")}" +
             $"\t物理サイズ換算: {(parsed.UsePhysicalSize ? "あり" : "なし")}" +
             $"\t要約値: {(parsed.ComputeDigest ? "作る" : "作らない（--no-digest。メモリの列を濁さないため）")}" +
+            $"\t並列度: {FormatThreadCount(ThreadCount)}" +
+            $"\t列挙のバッファ: {FormatBufferSize(EnumerationBufferSizeBytes)}" +
             $"\t回数: {parsed.Runs.ToString(CultureInfo.InvariantCulture)}");
     }
 
@@ -419,6 +453,9 @@ internal static class Program
             "ラベル",
             "版",
             "回",
+            "ワーカー数",
+            "同時の列挙の最大",
+            "バッファ",
             "所要時間(ms)",
             "フォルダ数",
             "ファイル数",
@@ -445,6 +482,9 @@ internal static class Program
             parsed.Label,
             global::LargeFolderFinder.AppInfo.Version,
             $"{runIndex.ToString(CultureInfo.InvariantCulture)}/{phase}",
+            measurement.WorkerCount?.ToString(CultureInfo.InvariantCulture) ?? "-",
+            measurement.PeakConcurrentEnumerations?.ToString(CultureInfo.InvariantCulture) ?? "-",
+            FormatBufferSize(EnumerationBufferSizeBytes),
             measurement.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture),
             measurement.Digest.FolderCount.ToString(CultureInfo.InvariantCulture),
             measurement.Digest.FileCount.ToString(CultureInfo.InvariantCulture),
@@ -459,6 +499,24 @@ internal static class Program
     private static string FormatMegabytes(long bytes)
     {
         return (bytes / BytesPerMegabyte).ToString("F1", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// 列挙のバッファの大きさを表示の形にする。0 は .NET の既定なので「既定」と出す
+    /// （記録を読む人が「バッファを指定して測った回」と取り違えないようにするため）。
+    /// </summary>
+    private static string FormatBufferSize(int bufferSize)
+    {
+        return bufferSize > 0 ? bufferSize.ToString(CultureInfo.InvariantCulture) : "既定";
+    }
+
+    /// <summary>
+    /// 走査に渡した並列度を表示の形にする。0 は本体が場面から決めるので「自動」と出す。
+    /// 実際に使われたワーカーの数は、最後の報告から取る「ワーカー数」の列で分かる。
+    /// </summary>
+    private static string FormatThreadCount(int threadCount)
+    {
+        return threadCount > 0 ? threadCount.ToString(CultureInfo.InvariantCulture) : "自動";
     }
 
     private static void PrintUsage()
@@ -481,6 +539,13 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine("出力: タブ区切りの1行ずつ。1回目は「初回」、2回目以降は「温まった」と区別する。");
         Console.WriteLine("      パスそのものは出さない。対象は --label で表す");
+        Console.WriteLine();
+        Console.WriteLine("並列度とバッファの列:");
+        Console.WriteLine("  ワーカー数            走査が実際に使った専用ワーカーの数（最後の報告から取る）");
+        Console.WriteLine("  同時の列挙の最大      同時に行われた列挙の数の最大。ワーカー数以下になる");
+        Console.WriteLine("  バッファ              列挙に渡したバッファの大きさ。「既定」は .NET の既定");
+        Console.WriteLine("  条件の行の「並列度: 自動」は、本体が対象から既定値を決めたことを表す。");
+        Console.WriteLine("  並列度とバッファを指定する --threads と --buffer はタスク 4.1 で足す");
         Console.WriteLine();
         Console.WriteLine("メモリの列の読み方:");
         Console.WriteLine("  最大の作業セット      プロセスの開始からの最大。同じプロセスで繰り返すと前の回の分を含む。");
