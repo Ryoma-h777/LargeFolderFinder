@@ -135,3 +135,91 @@
 - [TreeSize features](https://www.jam-software.com/treesize/features.shtml)
 - [WizTree What's New](https://diskanalyzer.com/whats-new)
 - [WinDirStat CHANGELOG](https://github.com/windirstat/windirstat/blob/master/CHANGELOG.md)
+
+## 全体の確認（5.2、2026-09-23、コミット 74571da の上で実施）
+
+| 確認 | 結果 |
+|---|---|
+| `dotnet build LargeFolderFinder.sln -c Release -warnaserror` | 成功、警告0件・エラー0件 |
+| `dotnet test --solution LargeFolderFinder.sln -c Release --no-build` | 8件すべて成功、スキップ0件 |
+| `GoldenBaseline.exe selfcheck` | 152件中 失敗0件（**6回連続で実行し、6回とも失敗0件**。所要 12.9〜13.1秒） |
+| `GoldenBaseline.exe compare --golden baselines/fixture-v1.golden.txt` | 一致（終了コード0） |
+| `GoldenBaseline.exe compare --golden artifacts/scan-performance/pre-change-physical.golden.txt --physical-size` | 一致（終了コード0。1.2 で控えた変更の前の期待値。クラスタサイズ 4096） |
+| `LocalizationCheck.exe check` | 問題なし（言語 13、キー 82） |
+| `build/Publish.ps1`（自己完結・フレームワーク依存の2形態） | どちらも終了コード0 |
+| `build/Test-Launch.ps1`（2形態） | どちらも「ウィンドウが出て、閉じる要求で終了（終了コード0）」、残留プロセスなし |
+| 発行フォルダに計測の道具が入っていないこと | 2形態とも `Config.txt` / `LargeFolderFinder.exe` / `LargeFolderFinder.pdb` / `Resources` のみ。`ScanBench`・`GoldenBaseline`・`LocalizationCheck` の名を含むファイルは0件 |
+
+- 起動確認の前に、利用者のアプリと計測の道具が動いていないことを確かめ、2つの発行フォルダの `Config.txt` が
+  リポジトリの `Config.txt` と同一であることを確かめた（壊れていると、解析の失敗のダイアログを
+  起動確認のスクリプトが検知して失敗になる）
+- **並行読み取りの自己検証の余裕（scan-correctness の 2.5、要件3.1・3.2）**: 走査が速くなって
+  「走査と並行に読めた回数」が足りなくなる懸念（Risks の最後の項目）を実測で確かめた。
+  検証の項目に一時的に計測用の出力を足して**5巡すべてを回した回数**を3回測った（計測の後、
+  `Tools/GoldenBaseline/SelfCheck/SelfChecks.cs` は元に戻してある。差分ゼロ）
+
+  | 走査 | 5巡の合計（3回の計測） | 1巡あたりの最小 | 必要（`ConcurrentReadMinReads`） |
+  |---|---|---|---|
+  | 逐次 | 610 / 1,037 / 910 | 42 | 3（最大5巡の合計で判定） |
+  | 並列 | 81 / 73 / 72 | 9 | 3（同上） |
+
+  1巡だけで最小 9 回読めており、判定は最大5巡の合計で行うため**余裕は十分**（必要の3倍以上が1巡で満たされる）。
+  **合成の木を大きくする必要はない**と判断した（`SyntheticTreeWideFolderFiles` = 3000 のまま）。
+  なお並列は逐次の約 1/12 の回数まで減っているので、将来さらに速くする変更（`ntfs-mft-scan` など）のときは
+  この余裕を測り直すこと
+
+## 利用者による確認の手順
+
+NAS の計測・WizTree との比較・再起動の直後の初回・画面の応答は、開発の作業の中では確かめられない
+（tasks.md のタスク 6）。発行した版は `artifacts/publish/` の2つのフォルダにある。
+**確認の前にアプリデータ（`%LOCALAPPDATA%\Cat & Chocolate Laboratory\LargeFolderFinder`）を
+フォルダごと別の場所に複製しておくこと。**
+
+計測の前に読むもの:
+
+- 手順はすべて `.kiro/steering/performance.md` の「計測の手順」にある
+  （「計測の道具（`Tools/ScanBench`）の使い方」→「変更の前の版で測る（`bench-before` の控え）」→
+  「バーストと持続を分けて測る」→「NAS の共有で測る手順」→「再起動の直後の初回を測る」→
+  「WizTree との比較」）
+- 記録の表は `.kiro/specs/scan-performance/measurements.md` にある（5章・6章・7章が空欄）
+- **共有の名前・ホスト名・絶対パスは記録に書かない**。ラベル（例:「NAS の写真の共有」）で表す
+- **バーストと持続を分けて測る**。開発機では走査を続けると並列度が高い条件ほど大きく遅くなった
+  （measurements.md の 4.2・4.3）。NAS でも回線と NAS 側の負荷が同じ罠を作り得るので、
+  1巡だけの結果で結論を出さない
+
+1. **NAS の計測と既定の並列度の確定（要件2.2、2.3、3.1）**
+   - 手順: performance.md の「NAS の共有で測る手順」。変更の前の版は
+     `artifacts/scan-performance/bench-before/ScanBench.exe`（基準のコミット `6c3008c`。
+     **この控えには `--threads` / `--buffer` が無い**ので、前の版は既定と `--sequential` の2通りだけ測れる）
+   - 記録: measurements.md の 5.0（環境）→ 5.1（変更の前）→ 5.2.1・5.2.2・5.2.3（並列度・バッファの調整）
+     → 5.2.4（決めた既定値）→ 5.3（前後の比較）
+   - 並列度の候補は 1・2・4・8・16・24・32 の7点×5巡。走査が長いときは候補を間引いて良い（4.2 の記録）
+   - 決めた値の反映先: `Services/ScanParallelism.cs` の `NetworkAutoThreads`（いまは仮の 16）と、
+     その自己検証の期待値、`Config.txt` の説明、README の「スキャンの速さの設定」のネットワークの既定値。
+     4か所を食い違わせない（measurements.md の 8.2）
+2. **WizTree と交互の比較（要件4.1〜4.4）**
+   - 手順: performance.md の「WizTree との比較」→「交互に3回ずつ測る手順」。
+     **WizTree は管理者でない状態で起動する**（管理者だと MFT を直接読み、比較にならない。
+     その場面は別スペック `ntfs-mft-scan` の担当）
+   - 対象は NAS と、管理者でない状態のローカル。交互に3回ずつ測り、**中央値**で比べる
+   - 記録: measurements.md の 6章（場面・対象・条件・両方の時間・版の列がある）。
+     遅い場面があれば、差と分かった原因も同じ章に書く
+3. **再起動の直後の初回（要件2.3、5.1）**
+   - 手順: performance.md の「再起動の直後の初回を測る」。サインインの後 1〜2 分待ってから
+     `--runs 1` を **1回だけ**。同じ対象の2回目は初回ではない。前後を比べるなら**それぞれの前に再起動する**
+   - 記録: measurements.md の 7章
+4. **走査中のタブの切り替えと取り消しの応答（要件1.6、2.4）**
+   - 大きなフォルダ（数十万ファイル以上、または NAS）を走査している間に、別のタブへ切り替えて戻す。
+     表示が乱れず、走査の完了時にそのタブの最終結果が出ること
+   - 走査中に取り消しを押す。状態の表示が「キャンセルされました」になり、完了の表示にならないこと
+   - **既知の制約**: 取り消しの粒度は作業の取り出しの前だけなので、1つのフォルダに数百万の項目があると
+     その列挙が終わるまで取り消しが効かない（設計どおり。Implementation Notes の 3.2）
+   - 走査の完了のログに `Workers: N`（使ったワーカー数）が出ることも併せて確かめられる
+5. **README の NAS の公開値の更新（要件5.3）**
+   - README の NAS の2行（約1TB / 約7万ファイル → 23秒、約20TB / 約140万ファイル → 約18〜30分）は
+     **旧来の値のまま残してある**。5章を埋めた後、その値と環境（ディスクの種類・接続方式・SMB の版）を
+     併記して更新する（measurements.md の 8.2）
+   - ローカルの公開値は 5.1 で足した分を**消さずに残す**方針（測った機と対象が違うため。8.1）
+
+問題があれば、画面の状態と `Logs` の最新のログ、`measurements.md` に書いた値を添えて知らせる。
+確認が終わったら、複製しておいたアプリデータで元に戻してよい。
