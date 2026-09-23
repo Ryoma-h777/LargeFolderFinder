@@ -56,6 +56,112 @@ internal static class SelfChecks
         RegisterConcurrentTreeReadChecks(runner);
         RegisterRenderCancellationChecks(runner);
         RegisterConfigLoadErrorChecks(runner);
+        RegisterScanParallelismChecks(runner);
+    }
+
+    /// <summary>
+    /// 並列度の決め方（scan-performance 要件3.1, 3.2）の検証項目を登録する（タスク2.2）。
+    /// 実際にネットワークへ接続せず、パスの文字列と一時フォルダだけで確かめる。
+    /// </summary>
+    private static void RegisterScanParallelismChecks(SelfCheckRunner runner)
+    {
+        runner.Add("並列度の決め方: 逐次の設定・設定値・UNC パス・ローカルのパスで期待どおりの値になる（scan-performance 要件3.1, 3.2）", () =>
+        {
+            // 検証ツールから直接確かめられるよう、公開の静的クラスであること（design.md: ScanParallelism）
+            Type type = typeof(ScanParallelism);
+            SelfAssert.That(type.IsPublic, "ScanParallelism が public ではありません（検証ツールから直接確かめられません）。");
+            SelfAssert.That(type.IsAbstract && type.IsSealed, "ScanParallelism が静的クラスではありません。");
+
+            // 実在しないホストの UNC パス。判定だけを行い、接続はしない
+            const string uncPath = @"\\unlikely-host-name-for-test\share\folder";
+            string localPath = Path.GetTempPath();
+
+            // 逐次の設定（要件3.2）: 設定値や対象に関わらず 1
+            SelfAssert.That(
+                ScanParallelism.Resolve(localPath, false, 0) == 1,
+                "逐次の設定でローカルのパスのワーカー数が 1 になりません。");
+            SelfAssert.That(
+                ScanParallelism.Resolve(localPath, false, 8) == 1,
+                "逐次の設定で、設定値 8 がワーカー数に反映されました（逐次が優先されるはずです）。");
+            SelfAssert.That(
+                ScanParallelism.Resolve(uncPath, false, 0) == 1,
+                "逐次の設定で UNC パスのワーカー数が 1 になりません。");
+
+            // 設定値が正のとき（要件3.1）: その値。上限 64 を超えたら 64 に丸める
+            SelfAssert.That(
+                ScanParallelism.Resolve(localPath, true, 1) == 1,
+                "設定値 1 がそのままワーカー数になりません。");
+            SelfAssert.That(
+                ScanParallelism.Resolve(localPath, true, 3) == 3,
+                "設定値 3 がそのままワーカー数になりません。");
+            SelfAssert.That(
+                ScanParallelism.Resolve(uncPath, true, 3) == 3,
+                "UNC パスでも設定値 3 がそのままワーカー数になりません（設定値は自動より優先されるはずです）。");
+            SelfAssert.That(
+                ScanParallelism.Resolve(localPath, true, 64) == 64,
+                "上限と同じ設定値 64 がそのままワーカー数になりません。");
+            SelfAssert.That(
+                ScanParallelism.Resolve(localPath, true, 65) == 64,
+                "上限を超える設定値 65 が 64 に丸められません。");
+            SelfAssert.That(
+                ScanParallelism.Resolve(localPath, true, int.MaxValue) == 64,
+                "上限を大きく超える設定値が 64 に丸められません。");
+
+            // 負の設定値は範囲外として自動と同じ扱いにする（判定の失敗で走査を止めない）
+            SelfAssert.That(
+                ScanParallelism.Resolve(uncPath, true, -1) == ScanParallelism.Resolve(uncPath, true, 0),
+                "負の設定値が自動と同じ扱いになりません。");
+
+            // ネットワークの判定（要件3.1）: UNC パスは接続せずにネットワークとして扱う
+            SelfAssert.That(
+                ScanParallelism.IsNetworkPath(uncPath),
+                "実在しないホストの UNC パスがネットワークと判定されません。");
+            SelfAssert.That(
+                ScanParallelism.IsNetworkPath(@"\\?\UNC\unlikely-host-name-for-test\share\folder"),
+                @"\\?\UNC\ 形式の UNC パスがネットワークと判定されません。");
+            SelfAssert.That(
+                ScanParallelism.Resolve(uncPath, true, 0) == 16,
+                $"UNC パスの自動のワーカー数がネットワークの既定値 16 になりません（{ScanParallelism.Resolve(uncPath, true, 0)}）。");
+
+            // ローカルの判定: 検証ツールの一時フォルダ。自動は論理プロセッサ数を 4〜16 に丸めた値
+            SelfAssert.That(
+                !ScanParallelism.IsNetworkPath(localPath),
+                "一時フォルダのパスがネットワークと判定されました（この検証はローカルの一時フォルダを前提にしています）。");
+            int expectedLocal = Math.Clamp(Environment.ProcessorCount, 4, 16);
+            SelfAssert.That(
+                ScanParallelism.Resolve(localPath, true, 0) == expectedLocal,
+                $"ローカルのパスの自動のワーカー数が、論理プロセッサ数を 4〜16 に丸めた値（{expectedLocal}）になりません（{ScanParallelism.Resolve(localPath, true, 0)}）。");
+            SelfAssert.That(
+                expectedLocal >= 4 && expectedLocal <= 16,
+                $"ローカルの自動のワーカー数が 4〜16 の範囲から外れています（{expectedLocal}）。");
+
+            // 判定できないパスはローカルとして扱い、例外を外に出さない
+            foreach (string undecidable in new[] { string.Empty, "   ", "relative\\path", @"Z:\not-existing-drive", "\0invalid" })
+            {
+                SelfAssert.That(
+                    !ScanParallelism.IsNetworkPath(undecidable),
+                    $"判定できないパス '{undecidable}' がネットワークと判定されました（ローカルとして扱うはずです）。");
+                SelfAssert.That(
+                    ScanParallelism.Resolve(undecidable, true, 0) == expectedLocal,
+                    $"判定できないパス '{undecidable}' の自動のワーカー数がローカルの既定値になりません。");
+            }
+
+            // null を渡しても例外を外に出さない（走査を止めない）
+            SelfAssert.That(
+                !ScanParallelism.IsNetworkPath(null!),
+                "null のパスがネットワークと判定されました。");
+            SelfAssert.That(
+                ScanParallelism.Resolve(null!, true, 0) == expectedLocal,
+                "null のパスの自動のワーカー数がローカルの既定値になりません。");
+
+            // 戻り値は常に 1 以上（DirectoryWalker の前提: WorkerCount >= 1）
+            foreach (int configured in new[] { int.MinValue, -1, 0, 1, 64, 65, int.MaxValue })
+            {
+                SelfAssert.That(
+                    ScanParallelism.Resolve(localPath, true, configured) >= 1,
+                    $"設定値 {configured} でワーカー数が 1 未満になりました。");
+            }
+        });
     }
 
     /// <summary>
