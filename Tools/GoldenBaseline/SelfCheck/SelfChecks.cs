@@ -58,6 +58,8 @@ internal static class SelfChecks
         RegisterConfigLoadErrorChecks(runner);
         RegisterScanParallelismChecks(runner);
         RegisterScanWorkerChecks(runner);
+        RegisterSessionPersistenceChecks(runner);
+        RegisterHiddenSystemJunctionChecks(runner);
     }
 
     /// <summary>
@@ -294,6 +296,418 @@ internal static class SelfChecks
                 + $"／{actualLabel}に無い: {string.Join(", ", missing)}"
                 + $"／{actualLabel}にだけある: {string.Join(", ", extra)}"
                 + $"／中身が違う: {string.Join(", ", differing)}）。");
+    }
+
+    /// <summary>
+    /// 走査の結果の保存と復元が引き続き動くことの検証項目を登録する
+    /// （scan-performance タスク3.3、要件7.1, 7.2, 7.3）。
+    /// 本体に触れる呼び出しは Scan 層の <see cref="SessionPersistenceProbe"/> を通し、
+    /// 利用者の保存データ（アプリデータの Sessions フォルダ）には触れない。
+    /// </summary>
+    private static void RegisterSessionPersistenceChecks(SelfCheckRunner runner)
+    {
+        runner.Add("走査した木を本体と同じ保存の設定で保存して読み戻すと、パスとサイズの一覧が一致する（scan-performance 要件7.1）", () =>
+        {
+            WithStandardFixture(root =>
+            {
+                var outcome = new ScanRunner().RunForFinalProgress(root, maxDepth: int.MaxValue, useParallel: true);
+                SelfAssert.That(outcome.Root != null, "走査が結果の木を返しませんでした。");
+
+                var expected = FlattenScanTree(outcome.Root!);
+                SelfAssert.That(expected.Count > 0, "走査の結果が空でした。保存と復元の確認が空振りになります。");
+
+                var saved = SessionPersistenceProbe.SaveAndLoadTree(outcome.Root!);
+
+                SelfAssert.That(saved.SavedByteCount > 0, "保存した内容が空でした。");
+                SelfAssert.That(saved.Restored, "保存した内容を本体の読み込み（SessionFileManager.Load）で読み戻せませんでした（null が返りました）。");
+                SelfAssert.That(saved.RestoredRoot != null, "読み戻したセッションに走査の結果の木がありません。");
+
+                // 木の中身（パスとサイズの一覧）が保存の前後で一致すること
+                AssertSameFlattenedTree(
+                    expected,
+                    FlattenScanTree(saved.RestoredRoot!),
+                    "走査した木",
+                    "読み戻した木",
+                    "フィクスチャ");
+
+                SelfAssert.That(
+                    string.Equals(saved.RestoredRoot!.Name, outcome.Root!.Name, StringComparison.Ordinal),
+                    $"読み戻した木の根の名前が違います（期待: {outcome.Root!.Name}, 実際: {saved.RestoredRoot!.Name}）。");
+                SelfAssert.That(
+                    saved.RestoredRoot!.Size == outcome.Root!.Size,
+                    $"読み戻した木の根のサイズが違います（期待: {outcome.Root!.Size}, 実際: {saved.RestoredRoot!.Size}）。");
+
+                // 木と一緒に保存する欄（要件7.1 の「保存したときと同じ集計値」）も戻ること
+                SelfAssert.That(
+                    string.Equals(saved.RestoredPath, saved.SavedPath, StringComparison.Ordinal),
+                    $"読み戻した検索パスが違います（期待: {saved.SavedPath}, 実際: {saved.RestoredPath}）。");
+                SelfAssert.That(
+                    saved.RestoredCreatedAt == saved.SavedCreatedAt,
+                    $"読み戻した作成日時が違います（期待: {saved.SavedCreatedAt:yyyy/MM/dd HH:mm:ss}, 実際: {saved.RestoredCreatedAt:yyyy/MM/dd HH:mm:ss}）。");
+                SelfAssert.That(
+                    saved.RestoredLastScanDuration == saved.SavedLastScanDuration,
+                    $"読み戻した前回の走査の所要時間が違います（期待: {saved.SavedLastScanDuration}, 実際: {saved.RestoredLastScanDuration}）。");
+                SelfAssert.That(
+                    saved.RestoredTotalFilesScanned == saved.SavedTotalFilesScanned,
+                    $"読み戻した走査したファイル数が違います（期待: {saved.SavedTotalFilesScanned}, 実際: {saved.RestoredTotalFilesScanned}）。");
+
+                // 本体の読み込みは親の参照を付け直す（FolderInfo.RestoreParentReferences）。
+                // 付け直しが漏れると、読み戻した結果でのサイズの加算や完全パスの組み立てが壊れる
+                SelfAssert.That(
+                    saved.RestoredRootParentIsNull,
+                    "読み戻した木の根に親が付いています（根の親は付けない）。");
+                SelfAssert.That(
+                    saved.ParentLinkProblem == null,
+                    $"読み戻した木の親の付け直しに漏れがあります: {saved.ParentLinkProblem}");
+            });
+        });
+
+        runner.Add("壊れた内容の保存ファイルを読んでも例外が外に出ず、読めなかったこととして null が返る（scan-performance 要件7.2）", () =>
+        {
+            var outcome = SessionPersistenceProbe.LoadCorruptedSessions();
+
+            // 空振り（読み込みが一時領域のファイルを見ておらず、常に null になる）を防ぐための前提
+            SelfAssert.That(
+                outcome.ValidFileLoaded,
+                "前提として置いた正常な内容の控えを、本体の読み込みで読み戻せませんでした。壊れた内容の確認が空振りになります。");
+            SelfAssert.That(
+                string.Equals(outcome.ValidLoadedPath, outcome.ExpectedValidPath, StringComparison.Ordinal),
+                $"正常な内容の控えの読み戻しの中身が違います（期待: {outcome.ExpectedValidPath}, 実際: {outcome.ValidLoadedPath}）。");
+
+            SelfAssert.That(
+                outcome.Cases.Count >= 2,
+                $"壊し方の確認が足りません（件数: {outcome.Cases.Count}）。");
+
+            foreach (var probeCase in outcome.Cases)
+            {
+                SelfAssert.That(
+                    probeCase.DirectDeserializeThrew,
+                    $"壊した内容（{probeCase.Label}）が保存の設定のまま復元できてしまいました。壊れた内容になっていないため確認が空振りになります。");
+                SelfAssert.That(
+                    !probeCase.LoadThrew,
+                    $"壊れた内容（{probeCase.Label}）の読み込みで例外が外に出ました（{probeCase.LoadExceptionTypeName}）。起動時に読むため、例外を外に出してはいけません。");
+                SelfAssert.That(
+                    probeCase.LoadReturnedNull,
+                    $"壊れた内容（{probeCase.Label}）なのに読み込みが null を返しませんでした。");
+            }
+
+            SelfAssert.That(!outcome.NonExistentThrew, "存在しない保存ファイルの読み込みで例外が外に出ました。");
+            SelfAssert.That(outcome.NonExistentReturnedNull, "存在しない保存ファイルの読み込みが null を返しませんでした。");
+        });
+
+        runner.Add("FolderInfo と SessionData の保存の番号と形が変わっていない（scan-performance 要件7.3）", () =>
+        {
+            // 保存の形式を変えると、以前の版で保存した結果が読めなくなる（要件7.3 の版の番号の判断に関わる）。
+            // 番号と形を直に書くことで、変えたときに必ずこの項目が落ちて気づけるようにする
+            AssertPersistedKeys(
+                typeof(global::LargeFolderFinder.FolderInfo),
+                new Dictionary<int, string>
+                {
+                    [0] = "Name:String",
+                    [1] = "IsFile:Boolean",
+                    [2] = "LastModified:DateTime",
+                    [3] = "Size:Int64",
+                    [4] = "Children:List<FolderInfo>",
+                    [5] = "IsExpanded:Boolean",
+                    [6] = "Owner:String",
+                });
+
+            AssertPersistedKeys(
+                typeof(global::LargeFolderFinder.SessionData),
+                new Dictionary<int, string>
+                {
+                    [0] = "CreatedAt:DateTime",
+                    [1] = "Path:String",
+                    [2] = "Threshold:Double",
+                    [3] = "Unit:SizeUnit",
+                    [4] = "IncludeFiles:Boolean",
+                    [5] = "SortTarget:SortTarget",
+                    [6] = "SortDirection:SortDirection",
+                    [7] = "SeparatorIndex:Int32",
+                    [8] = "TabWidth:Int32",
+                    [9] = "Result:FolderInfo",
+                    [10] = "FilterText:String",
+                    [11] = "FilterModeIndex:Int32",
+                    [12] = "LastScanDuration:TimeSpan",
+                    [13] = "TotalFilesScanned:Int64",
+                });
+
+            // 木の親の参照は保存しない（保存すると循環する）
+            SelfAssert.That(
+                typeof(global::LargeFolderFinder.FolderInfo).GetProperty("Parent")
+                    ?.GetCustomAttribute<MessagePack.IgnoreMemberAttribute>() != null,
+                "FolderInfo.Parent に保存しない印（IgnoreMember）がありません。");
+        });
+    }
+
+    /// <summary>
+    /// 型が MessagePack で保存する番号と中身（メンバー名と型）が、<paramref name="expected"/> とぴったり一致することを確かめる。
+    /// 番号の付け替え・追加・削除・型の変更のいずれでも失敗する。
+    /// </summary>
+    /// <param name="type">確かめる型。</param>
+    /// <param name="expected">番号から「メンバー名:型名」への対応。</param>
+    private static void AssertPersistedKeys(Type type, Dictionary<int, string> expected)
+    {
+        const BindingFlags DeclaredOnly = BindingFlags.Public | BindingFlags.NonPublic
+            | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+
+        var actual = new Dictionary<int, string>();
+
+        foreach (MemberInfo member in type.GetMembers(DeclaredOnly))
+        {
+            var key = member.GetCustomAttribute<MessagePack.KeyAttribute>();
+            if (key?.IntKey == null)
+            {
+                continue;
+            }
+
+            Type memberType = member switch
+            {
+                PropertyInfo property => property.PropertyType,
+                FieldInfo field => field.FieldType,
+                _ => typeof(void),
+            };
+
+            int number = key.IntKey.Value;
+            string entry = $"{member.Name}:{FormatTypeName(memberType)}";
+
+            SelfAssert.That(
+                !actual.ContainsKey(number),
+                $"{type.Name} の保存の番号 {number} が重複しています（{actual.GetValueOrDefault(number)} と {entry}）。");
+
+            actual[number] = entry;
+        }
+
+        var missing = expected.Where(kv => !actual.ContainsKey(kv.Key))
+            .Select(kv => $"{kv.Key}={kv.Value}")
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+        var added = actual.Where(kv => !expected.ContainsKey(kv.Key))
+            .Select(kv => $"{kv.Key}={kv.Value}")
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+        var changed = expected.Where(kv => actual.TryGetValue(kv.Key, out string? other) && !string.Equals(other, kv.Value, StringComparison.Ordinal))
+            .Select(kv => $"{kv.Key}（期待: {kv.Value}, 実際: {actual[kv.Key]}）")
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+
+        SelfAssert.That(
+            missing.Count == 0 && added.Count == 0 && changed.Count == 0,
+            $"{type.Name} の保存の番号と形が変わっています。保存形式を変えた場合は要件7.3 のとおり版の番号の扱いを決めること"
+                + $"（無くなった: {string.Join(", ", missing)}"
+                + $"／増えた: {string.Join(", ", added)}"
+                + $"／変わった: {string.Join(", ", changed)}）。");
+    }
+
+    /// <summary>
+    /// 型名を、総称型（<c>List&lt;FolderInfo&gt;</c> など）も読める形にして返す。
+    /// </summary>
+    private static string FormatTypeName(Type type)
+    {
+        if (!type.IsGenericType)
+        {
+            return type.Name;
+        }
+
+        string name = type.Name;
+        int tick = name.IndexOf('`');
+        if (tick >= 0)
+        {
+            name = name.Substring(0, tick);
+        }
+
+        return $"{name}<{string.Join(", ", type.GetGenericArguments().Select(FormatTypeName))}>";
+    }
+
+    /// <summary>
+    /// 隠し・システムの属性を持つ項目と、ジャンクション（フォルダのリパースポイント）を含む木を走査したときの
+    /// 集合の検証項目を登録する（scan-performance タスク3.3、要件1.3）。
+    /// </summary>
+    /// <remarks>
+    /// フィクスチャ（<see cref="FixtureSpec.Standard"/>）にはこの3種の項目が無く、
+    /// 新しい走査の方式（<c>DirectoryWalker</c>）の <c>AttributesToSkip = 0</c> と
+    /// リパースポイントの扱いが自動の検証で覆われていなかった（tasks.md の 3.2 の記録）。
+    /// この木は属性とジャンクションを確かめるためだけのもので、期待値データ（golden）には関わらない。
+    /// </remarks>
+    private static void RegisterHiddenSystemJunctionChecks(SelfCheckRunner runner)
+    {
+        runner.Add("隠し・システムの項目は走査に含まれ、ジャンクションのフォルダはノードにならず潜らない（scan-performance 要件1.3）", () =>
+        {
+            WithAttributeTree((root, expected) =>
+            {
+                var scanRunner = new ScanRunner();
+
+                foreach (int threads in WorkerCheckThreadCounts)
+                {
+                    var outcome = scanRunner.RunForFinalProgress(
+                        root,
+                        maxDepth: int.MaxValue,
+                        useParallel: true,
+                        tuning: new global::LargeFolderFinder.ScanTuning(threads));
+
+                    SelfAssert.That(outcome.Root != null, $"走査が結果の木を返しませんでした（ワーカー数{threads}）。");
+                    AssertSameFlattenedTree(expected, FlattenScanTree(outcome.Root!), "期待", $"ワーカー数{threads}", "属性とジャンクションの木");
+
+                    SelfAssert.That(
+                        outcome.Root!.Size == AttributeTreeTotalSize,
+                        $"起点の合計のサイズが期待と違います（期待: {AttributeTreeTotalSize}, 実際: {outcome.Root!.Size}, ワーカー数{threads}）。"
+                            + "ジャンクションの先を二重に数えているか、隠し・システムの項目を数え落としています。");
+
+                    // 事前カウント（進捗の分母）も本スキャンと同じ集合であること
+                    SelfAssert.That(
+                        outcome.FinalProgress!.ProcessedFolders == AttributeTreeFolderCount,
+                        $"走査したフォルダ数が期待と違います（期待: {AttributeTreeFolderCount}, 実際: {outcome.FinalProgress!.ProcessedFolders}, ワーカー数{threads}）。");
+                }
+
+                var sequential = scanRunner.RunForFinalProgress(root, maxDepth: int.MaxValue, useParallel: false);
+                SelfAssert.That(sequential.Root != null, "逐次の走査が結果の木を返しませんでした。");
+                AssertSameFlattenedTree(expected, FlattenScanTree(sequential.Root!), "期待", "逐次", "属性とジャンクションの木");
+
+                int counted = scanRunner.CountFolders(root, int.MaxValue);
+                SelfAssert.That(
+                    counted == AttributeTreeFolderCount,
+                    $"事前カウントのフォルダ数が本スキャンと違います（期待: {AttributeTreeFolderCount}, 実際: {counted}）。"
+                        + "ジャンクションのフォルダを数えているか、隠し・システムのフォルダを数え落としています。");
+            });
+        });
+    }
+
+    /// <summary>属性とジャンクションの木の、起点に集まるサイズの合計（各項目のファイルのサイズの合計）</summary>
+    private const long AttributeTreeTotalSize = 100 + 10 + 20 + 30 + 40 + 50 + 60 + 70;
+
+    /// <summary>属性とジャンクションの木のフォルダ数（起点・visible・hidden_dir・system_dir・target。ジャンクションは数えない）</summary>
+    private const int AttributeTreeFolderCount = 5;
+
+    /// <summary>
+    /// 隠し・システムの属性を持つファイルとフォルダ、ジャンクション（<c>mklink /J</c>）を含む木を一時領域に作り、
+    /// 起点のパスと期待するパスとサイズの一覧を渡して <paramref name="action"/> を実行し、必ず後始末する。
+    /// </summary>
+    private static void WithAttributeTree(Action<string, Dictionary<string, (bool IsFile, long Size)>> action)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "gb_att_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        string junction = Path.Combine(root, "junction");
+
+        try
+        {
+            Directory.CreateDirectory(root);
+
+            WriteFileWithAttributes(Path.Combine(root, "normal.txt"), 100, FileAttributes.Normal);
+            WriteFileWithAttributes(Path.Combine(root, "hidden.txt"), 10, FileAttributes.Hidden);
+            WriteFileWithAttributes(Path.Combine(root, "system.bin"), 20, FileAttributes.System);
+            WriteFileWithAttributes(Path.Combine(root, "hidden_system.dat"), 30, FileAttributes.Hidden | FileAttributes.System);
+
+            CreateFolderWithAttributes(Path.Combine(root, "visible"), "inside.txt", 40, FileAttributes.Directory);
+            CreateFolderWithAttributes(Path.Combine(root, "hidden_dir"), "in_hidden.txt", 50, FileAttributes.Hidden);
+            CreateFolderWithAttributes(Path.Combine(root, "system_dir"), "in_system.txt", 60, FileAttributes.System);
+
+            string target = Path.Combine(root, "target");
+            CreateFolderWithAttributes(target, "in_target.txt", 70, FileAttributes.Directory);
+
+            CreateJunction(junction, target);
+
+            // 期待する集合。ジャンクション（junction）とその先の項目は含まない
+            var expected = new Dictionary<string, (bool IsFile, long Size)>(StringComparer.Ordinal)
+            {
+                ["normal.txt"] = (true, 100),
+                ["hidden.txt"] = (true, 10),
+                ["system.bin"] = (true, 20),
+                ["hidden_system.dat"] = (true, 30),
+                ["visible"] = (false, 40),
+                ["visible\\inside.txt"] = (true, 40),
+                ["hidden_dir"] = (false, 50),
+                ["hidden_dir\\in_hidden.txt"] = (true, 50),
+                ["system_dir"] = (false, 60),
+                ["system_dir\\in_system.txt"] = (true, 60),
+                ["target"] = (false, 70),
+                ["target\\in_target.txt"] = (true, 70),
+            };
+
+            action(root, expected);
+        }
+        finally
+        {
+            // ジャンクションは先に外す（実体ではなく繋ぎだけを消す）
+            try
+            {
+                if (Directory.Exists(junction))
+                {
+                    Directory.Delete(junction);
+                }
+            }
+            catch
+            {
+                // 次の後始末の手段へ進む
+            }
+
+            try
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+            catch
+            {
+                // 次の後始末の手段へ進む
+            }
+
+            ForceCleanupFixtureResidue(root);
+        }
+    }
+
+    /// <summary>決めた大きさのファイルを作り、属性を付ける。</summary>
+    private static void WriteFileWithAttributes(string path, int size, FileAttributes attributes)
+    {
+        File.WriteAllBytes(path, new byte[size]);
+
+        if (attributes != FileAttributes.Normal)
+        {
+            File.SetAttributes(path, attributes);
+        }
+    }
+
+    /// <summary>フォルダを作り、その中にファイルを1つ置いてからフォルダに属性を付ける。</summary>
+    private static void CreateFolderWithAttributes(string path, string fileName, int fileSize, FileAttributes attributes)
+    {
+        Directory.CreateDirectory(path);
+        File.WriteAllBytes(Path.Combine(path, fileName), new byte[fileSize]);
+
+        if (attributes != FileAttributes.Directory)
+        {
+            var info = new DirectoryInfo(path);
+            info.Attributes |= attributes;
+        }
+    }
+
+    /// <summary>
+    /// ジャンクション（フォルダのリパースポイント）を作る。管理者の権限を要しない <c>mklink /J</c> を使う。
+    /// </summary>
+    private static void CreateJunction(string junctionPath, string targetPath)
+    {
+        var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{junctionPath}\" \"{targetPath}\"")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        using var process = Process.Start(psi);
+        SelfAssert.That(process != null, "ジャンクションを作るための cmd.exe を起動できませんでした。");
+
+        string stdOut = process!.StandardOutput.ReadToEnd();
+        string stdErr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        SelfAssert.That(
+            process.ExitCode == 0,
+            $"ジャンクションを作れませんでした（終了コード: {process.ExitCode}）。標準出力: {stdOut} 標準エラー: {stdErr}");
+
+        // 作れたつもりで実体のフォルダになっていると、確認が空振りになるため印を確かめる
+        SelfAssert.That(Directory.Exists(junctionPath), $"ジャンクションが作られていません: {junctionPath}");
+        SelfAssert.That(
+            (new DirectoryInfo(junctionPath).Attributes & FileAttributes.ReparsePoint) != 0,
+            "作ったジャンクションにリパースポイントの印がありません。確認が空振りになります。");
     }
 
     /// <summary>
