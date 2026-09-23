@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <AssemblyName>ScanBench</AssemblyName>
+    <RootNamespace>LargeFolderFinder.ScanBench</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- アプリ本体を読み取り専用の依存として参照する（design.md: Allowed Dependencies）。
+         公開の Scanner.RunScan と FolderInfo、版を得る AppInfo だけを使い、本体には手を加えない。
+         新しいパッケージは加えない。 -->
+    <ProjectReference Include="..\..\LargeFolderFinder.csproj" />
+  </ItemGroup>
+
+</Project>
