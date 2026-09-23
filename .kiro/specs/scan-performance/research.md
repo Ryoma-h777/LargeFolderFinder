@@ -194,9 +194,13 @@ NAS の計測・WizTree との比較・再起動の直後の初回・画面の�
    - 記録: measurements.md の 5.0（環境）→ 5.1（変更の前）→ 5.2.1・5.2.2・5.2.3（並列度・バッファの調整）
      → 5.2.4（決めた既定値）→ 5.3（前後の比較）
    - 並列度の候補は 1・2・4・8・16・24・32 の7点×5巡。走査が長いときは候補を間引いて良い（4.2 の記録）
-   - 決めた値の反映先: `Services/ScanParallelism.cs` の `NetworkAutoThreads`（いまは仮の 16）と、
-     その自己検証の期待値、`Config.txt` の説明、README の「スキャンの速さの設定」のネットワークの既定値。
-     4か所を食い違わせない（measurements.md の 8.2）
+   - 決めた値の反映先は**5系統**。食い違わせない（measurements.md の 8.2）
+     1. `Services/ScanParallelism.cs` の `NetworkAutoThreads`（いまは仮の 16）
+     2. 検証ツールの自己検証の期待値（UNC の自動の値を直接書いてある）
+     3. README（日英）の「スキャンの速さの設定」のネットワークの既定値
+     4. **同梱の Readme 13言語**（`Resources/Readme/Readme_*.txt` の `ScanThreads` の項目に「ネットワーク（NAS・UNC）は 16」と書いてある）
+     5. steering の performance.md の「並列度の決め方」の表
+     `Config.txt` には数値を書いていないので変更は要らない
 2. **WizTree と交互の比較（要件4.1〜4.4）**
    - 手順: performance.md の「WizTree との比較」→「交互に3回ずつ測る手順」。
      **WizTree は管理者でない状態で起動する**（管理者だと MFT を直接読み、比較にならない。

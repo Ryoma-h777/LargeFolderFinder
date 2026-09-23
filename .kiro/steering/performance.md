@@ -258,8 +258,10 @@ NAS で既定より速いバッファが見つかったときだけ、本体の�
 | 変更の後と前後の比較 | 5.3 NAS の変更の後と、前後の比較 |
 | NAS の既定の並列度の結論 | 5.2 の下の「決めた既定値」の表 |
 
-NAS の既定の並列度は、いまは仮の値（16）です。5.2 の結論を `Services/ScanParallelism.cs` の
-`NetworkAutoThreads` に反映し、README の NAS の公開値も更新します。
+NAS の既定の並列度は、いまは仮の値（16）です。5.2 の結論を反映するときは、次の5系統を揃えます。
+`Services/ScanParallelism.cs` の `NetworkAutoThreads`、検証ツールの自己検証の期待値、README（日英）、
+**同梱の Readme 13言語**（`Resources/Readme/Readme_*.txt` の `ScanThreads` の項目）、この節の「並列度の決め方」の表。
+あわせて README の NAS の公開値も更新します（`Config.txt` には数値が無いので変更は要りません）。
 
 ### 再起動の直後の初回を測る
 
@@ -350,7 +352,7 @@ Tools/ScanBench/bin/Release/net10.0-windows/ScanBench.exe "<対象のフォル�
 - [ ] 列挙処理にリパースポイントの除外を入れたか
 - [ ] 1 フォルダにつき列挙を 1 回に保ったか（2 回列挙する形に戻していないか）
 - [ ] 同時の列挙の数がワーカー数を超えない形を保ったか（並列化を入れ子にしていないか）
-- [ ] 並列度の既定値を変えたなら、`ScanParallelism` の const と検証ツールの自己検証の期待値、`Config.txt` の説明、README を合わせたか
+- [ ] 並列度の既定値を変えたなら、5系統（`ScanParallelism` の const、検証ツールの自己検証の期待値、README（日英）、同梱の Readme 13言語、この文書の「並列度の決め方」の表）を合わせたか
 - [ ] `CancellationToken` を末端まで引き回したか
 - [ ] 共有状態を `lock` または `Interlocked` で保護したか
 - [ ] 進捗通知を新たに高頻度で発火させていないか
