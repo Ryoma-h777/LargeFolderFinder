@@ -41,7 +41,7 @@
   - _Requirements: 3.1, 3.2_
   - _Boundary: ScanParallelism_
 
-- [ ] 2.3 (P) 並列度の設定を `Config.txt` に足し、走査に渡す
+- [x] 2.3 (P) 並列度の設定を `Config.txt` に足し、走査に渡す
   - 設定に並列度（0 = 自動）を足し、同梱の `Config.txt` に既定の行と、0 は自動・1以上で固定・逐次の設定が優先することの短い説明を足す
   - 画面の走査の開始で設定の並列度を走査の調整値として渡す
   - 完了の状態: 同梱の `Config.txt` が解析の失敗なしに読め（既存の設定の自己検証が通る）、ビルドが警告なしで通る
@@ -132,3 +132,4 @@
 - 1.3: performance.md の計測の手順に、計測の道具の使い方・初回と温まったの区別・中央値での判断・メモリを見る回の `--no-digest --runs 1`・記録の置き場を書いた。前後の比較の表の枠は 1.2 で measurements.md に作ってあるので流用した。確認は親が差分を読んで行った（ドキュメントのみ）
 - 2.1: `Models/ScanTuning.cs`（`record ScanTuning(int ThreadCount = 0, int EnumerationBufferSize = 0)`）。`RunScan` の末尾に `ScanTuning? tuning = null`（既存の呼び出し元は無修正で通った）。`ScanProgress` に `WorkerCount` と `PeakConcurrentEnumerations`。`ReportFinalProgress` は今は 0 を載せる（3.2 で実際の値に差し替える）。確認は親が差分を読んで行った
 - 2.2: `Services/ScanParallelism.cs`（public。`Resolve` と `IsNetworkPath`）。上限64・ネットワーク16・ローカルは論理プロセッサ数を4〜16に丸めた値は private const で、自己検証は期待値を直接書く（値を変えると試験が落ちて気づける）。2.3 で `Config.txt` に上限を書くときはこの定数と食い違わせないこと。selfcheck は 143 件
+- 2.3: `Config.ScanThreads`（既定 0）と `Config.txt` の行・日英の説明。画面は `new ScanTuning(config.ScanThreads)` を渡す。古い `Config.txt`（この行が無い）を新しいアプリが読んでも既定値 0 になる。逆に**新しい `Config.txt` を古い版のアプリが読むと未知のキーで解析に失敗し、設定が既定に戻って警告が出る**（版を戻したときの注意。README で触れる）。selfcheck は 144 件

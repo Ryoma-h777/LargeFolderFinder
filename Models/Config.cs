@@ -12,6 +12,13 @@ namespace LargeFolderFinder
     {
         public int MaxDepthForCount { get; set; } = 3;
         public bool UseParallelScan { get; set; } = true;
+
+        /// <summary>
+        /// 走査の並列度（ワーカー数）。0 は自動で、対象がネットワークかローカルかで既定値が変わる。
+        /// 1 以上ならその値に固定する（大きすぎる値は上限に丸める）。
+        /// <see cref="UseParallelScan"/> が false のときは、この値に関わらず逐次で走査する。
+        /// </summary>
+        public int ScanThreads { get; set; } = 0;
         public bool SkipFolderCount { get; set; } = false;
         public bool UsePhysicalSize { get; set; } = true;
         public int OldDataThresholdDays { get; set; } = 30;

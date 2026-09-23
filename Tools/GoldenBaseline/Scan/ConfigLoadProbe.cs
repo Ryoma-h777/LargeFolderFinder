@@ -153,6 +153,31 @@ public static class ConfigLoadProbe
         }
     }
 
+    /// <summary>
+    /// 同梱の設定ファイル（実行ファイルと同じ場所の <c>Config.txt</c>）を読み、観測した値だけを返す
+    /// （scan-performance 要件3.3）。ファイルは既にあるので既定の設定の書き出しは起きず、読むだけで書き換えない。
+    /// </summary>
+    public static BundledConfigOutcome ReadBundled()
+    {
+        string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, global::LargeFolderFinder.AppConstants.ConfigFileName);
+        FileSnapshot before = FileSnapshot.Take(path);
+
+        string text = before.Exists ? File.ReadAllText(path) : string.Empty;
+        ConfigValues values = ConfigValues.From(global::LargeFolderFinder.Config.LoadFrom(path));
+        string? error = global::LargeFolderFinder.Config.LastLoadError;
+
+        // 読み込みの失敗の記録を他の項目へ持ち越さない
+        global::LargeFolderFinder.Config.TryTakeUnnotifiedError(out _);
+
+        return new BundledConfigOutcome(
+            before.Exists,
+            path,
+            text,
+            values,
+            error,
+            before.Equals(FileSnapshot.Take(path)));
+    }
+
     /// <summary>本体の現在のログファイルの中身を、書き込み中でも読める共有の指定で読む。読めなければ空文字列を返す。</summary>
     private static string ReadLogText()
     {
@@ -186,7 +211,8 @@ public sealed record ConfigValues(
     bool UseParallelScan,
     bool SkipFolderCount,
     bool UsePhysicalSize,
-    int OldDataThresholdDays)
+    int OldDataThresholdDays,
+    int ScanThreads)
 {
     /// <summary>本体の設定から各欄の値を写す。</summary>
     public static ConfigValues From(global::LargeFolderFinder.Config config) => new(
@@ -194,8 +220,24 @@ public sealed record ConfigValues(
         config.UseParallelScan,
         config.SkipFolderCount,
         config.UsePhysicalSize,
-        config.OldDataThresholdDays);
+        config.OldDataThresholdDays,
+        config.ScanThreads);
 }
+
+/// <summary><see cref="ConfigLoadProbe.ReadBundled"/> の結果。</summary>
+/// <param name="Exists">同梱の設定ファイルがあったか</param>
+/// <param name="Path">読んだ設定ファイルのパス</param>
+/// <param name="Text">設定ファイルの中身（行の有無と説明を確かめるために使う）</param>
+/// <param name="Values">読み込めた設定の値</param>
+/// <param name="Error">読み込みの失敗の理由。成功なら null</param>
+/// <param name="Unchanged">読み込みの前後でファイルが変わっていないか</param>
+public sealed record BundledConfigOutcome(
+    bool Exists,
+    string Path,
+    string Text,
+    ConfigValues Values,
+    string? Error,
+    bool Unchanged);
 
 /// <summary><see cref="ConfigLoadProbe.Run"/> の結果。</summary>
 public sealed record ConfigLoadOutcome(

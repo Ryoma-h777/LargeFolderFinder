@@ -4769,7 +4769,8 @@ internal static class SelfChecks
             SelfAssert.That(o.TakeAfterOther && o.OtherTakeError == o.OtherError, "内容の違う失敗が取り出せません。");
 
             // 成功で記録が消え、その後の同じ失敗は再び通知する
-            SelfAssert.That(o.ValidValues == new ConfigValues(7, false, true, false, 12), $"正しい設定の値が読めていません（{o.ValidValues}）。");
+            // 末尾の 0 は ScanThreads。正しい内容にこのキーが無くても解析は失敗せず既定値になること（古い Config.txt との互換）も兼ねて確かめる
+            SelfAssert.That(o.ValidValues == new ConfigValues(7, false, true, false, 12, 0), $"正しい設定の値が読めていません（{o.ValidValues}）。");
             SelfAssert.That(o.ErrorAfterValid == null, $"正しい設定を読んだ後も失敗の理由が残っています（{o.ErrorAfterValid}）。");
             SelfAssert.That(!o.TakeAfterValid, "正しい設定を読んだ後に未通知の失敗が取り出せました。");
             SelfAssert.That(o.TakeAfterSuccessThenBroken && o.ReTakeError == o.BrokenError, "成功の後に同じ壊れ方を読んでも、再び通知の対象になりません。");
@@ -4788,6 +4789,32 @@ internal static class SelfChecks
             // 後始末と、既定のパスに触れていないこと
             SelfAssert.That(!o.PendingAtEnd && o.ErrorAtEnd == null, "検証の終わりに失敗の記録が成功の状態へ戻っていません。");
             SelfAssert.That(o.DefaultPathUnchanged, "任意のパスからの読み込みで、既定のパスの設定ファイルが作られたか書き換えられました。");
+        });
+
+        runner.Add("同梱の Config.txt が解析の失敗なしに読め、並列度の行があって既定は自動（0）で、決め方の説明が添えてある（scan-performance 要件3.3）", () =>
+        {
+            BundledConfigOutcome o = ConfigLoadProbe.ReadBundled();
+
+            SelfAssert.That(o.Exists, $"同梱の設定ファイルが見つかりません（{o.Path}）。");
+            SelfAssert.That(o.Error == null, $"同梱の設定ファイルを解析できませんでした（{o.Error}）。");
+            SelfAssert.That(o.Unchanged, "同梱の設定ファイルが読み込みで書き換えられました。");
+
+            string[] lines = o.Text.Split('\n').Select(line => line.Trim()).ToArray();
+
+            // 利用者が値を見つけて直せるよう、説明のコメントではなく設定の行そのものがあること
+            SelfAssert.That(
+                lines.Any(line => !line.StartsWith("#", StringComparison.Ordinal) && line.StartsWith("ScanThreads:", StringComparison.Ordinal)),
+                "同梱の設定ファイルに ScanThreads の行がありません（利用者が並列度を確かめられません）。");
+            SelfAssert.That(
+                o.Values.ScanThreads == 0,
+                $"同梱の設定ファイルの並列度が自動（0）ではありません（{o.Values.ScanThreads}）。");
+
+            // 決め方（0 は自動、1 以上で固定、逐次の設定が優先）が Config.txt の説明から読み取れること
+            string comments = string.Join("\n", lines.Where(line => line.StartsWith("#", StringComparison.Ordinal)));
+            SelfAssert.That(
+                comments.Contains("ScanThreads", StringComparison.Ordinal) &&
+                comments.Contains("UseParallelScan", StringComparison.Ordinal),
+                "同梱の設定ファイルの説明に、並列度の決め方（ScanThreads と UseParallelScan の関係）が書かれていません。");
         });
     }
 

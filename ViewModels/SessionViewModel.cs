@@ -253,7 +253,9 @@ namespace LargeFolderFinder.ViewModels
                     config.UseParallelScan,
                     config.UsePhysicalSize,
                     progress,
-                    _model.Cts.Token);
+                    _model.Cts.Token,
+                    // 列挙のバッファの大きさは既定のまま。画面からは設定の並列度だけを渡す
+                    new ScanTuning(config.ScanThreads));
 
                 // Success
                 _model.Result = result;

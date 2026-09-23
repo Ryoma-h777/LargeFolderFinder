@@ -1,6 +1,9 @@
 # 各項目の説明はReadmeをご確認ください。/ Please refer to the Readme for explanations of each item.
+# ScanThreads は走査の並列度です。0 は自動（ネットワークとローカルで既定値が違う）、1 以上でその値に固定します（大きすぎる値は上限に丸めます）。UseParallelScan: false のときは、この値に関わらず逐次で走査します。
+# ScanThreads is the scan parallelism. 0 means automatic (the default differs between network and local targets), and 1 or more fixes the worker count (values that are too large are capped). When UseParallelScan is false, the scan runs sequentially regardless of this value.
 
 UseParallelScan: true
+ScanThreads: 0
 SkipFolderCount: false
 MaxDepthForCount: 3
 UsePhysicalSize: true
