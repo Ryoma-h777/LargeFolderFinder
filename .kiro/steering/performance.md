@@ -80,12 +80,26 @@ else
 
 自動テストが無いため、**速度に影響する変更は必ず実測で確認**します。
 
-1. **Release ビルド**で計測する（`dotnet build LargeFolderFinder.csproj -c Release`）
+1. **Release ビルド**で計測する（`dotnet build LargeFolderFinder.sln -c Release -warnaserror`）
 2. 対象と条件を固定する。最低でも「ローカルドライブ」「ネットワークドライブ」の 2 系統
-3. アプリが計測した経過時間を使う（`SessionViewModel` の `Stopwatch` → UI 表示 + `Logger` の `LogScanSuccess`）
+3. **計測の道具 `Tools/ScanBench` を使う**（画面を介さずに走査だけを繰り返し測る）。画面込みの所要時間を見たいときは、アプリの表示と `Logger` の `LogScanSuccess` を使う
 4. **OS のファイルキャッシュの影響を排除する**。同一パスの 2 回目以降は大幅に速くなるため、初回計測値と 2 回目以降を区別して記録する
-5. 変更前後を同一条件で比較する。絶対値ではなく差分で判断する
-6. `Config.txt` の設定（`UseParallelScan` / `SkipFolderCount` / `UsePhysicalSize`）を記録に残す
+5. 変更前後を同一条件で比較する。絶対値ではなく差分で判断する。**判断は複数回の中央値で行う**（背景の負荷で1回だけ大きく外れることがある）
+6. `Config.txt` の設定（`UseParallelScan` / `ScanThreads` / `SkipFolderCount` / `UsePhysicalSize`）を記録に残す
+7. 記録は `.kiro/specs/scan-performance/measurements.md` に、環境・対象のラベル・条件・各回の値・中央値・要約値の形で残す。**利用者固有の絶対パス・利用者名・NAS の名前は書かない**
+
+### 計測の道具（`Tools/ScanBench`）の使い方
+
+```
+Tools/ScanBench/bin/Release/net10.0-windows/ScanBench.exe <対象のフォルダ> [--runs N] [--sequential] [--physical-size] [--label 対象の説明] [--no-digest]
+```
+
+- 出力はタブ区切りで、条件の行（`#` で始まる）→ 見出し → 1回ごとの行。**パスは出さない**ので、そのまま記録に貼れる
+- 同じプロセスで `--runs` の回数だけ繰り返し、1回目を「初回」、2回目以降を「温まった」として区別して出す
+- **要約値**（全ノードの相対パス・種別・サイズから作る値）で、走査の結果が変わっていないことを確かめる。並列と逐次、変更の前と後で同じ対象の要約値が一致すれば、集計値は変わっていない
+  - ただし**動いているシステムのドライブでは、走査のたびに中身が変わるので要約値は一致しない**。その場合はフォルダ数・ファイル数・スキップ数の概数で見る
+- **メモリを比べる回は `--no-digest --runs 1`** にする。要約値の一覧はメモリを押し上げ（45万ファイルで約 148MB）、最大の作業セットはプロセスの開始からの最大でリセットできないため、回をまたぐと増えてしまう
+- 変更の前の値と比べるには、基準のコミットで道具をビルドしたものを使う（基準のコミットは measurements.md に書く）
 
 ### WizTree との比較（2026-09-22 利用者の決定で目標に加えた）
 
