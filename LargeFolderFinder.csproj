@@ -16,6 +16,8 @@
     <Copyright>Copyright (C) 2026 Ryoma Henzan / Cat &amp; Chocolate Laboratory</Copyright>
     <AssemblyName>LargeFolderFinder</AssemblyName>
     <RootNamespace>LargeFolderFinder</RootNamespace>
+    <!-- 管理者の権限を持つ利用者は起動のときに昇格する（ntfs-mft-scan 要件3.1〜3.3） -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- テスト・スクリプト・発行物のフォルダはアプリのビルドに含めない -->
     <DefaultItemExcludes>$(DefaultItemExcludes);TestPerf\**;Tools\**;Tests\**;build\**;artifacts\**</DefaultItemExcludes>
   </PropertyGroup>

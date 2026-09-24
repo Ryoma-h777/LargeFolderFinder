@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Large Folder Finder のアプリケーションマニフェスト（ntfs-mft-scan 要件3.1〜3.3）。
+
+  目的: 管理者の権限を持つ利用者が起動したときだけ、起動のときに昇格する（highestAvailable）。
+        管理者の権限を持たない利用者は、そのままの権限で起動できる。
+
+  方針（design.md Technology Stack「起動時の昇格」）:
+  - requireAdministrator は使わない。管理者の権限を持たない利用者が起動できなくなるため。
+  - 走査のたびに昇格を尋ねる処理は持たない。昇格の状態は起動のときに決まる。
+  - longPathAware は宣言しない。長いパスの扱いは BCL に任せる（dotnet10-migration の決定）。
+  - DPI・テーマ・supportedOS は宣言しない。.NET の既定のマニフェストにも無く、
+    宣言すると今までの動きが変わるため、requestedExecutionLevel の行だけを既定から変えている。
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity version="1.0.0.0" name="LargeFolderFinder.app"/>
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="highestAvailable" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+</assembly>

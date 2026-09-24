@@ -61,6 +61,7 @@ internal static class SelfChecks
         RegisterSessionPersistenceChecks(runner);
         RegisterHiddenSystemJunctionChecks(runner);
         RegisterSelfCheckSkipChecks(runner);
+        RegisterAdminRightsChecks(runner);
     }
 
     /// <summary>
@@ -3182,6 +3183,130 @@ internal static class SelfChecks
                     outcome.Status == CheckStatus.Passed,
                     $"管理者権限ではないのに、この項目が成功しませんでした（実際: {outcome.Status}、理由: {outcome.Reason}）。");
             }
+        });
+    }
+
+    /// <summary>
+    /// 本体の権限の判定と、起動時の昇格を決めるマニフェストの検証項目を登録する
+    /// （ntfs-mft-scan タスク2.1、要件3.1〜3.4、design.md Technology Stack「権限の判定」「起動時の昇格」、
+    /// Components and Interfaces &gt; Helpers &gt; AdminRights）。
+    /// いずれも管理者権限を必要としない（昇格の有無のどちらでも通る）。
+    /// </summary>
+    private static void RegisterAdminRightsChecks(SelfCheckRunner runner)
+    {
+        runner.Add("本体の権限の判定（AdminRights.IsElevated）が例外を投げず、いまの環境の実際の状態と矛盾しない（ntfs-mft-scan 要件3.1, 3.2, 3.4）", () =>
+        {
+            var observation = AdminRightsProbe.Observe();
+
+            SelfAssert.That(
+                observation.ExceptionType == null,
+                $"権限の判定が例外を投げました（{observation.ExceptionType}: {observation.ExceptionMessage}）。この判定は走査の方式の決定で必ず読むため、例外を外に出してはなりません。");
+            SelfAssert.That(observation.FirstRead != null, "権限の判定の値が取得できませんでした。");
+            SelfAssert.That(
+                observation.FirstRead == observation.SecondRead,
+                $"権限の判定の値が読むたびに変わります（1回目: {observation.FirstRead}, 2回目: {observation.SecondRead}）。昇格の状態は起動のときに決まるため、同じプロセスの中で変わってはなりません。");
+
+            // いまの環境の実際の状態との照合その1: 検証ツール側で独立に調べた管理者の役割の有無
+            SelfAssert.That(
+                observation.FirstRead == observation.PrincipalIsElevated,
+                $"権限の判定（{observation.FirstRead}）が、検証ツール側で独立に調べた管理者の役割の有無（{observation.PrincipalIsElevated}）と一致しません。");
+
+            // いまの環境の実際の状態との照合その2: プロセスのトークンへの直接の問い合わせ（別の OS の問い合わせ）
+            SelfAssert.That(
+                observation.Token.Queried,
+                $"プロセスのトークンに問い合わせられませんでした（エラー {observation.Token.LastError}）。自分自身のトークンの問い合わせは権限を必要としないため、失敗は環境の異常を表します。");
+            SelfAssert.That(
+                observation.Token.IsElevated == observation.FirstRead,
+                $"権限の判定（{observation.FirstRead}）が、プロセスのトークンの昇格の印（{observation.Token.IsElevated}、昇格の種類 {observation.Token.ElevationType}）と矛盾します。");
+
+            // 昇格の種類（1=既定、2=完全、3=制限）との整合。制限されたトークンで昇格と答えてはならない
+            if (observation.Token.ElevationType == 3)
+            {
+                SelfAssert.That(
+                    observation.FirstRead == false,
+                    "制限されたトークン（昇格の種類 3）で動いているのに、権限の判定が管理者だと答えています。");
+            }
+            else if (observation.Token.ElevationType == 2)
+            {
+                SelfAssert.That(
+                    observation.FirstRead == true,
+                    "完全なトークン（昇格の種類 2）で動いているのに、権限の判定が管理者でないと答えています。");
+            }
+        });
+
+        runner.Add("本体の権限の判定が公開するのは IsElevated だけで、昇格を試みる入口を公開しない（ntfs-mft-scan 要件3.4、design.md Helpers > AdminRights）", () =>
+        {
+            var surface = AdminRightsProbe.Observe().Surface;
+
+            SelfAssert.That(surface.IsPublic, "権限の判定の型が公開されていません。検証ツールから反射なしで呼べる必要があります。");
+            SelfAssert.That(surface.IsStaticClass, "権限の判定の型が静的なクラスではありません。");
+            SelfAssert.That(surface.IsBooleanProperty, "IsElevated が真偽の値を返すプロパティではありません。");
+            SelfAssert.That(surface.IsStaticReadable, "IsElevated を静的に読めません。");
+            SelfAssert.That(surface.HasNoSetter, "IsElevated に書き込みの入口があります。権限の状態は外から変えられてはなりません。");
+
+            // 公開されているのは IsElevated とその読み取りの入口だけ。
+            // 昇格を試みる処理はマニフェストに任せる設計なので、そのための公開の入口があってはならない。
+            string[] expected = { "IsElevated", "get_IsElevated" };
+            SelfAssert.That(
+                surface.PublicMemberNames.SequenceEqual(expected),
+                $"権限の判定が公開している要素が想定と異なります（期待: {string.Join(", ", expected)} / 実際: {string.Join(", ", surface.PublicMemberNames)}）。昇格を試みる入口を公開してはなりません。");
+        });
+
+        runner.Add("本体の実行ファイルに埋め込まれたマニフェストが highestAvailable を要求し、requireAdministrator と longPathAware を宣言しない（ntfs-mft-scan 要件3.1, 3.3）", () =>
+        {
+            var manifest = AdminRightsProbe.ReadAppManifest();
+
+            SelfAssert.SkipIf(
+                !manifest.ExeExists,
+                $"本体の実行ファイルが検証ツールの出力先にありません（{manifest.ExePath}）。ソリューション全体をビルドすると確かめられます。");
+            SelfAssert.That(
+                manifest.ManifestText != null,
+                $"実行ファイルからマニフェストを取り出せませんでした（{manifest.Error} / {manifest.ExePath}）。");
+
+            string text = manifest.ManifestText!;
+
+            // 起動のときに OS が読む文書なので、まず XML として成り立っていることを確かめる
+            System.Xml.Linq.XDocument document;
+            try
+            {
+                document = System.Xml.Linq.XDocument.Parse(text);
+            }
+            catch (System.Xml.XmlException ex)
+            {
+                throw new InvalidOperationException(
+                    $"埋め込まれたマニフェストが XML として成り立っていません（{ex.Message}）。起動そのものが失敗します。マニフェスト: {text}");
+            }
+
+            // 注釈（コメント）には方針の説明として宣言しない語も書かれるため、宣言だけを見るように取り除く
+            foreach (var comment in document.DescendantNodes().OfType<System.Xml.Linq.XComment>().ToArray())
+            {
+                comment.Remove();
+            }
+
+            string declarations = document.ToString();
+
+            // 要件3.1: 管理者の権限を持つ利用者は起動のときに昇格する
+            var level = document
+                .Descendants(System.Xml.Linq.XName.Get("requestedExecutionLevel", "urn:schemas-microsoft-com:asm.v3"))
+                .SingleOrDefault();
+
+            SelfAssert.That(level != null, $"マニフェストに requestedExecutionLevel の宣言がちょうど1つありません。マニフェスト: {text}");
+            SelfAssert.That(
+                (string?)level!.Attribute("level") == "highestAvailable",
+                $"マニフェストが highestAvailable を要求していません（実際: {(string?)level.Attribute("level")}）。マニフェスト: {text}");
+            SelfAssert.That(
+                (string?)level.Attribute("uiAccess") == "false",
+                $"マニフェストの uiAccess が false と明示されていません（実際: {(string?)level.Attribute("uiAccess")}）。マニフェスト: {text}");
+
+            // 要件3.3: 管理者の権限を持たない利用者も通常の権限で起動できる（requireAdministrator では起動できない）
+            SelfAssert.That(
+                !declarations.Contains("requireAdministrator", StringComparison.Ordinal),
+                $"マニフェストが requireAdministrator を要求しています。管理者の権限を持たない利用者が起動できなくなります。マニフェスト: {text}");
+
+            // dotnet10-migration の決定: 長いパスは BCL 経由で扱い、マニフェストでは宣言しない
+            SelfAssert.That(
+                !declarations.Contains("longPathAware", StringComparison.Ordinal),
+                $"マニフェストが longPathAware を宣言しています。長いパスの扱いは BCL に任せる決定に反します。マニフェスト: {text}");
         });
     }
 

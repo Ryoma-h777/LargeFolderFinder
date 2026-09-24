@@ -35,7 +35,7 @@
   - _Requirements: 1.2, 1.3, 4.4, 4.5_
 
 - [ ] 2. 起動時の昇格と設定
-- [ ] 2.1 マニフェストで、管理者を持つ利用者は起動時に昇格するようにする
+- [x] 2.1 マニフェストで、管理者を持つ利用者は起動時に昇格するようにする
   - アプリにマニフェストを足し、`requestedExecutionLevel` を `highestAvailable` にする（`requireAdministrator` は使わない）。csproj に組み込む
   - いま管理者として動いているかを返す小さな部品を作る（走査の方式の判断に使う。昇格を試みる処理は持たない）
   - その部品が例外を投げず、いまの環境の実際の状態と矛盾しないことを確かめる項目を自己検証に加える
@@ -134,3 +134,6 @@
 - 1.2: **`FSCTL_QUERY_FILE_LAYOUT` は管理者が必須**と実測で確定した。ボリュームを権限なし・`FILE_READ_ATTRIBUTES` だけで開くと「デバイスを直接開いた」形になり、ファイルシステムまで届かない（エラー1）。`FILE_READ_DATA` を求めると非管理者では開けない（エラー5）。フォルダのハンドルでは通らない（エラー87）。Microsoft 純正の `fsutil file layout` も非管理者では拒否される
 - 1.2: 制御コードとフラグの正しい値（Windows SDK のヘッダで確認）: `FSCTL_QUERY_FILE_LAYOUT = 0x00090277`、`RESTART=0x01`・`INCLUDE_NAMES=0x02`・`INCLUDE_STREAMS=0x04`・`INCLUDE_EXTRA_INFO=0x10`・`INCLUDE_STREAMS_WITH_NO_CLUSTERS_ALLOCATED=0x20`。`RESTART` は**最初と再開のときだけ**付ける（毎回付けると先頭から繰り返す）。入力は 8 バイト境界に揃える（`METHOD_NEITHER` のため）
 - 1.2: 使い捨ての確認用コマンド `Tools/ScanBench/LayoutProbe.cs`（`ScanBench.exe layout-probe C:`）。管理者で実行すれば、全件の列挙の時間・取れる値・`FileInfo.Length` との一致・アクセス権の無い場所の扱いが出る。**目録の出力を読み解く処理は非管理者では1件も返らないため、一度も動いていない**（正しさは管理者での実行で初めて分かる）。再開するときはここから
+- 2.1: `app.manifest`（`highestAvailable`・`uiAccess=false` のみ。`requireAdministrator`・`longPathAware`・DPI・テーマ・`supportedOS` は宣言しない）と `LargeFolderFinder.csproj` の `ApplicationManifest`。`Helpers/AdminRights.cs` は `IsElevated` だけ。**.NET の既定のマニフェストは `assemblyIdentity` と `trustInfo(asInvoker)` だけ**なので、引き継ぐべき項目は無かった
+- 2.1: **自動の起動確認（`build/Test-Launch.ps1`）は、管理者の権限を持つ利用者の環境では使えなくなった**（標準出力を受け取る方式では昇格の確認を出せず `ERROR_ELEVATION_REQUIRED` で失敗する。マニフェストが効いている証拠でもある）。管理者でない環境では従来どおり通る。管理者の手元では昇格したコマンドプロンプトから実行すれば通る見込み。代わりに**発行した exe の埋め込みマニフェストを読む自己検証**を置いた。以後のタスクの完了の条件から「起動確認のスクリプトが通る」を外す
+- 2.1: selfcheck は 155→158 件
