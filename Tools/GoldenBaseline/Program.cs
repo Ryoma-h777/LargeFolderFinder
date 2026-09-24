@@ -117,6 +117,8 @@ internal static class Program
     /// <summary>
     /// 登録済みの自己検証項目をすべて実行し、結果を標準出力へ報告する。
     /// 1件でも失敗があれば非ゼロの終了コードを返す。
+    /// 前提が成り立たず飛ばした項目は、名前と理由を報告するが失敗としては数えないため、
+    /// 飛ばした項目があっても終了コードは 0 のままとする（ntfs-mft-scan 要件7.1）。
     /// </summary>
     private static int RunSelfCheck()
     {
@@ -124,21 +126,10 @@ internal static class Program
         SelfChecks.Register(runner);
         var outcomes = runner.RunAll();
 
-        foreach (var outcome in outcomes)
-        {
-            var mark = outcome.Passed ? "OK" : "NG";
-            Console.WriteLine($"[{mark}] {outcome.Name}");
-            if (!outcome.Passed)
-            {
-                Console.WriteLine($"      理由: {outcome.FailureReason}");
-            }
-        }
+        // 1項目ごとの行とまとめの行の組み立ては SelfCheck 層に置き、自己検証から確かめられるようにしている。
+        Console.Write(SelfCheckRunner.BuildReport(outcomes, out int failureCount, out _));
 
-        int failureCount = outcomes.Count(o => !o.Passed);
-        Console.WriteLine();
-        Console.WriteLine($"{outcomes.Count} 件中 {failureCount} 件が失敗しました。");
-
-        return failureCount == 0 ? 0 : 1;
+        return failureCount == 0 ? ExitCodeMatch : ExitCodeDifferent;
     }
 
     // ==================================================================

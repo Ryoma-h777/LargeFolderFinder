@@ -60,6 +60,7 @@ internal static class SelfChecks
         RegisterScanWorkerChecks(runner);
         RegisterSessionPersistenceChecks(runner);
         RegisterHiddenSystemJunctionChecks(runner);
+        RegisterSelfCheckSkipChecks(runner);
     }
 
     /// <summary>
@@ -3026,36 +3027,160 @@ internal static class SelfChecks
             }
         });
 
-        runner.Add("Deny ACE の付与・解除は管理者権限を必要としない（要件3.4）", () =>
+        runner.Add(DenyAceWithoutAdminCheckName, AssertDenyAceDoesNotRequireAdmin);
+    }
+
+    /// <summary>
+    /// 非昇格の実行を前提とする検証項目の名前。飛ばす仕組みの検証項目からも参照する
+    /// （ntfs-mft-scan タスク1.1）。
+    /// </summary>
+    private const string DenyAceWithoutAdminCheckName = "Deny ACE の付与・解除は管理者権限を必要としない（要件3.4）";
+
+    /// <summary>
+    /// Deny ACE の付与・解除が管理者権限を必要としないことを確かめる（要件3.4）。
+    /// 管理者で実行した場合は「非昇格でも成功する」ことを証明できないため、失敗ではなく飛ばす
+    /// （ntfs-mft-scan タスク1.1、要件7.1）。
+    /// 飛ばす仕組みの検証項目から同じ判定を呼べるよう、登録から切り出している。
+    /// </summary>
+    private static void AssertDenyAceDoesNotRequireAdmin()
+    {
+        // この検証項目は非昇格で実行されていることを前提とする。
+        // 昇格状態では「非昇格でも成功する」ことを証明できないため、名前と理由を残して飛ばす。
+        SelfAssert.SkipIf(
+            IsCurrentProcessElevated(),
+            "管理者権限で実行されているため、非昇格での付与・解除の成功を証明できません。管理者ではないコマンドプロンプトから実行すると確かめられます。");
+
+        string root = Path.Combine(Path.GetTempPath(), "gb_acl_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        var gate = new AccessControlGate();
+
+        try
         {
-            // この自己検証全体が非昇格で実行されていることを前提とする。
-            // 昇格状態では「非昇格でも成功する」ことを証明できないため、まずそれ自体を確認する。
-            bool isAdmin = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent())
-                .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            Directory.CreateDirectory(root);
 
-            SelfAssert.That(!isAdmin, "この自己検証は非昇格実行を前提としています。現在の実行が管理者権限のため、非昇格での成功を証明できません。");
+            // 非昇格のまま付与・解除が例外なく成功することを確認する。
+            gate.DenyRead(root);
+            gate.RestoreRead(root);
 
-            string root = Path.Combine(Path.GetTempPath(), "gb_acl_" + Guid.NewGuid().ToString("N").Substring(0, 8));
-            var gate = new AccessControlGate();
-
-            try
+            string[] entries = Directory.GetFileSystemEntries(root);
+            SelfAssert.That(entries.Length == 0, "解除後のフォルダの列挙結果が想定と異なります。");
+        }
+        finally
+        {
+            gate.RestoreRead(root);
+            if (Directory.Exists(root))
             {
-                Directory.CreateDirectory(root);
-
-                // 非昇格のまま付与・解除が例外なく成功することを確認する。
-                gate.DenyRead(root);
-                gate.RestoreRead(root);
-
-                string[] entries = Directory.GetFileSystemEntries(root);
-                SelfAssert.That(entries.Length == 0, "解除後のフォルダの列挙結果が想定と異なります。");
+                Directory.Delete(root, recursive: true);
             }
-            finally
+        }
+    }
+
+    /// <summary>
+    /// いまのプロセスが管理者権限で動いているかを返す（ntfs-mft-scan タスク1.1）。
+    /// 本体の権限の判定の部品はタスク2.1 で作るため、この時点では検証ツールの中だけで判定する。
+    /// </summary>
+    private static bool IsCurrentProcessElevated()
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        return new System.Security.Principal.WindowsPrincipal(identity)
+            .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+    }
+
+    /// <summary>
+    /// 自己検証の「飛ばした」の仕組みの検証項目を登録する（ntfs-mft-scan タスク1.1、要件7.1、
+    /// design.md Testing Strategy「検証の足場（先に用意する）」）。
+    /// 飛ばした項目は名前と理由を報告しつつ失敗として数えないこと、および管理者では成り立たない
+    /// 既存の項目が管理者のときだけ飛ばされることを確かめる。
+    /// </summary>
+    private static void RegisterSelfCheckSkipChecks(SelfCheckRunner runner)
+    {
+        runner.Add("自己検証の報告が成功・失敗・飛ばしたを区別し、飛ばした項目は名前と理由を出しながら失敗として数えられない（ntfs-mft-scan 要件7.1）", () =>
+        {
+            const string SkipReason = "前提が成り立たないため飛ばしました（この項目の検証用）。";
+            const string FailureReason = "わざと失敗させました（この項目の検証用）。";
+            const string PassName = "成功する項目（検証用）";
+            const string SkipName = "飛ばす項目（検証用）";
+            const string FailName = "失敗する項目（検証用）";
+
+            // 別の入れ物へ登録して実行する。ここから登録が再帰することはない。
+            var probe = new SelfCheckRunner();
+            probe.Add(PassName, () => { });
+            probe.Add(SkipName, () => SelfAssert.Skip(SkipReason));
+            probe.Add(FailName, () => SelfAssert.That(false, FailureReason));
+
+            var outcomes = probe.RunAll();
+
+            SelfAssert.That(outcomes.Count == 3, $"登録した3件分の結果が返りません（実際: {outcomes.Count} 件）。");
+            SelfAssert.That(outcomes[0].Status == CheckStatus.Passed, $"成功する項目の状態が Passed ではありません（実際: {outcomes[0].Status}）。");
+            SelfAssert.That(outcomes[1].Status == CheckStatus.Skipped, $"飛ばす項目の状態が Skipped ではありません（実際: {outcomes[1].Status}、理由: {outcomes[1].Reason}）。");
+            SelfAssert.That(outcomes[1].Reason == SkipReason, $"飛ばした理由が伝わっていません（実際: {outcomes[1].Reason}）。");
+            SelfAssert.That(outcomes[2].Status == CheckStatus.Failed, $"失敗する項目の状態が Failed ではありません（実際: {outcomes[2].Status}）。");
+            SelfAssert.That(outcomes[2].Reason == FailureReason, $"失敗の理由が伝わっていません（実際: {outcomes[2].Reason}）。");
+
+            string report = SelfCheckRunner.BuildReport(outcomes, out int failureCount, out int skippedCount);
+
+            SelfAssert.That(failureCount == 1, $"失敗の件数が1件ではありません（実際: {failureCount} 件）。飛ばした項目を失敗として数えてはなりません。");
+            SelfAssert.That(skippedCount == 1, $"飛ばした件数が1件ではありません（実際: {skippedCount} 件）。");
+            SelfAssert.That(report.Contains($"[SKIP] {SkipName}", StringComparison.Ordinal), $"報告に飛ばした項目の名前が出ていません。報告: {report}");
+            SelfAssert.That(report.Contains($"飛ばした理由: {SkipReason}", StringComparison.Ordinal), $"報告に飛ばした理由が出ていません。報告: {report}");
+            SelfAssert.That(report.Contains($"[OK] {PassName}", StringComparison.Ordinal), $"報告に成功した項目の行が出ていません。報告: {report}");
+            SelfAssert.That(report.Contains($"[NG] {FailName}", StringComparison.Ordinal), $"報告に失敗した項目の行が出ていません。報告: {report}");
+            SelfAssert.That(report.Contains($"理由: {FailureReason}", StringComparison.Ordinal), $"報告に失敗の理由が出ていません。報告: {report}");
+            SelfAssert.That(
+                report.Contains("3 件中 1 件が失敗、1 件を飛ばしました。", StringComparison.Ordinal),
+                $"まとめの行に失敗と飛ばした件数の両方が出ていません。報告: {report}");
+        });
+
+        runner.Add("飛ばした項目だけがあるときは失敗が0件のままで、終了コードを1へ倒す材料にならない（ntfs-mft-scan 要件7.1）", () =>
+        {
+            var probe = new SelfCheckRunner();
+            probe.Add("成功する項目（検証用）", () => { });
+            probe.Add("条件が真なので飛ばす項目（検証用）", () => SelfAssert.SkipIf(true, "条件が真のため飛ばしました（この項目の検証用）。"));
+            probe.Add("条件が偽なので飛ばさない項目（検証用）", () => SelfAssert.SkipIf(false, "ここは飛ばされてはなりません（この項目の検証用）。"));
+
+            var outcomes = probe.RunAll();
+
+            SelfAssert.That(outcomes.Count == 3, $"登録した3件分の結果が返りません（実際: {outcomes.Count} 件）。");
+            SelfAssert.That(outcomes[1].Status == CheckStatus.Skipped, $"条件が真の項目が飛ばされていません（実際: {outcomes[1].Status}）。");
+            SelfAssert.That(
+                outcomes[2].Status == CheckStatus.Passed,
+                $"条件が偽なのに飛ばされました（実際: {outcomes[2].Status}、理由: {outcomes[2].Reason}）。SkipIf が条件を無視しています。");
+
+            string report = SelfCheckRunner.BuildReport(outcomes, out int failureCount, out int skippedCount);
+
+            SelfAssert.That(failureCount == 0, $"飛ばした項目しかないのに失敗が {failureCount} 件と数えられました。終了コードは0のままでなければなりません。");
+            SelfAssert.That(skippedCount == 1, $"飛ばした件数が1件ではありません（実際: {skippedCount} 件）。");
+            SelfAssert.That(
+                report.Contains("3 件中 0 件が失敗、1 件を飛ばしました。", StringComparison.Ordinal),
+                $"まとめの行が想定と異なります。報告: {report}");
+        });
+
+        runner.Add("管理者では成り立たない既存の項目（Deny ACE の付与・解除）が、管理者のときは理由つきで飛ばされ、管理者でないときは実行される（ntfs-mft-scan 要件7.1）", () =>
+        {
+            // 同じ判定を別の入れ物で1件だけ実行し、いまの権限の状態に応じた扱いを照合する。
+            // 非昇格では「飛ばされずに成功する」こと、管理者では「理由つきで飛ばされる」ことを、
+            // どちらの環境でもこの1項目で確かめられる（管理者での実行は tasks.md タスク8）。
+            var probe = new SelfCheckRunner();
+            probe.Add(DenyAceWithoutAdminCheckName, AssertDenyAceDoesNotRequireAdmin);
+
+            var outcomes = probe.RunAll();
+            SelfAssert.That(outcomes.Count == 1, $"登録した1件分の結果が返りません（実際: {outcomes.Count} 件）。");
+
+            var outcome = outcomes[0];
+
+            if (IsCurrentProcessElevated())
             {
-                gate.RestoreRead(root);
-                if (Directory.Exists(root))
-                {
-                    Directory.Delete(root, recursive: true);
-                }
+                SelfAssert.That(
+                    outcome.Status == CheckStatus.Skipped,
+                    $"管理者権限で実行しているのに、この項目が飛ばされていません（実際: {outcome.Status}、理由: {outcome.Reason}）。");
+                SelfAssert.That(
+                    outcome.Reason != null && outcome.Reason.Contains("管理者", StringComparison.Ordinal),
+                    $"飛ばした理由に管理者権限であることが書かれていません（実際: {outcome.Reason}）。");
+            }
+            else
+            {
+                SelfAssert.That(
+                    outcome.Status == CheckStatus.Passed,
+                    $"管理者権限ではないのに、この項目が成功しませんでした（実際: {outcome.Status}、理由: {outcome.Reason}）。");
             }
         });
     }
