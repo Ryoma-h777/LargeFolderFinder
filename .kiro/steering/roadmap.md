@@ -100,6 +100,7 @@ Large Folder Finder v1.0.3 は、2025年11月〜2026年1月ごろの旧世代 AI
 - [x] dotnet10-migration -- .NET 10 への移行、Costura.Fody の除去と PublishSingleFile 化、Ookii.Dialogs.Wpf の削除、依存バージョンの更新、`global.json` による SDK 固定、2形態の発行・起動確認・梱包のスクリプト化。Dependencies: scan-golden-baseline
 - [x] scan-correctness -- 事前カウントの長いパス対応（本スキャンの長いパスは移行で解消済み）と事前カウント用 P/Invoke の除去、描画のタブごとの取り消し、開発用ダイアログの除去、例外の握りつぶし方針の是正と `Config.txt` の解析の失敗の通知。Dependencies: dotnet10-migration
 - [x] scan-performance -- `FolderInfo.AddSize` の再設計（祖先への逐次 Interlocked を廃止）、`FileSystemEnumerator<T>` による1パス列挙、並列度の制御。**通常の列挙で WizTree と同等以上**（NAS、および管理者でない・NTFS 以外のローカル）を目標とし、WizTree との比較の計測手順を整える。Dependencies: scan-correctness, scan-golden-baseline
-- [ ] ntfs-mft-scan -- ローカルの NTFS ドライブを管理者として走査するとき、MFT（全ファイルの目録）を直接読む走査方式を加え、**WizTree の最速モードと同等以上**を目指す。使えない条件（NAS・NTFS 以外・管理者でない）では通常の走査に戻る。Dependencies: scan-performance
-- [ ] architecture-refactoring -- `MainWindow.xaml.cs` の分割、MVVM の責務整理、CommunityToolkit.Mvvm の導入、C# の新しい言語機能の適用、定数の二重管理の解消。Dependencies: scan-performance, ntfs-mft-scan
+- [ ] scan-enumeration-speed -- 通常の走査（管理者を必要としない経路）を、WizTree と同等の速さにする。2026-09-25 の実測で、同じローカルのドライブ（191万ファイル）を WizTree は管理者なしで 3.67 秒、このアプリは約 7.1 秒で走査した（**約2倍の差**）。ファイル1件ごとのノードの確保や列挙のバッファなど、差の出どころを実測で特定して埋める。Dependencies: scan-performance
+- [ ] ntfs-mft-scan -- **【保留 2026-09-25】** ローカルの NTFS ドライブを管理者として走査するとき、目録（MFT）をまとめて読む走査方式を加える。実測で**管理者が必須**と確定し、WizTree の速さは管理者なしでも出ていたため、**管理者以外の利用者には効かない**ことが分かった。`scan-enumeration-speed` の結果を見てから再開するか決める。Dependencies: scan-performance, scan-enumeration-speed
+- [ ] architecture-refactoring -- `MainWindow.xaml.cs` の分割、MVVM の責務整理、CommunityToolkit.Mvvm の導入、C# の新しい言語機能の適用、定数の二重管理の解消。Dependencies: scan-performance, scan-enumeration-speed
 - [ ] ui-redesign -- 色・フォント・サイズのデザイントークン化、縦横レイアウト XAML の重複解消、一覧の視認性改善。Dependencies: architecture-refactoring

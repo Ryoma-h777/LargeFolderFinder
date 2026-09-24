@@ -1,9 +1,9 @@
 {
   "feature_name": "ntfs-mft-scan",
   "created_at": "2026-09-24T00:29:46Z",
-  "updated_at": "2026-09-24T01:15:56.900217+00:00",
+  "updated_at": "2026-09-24T16:18:57.099138+00:00",
   "language": "ja",
-  "phase": "tasks-generated",
+  "phase": "on-hold",
   "approvals": {
     "requirements": {
       "generated": true,
