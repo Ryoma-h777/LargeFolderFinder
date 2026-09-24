@@ -62,6 +62,7 @@ internal static class SelfChecks
         RegisterHiddenSystemJunctionChecks(runner);
         RegisterSelfCheckSkipChecks(runner);
         RegisterAdminRightsChecks(runner);
+        RegisterScanMethodSelectorChecks(runner);
     }
 
     /// <summary>
@@ -3308,6 +3309,235 @@ internal static class SelfChecks
                 !declarations.Contains("longPathAware", StringComparison.Ordinal),
                 $"マニフェストが longPathAware を宣言しています。長いパスの扱いは BCL に任せる決定に反します。マニフェスト: {text}");
         });
+    }
+
+    /// <summary>実在しないホストの UNC パス。方式の決定の判定だけを確かめ、ネットワークへ接続しない</summary>
+    private const string UncPathForMethodCheck = @"\\unlikely-host-name-for-test\share\folder";
+
+    /// <summary>
+    /// 走査の方式を決める規則（<see cref="ScanMethodSelector"/>）の検証項目を登録する
+    /// （ntfs-mft-scan タスク3.1、要件1.1, 2.1, 2.4, 3.4, 3.5）。
+    /// 管理者の状態は引数で渡すため、管理者でない環境でも期待どおりかを確かめられる。
+    /// </summary>
+    /// <remarks>
+    /// 対象の小ささの基準（要件5.3）はタスク6.1 で入れるため、ここでは確かめない。
+    /// </remarks>
+    private static void RegisterScanMethodSelectorChecks(SelfCheckRunner runner)
+    {
+        runner.Add("走査の方式の決め方: 対象がローカルの NTFS で管理者なら目録の走査、管理者でなければ通常の走査、設定で無効なら通常の走査になる（ntfs-mft-scan 要件1.1, 2.4, 3.4）", () =>
+        {
+            // 検証ツールから直接確かめられるよう、公開の静的クラスであること（design.md: ScanMethodSelector）
+            Type type = typeof(ScanMethodSelector);
+            SelfAssert.That(type.IsPublic, "ScanMethodSelector が public ではありません（検証ツールから直接確かめられません）。");
+            SelfAssert.That(type.IsAbstract && type.IsSealed, "ScanMethodSelector が静的クラスではありません。");
+
+            string localPath = Path.GetTempPath();
+            SelfAssert.SkipIf(
+                !IsLocalNtfsDriveForMethodCheck(localPath),
+                $"検証ツールの一時フォルダ（{localPath}）がローカルの NTFS の上にないため、目録の走査を選ぶ場面を確かめられません。NTFS のローカルドライブ上の一時フォルダで実行すると確かめられます。");
+
+            SelfAssert.That(
+                ScanMethodSelector.IsLocalNtfsVolume(localPath),
+                $"ローカルの NTFS の一時フォルダ（{localPath}）がローカルの NTFS と判定されません。");
+
+            // 要件1.1: 対象がローカルの NTFS で、管理者として動いていて、設定が有効なら目録の走査
+            var faster = ScanMethodSelector.Decide(localPath, useMftScan: true, isElevated: true);
+            SelfAssert.That(
+                faster.Method == ScanMethodKind.VolumeLayout,
+                $"ローカルの NTFS を管理者として走査するときに目録の走査が選ばれません（実際: {faster.Method} / 理由: {faster.Reason}）。");
+
+            // 要件3.4: 管理者として動いていなければ通常の走査（昇格を促さない）
+            var notElevated = ScanMethodSelector.Decide(localPath, useMftScan: true, isElevated: false);
+            SelfAssert.That(
+                notElevated.Method == ScanMethodKind.NormalEnumeration,
+                $"管理者として動いていないときに通常の走査が選ばれません（実際: {notElevated.Method} / 理由: {notElevated.Reason}）。");
+
+            // 要件2.4: 設定で無効なら、条件が揃っていても常に通常の走査
+            var disabled = ScanMethodSelector.Decide(localPath, useMftScan: false, isElevated: true);
+            SelfAssert.That(
+                disabled.Method == ScanMethodKind.NormalEnumeration,
+                $"設定で目録の走査を使わないときに通常の走査が選ばれません（実際: {disabled.Method} / 理由: {disabled.Reason}）。");
+            SelfAssert.That(
+                ScanMethodSelector.Decide(localPath, useMftScan: false, isElevated: false).Method == ScanMethodKind.NormalEnumeration,
+                "設定で無効かつ管理者でないときに通常の走査が選ばれません。");
+
+            // 理由はログと記録に出すため、どの場面でも1行の日本語の文が入っていること
+            foreach (var decision in new[] { faster, notElevated, disabled })
+            {
+                AssertScanMethodReasonIsOneJapaneseLine(decision);
+            }
+
+            // 同じ場面で理由が食い違わないこと（方式の決定に状態を持たない）
+            SelfAssert.That(
+                ScanMethodSelector.Decide(localPath, useMftScan: true, isElevated: true) == faster,
+                "同じ条件で方式の決定の結果が変わります（方式の決定は状態を持たないはずです）。");
+        });
+
+        runner.Add("走査の方式の決め方: UNC パスと判定できないパスでは通常の走査になり、例外を外に出さない（ntfs-mft-scan 要件2.1）", () =>
+        {
+            // 要件2.1: ネットワーク上の場所は通常の走査。実在しないホストでも接続せずに判定する
+            SelfAssert.That(
+                !ScanMethodSelector.IsLocalNtfsVolume(UncPathForMethodCheck),
+                "実在しないホストの UNC パスがローカルの NTFS と判定されました。");
+
+            var unc = ScanMethodSelector.Decide(UncPathForMethodCheck, useMftScan: true, isElevated: true);
+            SelfAssert.That(
+                unc.Method == ScanMethodKind.NormalEnumeration,
+                $"UNC パスを管理者として走査するときに通常の走査が選ばれません（実際: {unc.Method} / 理由: {unc.Reason}）。");
+            AssertScanMethodReasonIsOneJapaneseLine(unc);
+
+            SelfAssert.That(
+                ScanMethodSelector.Decide(@"\\?\UNC\unlikely-host-name-for-test\share\folder", useMftScan: true, isElevated: true).Method
+                    == ScanMethodKind.NormalEnumeration,
+                @"\\?\UNC\ 形式の UNC パスで通常の走査が選ばれません。");
+
+            // 判定できないパス・扱えない形のパスは、例外を外に出さず通常の走査に倒す
+            foreach (string undecidable in new[] { string.Empty, "   ", "relative\\path", @"Z:\not-existing-drive", "\0invalid" })
+            {
+                var decision = ScanMethodSelector.Decide(undecidable, useMftScan: true, isElevated: true);
+                SelfAssert.That(
+                    decision.Method == ScanMethodKind.NormalEnumeration,
+                    $"判定できないパス '{undecidable}' で通常の走査が選ばれません（実際: {decision.Method} / 理由: {decision.Reason}）。");
+                AssertScanMethodReasonIsOneJapaneseLine(decision);
+                SelfAssert.That(
+                    !ScanMethodSelector.IsLocalNtfsVolume(undecidable),
+                    $"判定できないパス '{undecidable}' がローカルの NTFS と判定されました。");
+            }
+
+            // null を渡しても例外を外に出さない（走査を止めない）
+            var nullPath = ScanMethodSelector.Decide(null!, useMftScan: true, isElevated: true);
+            SelfAssert.That(
+                nullPath.Method == ScanMethodKind.NormalEnumeration,
+                $"null のパスで通常の走査が選ばれません（実際: {nullPath.Method} / 理由: {nullPath.Reason}）。");
+            SelfAssert.That(
+                !ScanMethodSelector.IsLocalNtfsVolume(null!),
+                "null のパスがローカルの NTFS と判定されました。");
+        });
+
+        runner.Add("走査の方式の決め方: NTFS 以外のファイルシステムでは通常の走査になる（ntfs-mft-scan 要件2.1）", () =>
+        {
+            // NTFS 以外のローカルドライブ（FAT32 の USB メモリなど）が無い環境では確かめられないため飛ばす
+            string? nonNtfsRoot = FindNonNtfsLocalDriveRoot();
+            SelfAssert.SkipIf(
+                nonNtfsRoot == null,
+                "NTFS 以外のローカルドライブ（FAT32 の USB メモリなど）が見つからないため、NTFS 以外で通常の走査になることを確かめられません。NTFS 以外で書式化したドライブを接続すると確かめられます。");
+
+            SelfAssert.That(
+                !ScanMethodSelector.IsLocalNtfsVolume(nonNtfsRoot!),
+                $"NTFS 以外のドライブ（{nonNtfsRoot}）がローカルの NTFS と判定されました。");
+
+            var decision = ScanMethodSelector.Decide(nonNtfsRoot!, useMftScan: true, isElevated: true);
+            SelfAssert.That(
+                decision.Method == ScanMethodKind.NormalEnumeration,
+                $"NTFS 以外のドライブ（{nonNtfsRoot}）で通常の走査が選ばれません（実際: {decision.Method} / 理由: {decision.Reason}）。");
+            AssertScanMethodReasonIsOneJapaneseLine(decision);
+        });
+
+        runner.Add("走査の方式の決め方が公開するのは方式と理由だけで、昇格を促すための入口を持たない（ntfs-mft-scan 要件3.4, 3.5）", () =>
+        {
+            // 昇格は起動のときにマニフェストが行う決定（2026-09-25）なので、
+            // 「管理者になれば速くなる」ことを画面へ伝える入口があってはならない。
+            string[] expectedDecisionMembers = { "Method", "Reason" };
+            string[] actualDecisionMembers = typeof(ScanMethodDecision)
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Select(p => p.Name)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            SelfAssert.That(
+                actualDecisionMembers.SequenceEqual(expectedDecisionMembers),
+                $"方式の決定の結果が公開する項目が想定と異なります（期待: {string.Join(", ", expectedDecisionMembers)} / 実際: {string.Join(", ", actualDecisionMembers)}）。走査のたびに昇格を促さない決定に反する項目を持ってはなりません。");
+
+            MethodInfo[] decideOverloads = typeof(ScanMethodSelector)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.Name == "Decide")
+                .ToArray();
+            SelfAssert.That(
+                decideOverloads.Length == 1,
+                $"方式を決める入口が1つではありません（{decideOverloads.Length} 個）。");
+
+            string[] expectedParameters = { "rootPath", "useMftScan", "isElevated" };
+            string[] actualParameters = decideOverloads[0].GetParameters().Select(p => p.Name!).ToArray();
+            SelfAssert.That(
+                actualParameters.SequenceEqual(expectedParameters),
+                $"方式を決める入口の引数が想定と異なります（期待: {string.Join(", ", expectedParameters)} / 実際: {string.Join(", ", actualParameters)}）。昇格できるかどうかを渡す引数は持ちません。");
+        });
+    }
+
+    /// <summary>
+    /// 方式の決定の理由が、ログと記録にそのまま出せる「1行の日本語の文」であることを確かめる。
+    /// </summary>
+    private static void AssertScanMethodReasonIsOneJapaneseLine(ScanMethodDecision decision)
+    {
+        SelfAssert.That(
+            !string.IsNullOrWhiteSpace(decision.Reason),
+            $"方式 {decision.Method} の理由が空です。ログと記録に出すため、なぜその方式を選んだかが分かる文が必要です。");
+        SelfAssert.That(
+            !decision.Reason.Contains('\n') && !decision.Reason.Contains('\r'),
+            $"方式 {decision.Method} の理由が1行ではありません（{decision.Reason}）。");
+        SelfAssert.That(
+            ContainsNonAscii(decision.Reason),
+            $"方式 {decision.Method} の理由が日本語ではありません（{decision.Reason}）。");
+    }
+
+    /// <summary>
+    /// 指定したパスが、ローカル（固定・取り外し可能）かつ NTFS のドライブの上にあるかを、
+    /// 本体の判定とは独立に調べる。本体の式を共有せず、この検証の中に期待を直接書く。
+    /// </summary>
+    private static bool IsLocalNtfsDriveForMethodCheck(string path)
+    {
+        try
+        {
+            string? root = Path.GetPathRoot(path);
+
+            if (string.IsNullOrEmpty(root))
+            {
+                return false;
+            }
+
+            var drive = new DriveInfo(root);
+
+            return drive.IsReady
+                && (drive.DriveType == DriveType.Fixed || drive.DriveType == DriveType.Removable)
+                && string.Equals(drive.DriveFormat, "NTFS", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            // 意図して無視: 調べられなければ「ローカルの NTFS ではない」として扱い、検証項目を飛ばさせる
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// NTFS 以外のローカルドライブのルートを1つ返す。見つからなければ null。
+    /// </summary>
+    private static string? FindNonNtfsLocalDriveRoot()
+    {
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            try
+            {
+                if (!drive.IsReady)
+                {
+                    continue;
+                }
+
+                if (drive.DriveType != DriveType.Fixed && drive.DriveType != DriveType.Removable)
+                {
+                    continue;
+                }
+
+                if (!string.Equals(drive.DriveFormat, "NTFS", StringComparison.OrdinalIgnoreCase))
+                {
+                    return drive.RootDirectory.FullName;
+                }
+            }
+            catch (Exception)
+            {
+                // 意図して無視: 調べられないドライブは候補から外すだけ（検証は他のドライブで続けられる）
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

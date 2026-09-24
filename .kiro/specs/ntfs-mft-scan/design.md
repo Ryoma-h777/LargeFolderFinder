@@ -194,7 +194,7 @@ sequenceDiagram
 
 | Component | Layer | Intent | Req Coverage | Key Dependencies |
 |---|---|---|---|---|
-| ScanMethodSelector | Services | 走査の方式を決める | 1.1, 2.1, 2.4, 3.4, 5.3 | AdminRights, Win32Volume (P0) |
+| ScanMethodSelector | Services | 走査の方式を決める | 1.1, 2.1, 2.4, 3.4, 5.3 | ScanParallelism（ネットワークの判定）、DriveInfo。管理者の状態は引数で受け取る（AdminRights は呼び出し側が読む） |
 | VolumeLayoutReader | Services | 目録を連続して列挙する | 1.2〜1.5 | Win32Volume (P0) |
 | MftScanner | Services | 木を組み立て、絞り、合計する | 1.3, 4.1〜4.6, 5.1, 5.2, 6.1〜6.3, 6.5 | VolumeLayoutReader, FolderInfo, ScanSkipRecorder (P0) |
 | AdminRights | Helpers | いま管理者として動いているかの判定 | 3.4 | なし |
@@ -209,15 +209,21 @@ sequenceDiagram
 ```csharp
 public enum ScanMethodKind { NormalEnumeration, VolumeLayout }
 
-public sealed record ScanMethodDecision(ScanMethodKind Method, string Reason, bool CanElevateForFaster);
+public sealed record ScanMethodDecision(ScanMethodKind Method, string Reason);
 
 public static class ScanMethodSelector
 {
-    /// <summary>走査の方式を決める。Reason には選んだ理由（日本語）を入れる。</summary>
-    public static ScanMethodDecision Decide(string rootPath, bool useMftScan, bool isElevated, bool canElevate);
+    /// <summary>走査の方式を決める。Reason には選んだ理由（日本語の1行）を入れる。</summary>
+    public static ScanMethodDecision Decide(string rootPath, bool useMftScan, bool isElevated);
+
+    /// <summary>対象がローカル（固定・取り外し可能）の NTFS のドライブの上にあるか。判定できなければ false。</summary>
+    public static bool IsLocalNtfsVolume(string rootPath);
 }
 ```
-- `CanElevateForFaster` は「いま通常の走査だが、管理者になれば目録の走査が使える」ことを示す（画面が昇格を尋ねる判断に使う）
+- **昇格は起動のときに行う形に変えた（利用者の決定・2026-09-25）ため、「管理者になれば速くなる」ことを画面へ伝える項目（`CanElevateForFaster`）と、そのための引数（`canElevate`）は持たない**（要件3.4, 3.5）。管理者でなければ通常の走査を選び、昇格を促さない
+- `Reason` はログと走査の記録にそのまま出すため、日本語の1行にする
+- ローカルの NTFS の判定は `DriveInfo` のドライブの種類とファイルシステム名で行い（`DriveFormat` は OS のボリュームの情報の問い合わせをそのまま返す）、ネットワークの判定は `ScanParallelism.IsNetworkPath` と同じ規則を使う。判定できない・例外のときは通常の走査に倒す
+- `IsLocalNtfsVolume` は判定だけを取り出して確かめられるよう公開する（`ScanParallelism.IsNetworkPath` と同じ扱い）
 - 対象の小ささの基準は、まず暫定の値を入れ（対象がドライブのルートでなく、配下のフォルダ数が明らかに少ないと分かる場合。判断が付かないときは目録の走査を選ぶ）、**管理者での計測（利用者の作業）の結果で確定する**
 
 #### VolumeLayoutReader
@@ -314,7 +320,7 @@ public static class AdminRights
 - **`MftScanner` は目録の並びを受け取る形**なので、木の組み立ての検証は管理者でなくても回る。管理者が必要なのは `VolumeLayoutReader` の実機確認だけ
 
 ### 自己検証に加える項目
-1. **方式の決定（1.1, 2.1, 2.4, 5.3）**: ローカルの NTFS・UNC・NTFS 以外・管理者でない・設定で無効のそれぞれで、`ScanMethodSelector.Decide` が期待どおりの方式と `CanElevateForFaster` を返す（管理者の状態は引数で渡すので、管理者でなくても確かめられる）
+1. **方式の決定（1.1, 2.1, 2.4, 3.4, 5.3）**: ローカルの NTFS・UNC・NTFS 以外・管理者でない・設定で無効のそれぞれで、`ScanMethodSelector.Decide` が期待どおりの方式と理由を返す（管理者の状態は引数で渡すので、管理者でなくても確かめられる）。あわせて、昇格を促すための入口（`CanElevateForFaster`）を持たないことを確かめる
 2. **権限の判定とマニフェスト（3.1〜3.4）**: `AdminRights.IsElevated` が例外を投げず、いまの環境の実際の状態（`WindowsPrincipal` とプロセスのトークン）と矛盾しない。本体の exe に埋め込まれたマニフェストが `highestAvailable` を宣言し、`requireAdministrator` と `longPathAware` を宣言しない
 3. **木の組み立て（4.2, 4.6, 5.1, 5.2, 6.5）**: 作った目録の並び（ハードリンクの別名・短縮名・はぐれ・予約の項目・深い階層）を `MftScanner.Build` に渡し、ノードの集合・合計・はぐれの件数・絞り込みが期待どおりになる。**管理者は不要**
 4. **物理サイズ換算（4.5）**: 同じ並びを換算あり・なしで組み立て、通常の走査と同じ式になる。**管理者は不要**

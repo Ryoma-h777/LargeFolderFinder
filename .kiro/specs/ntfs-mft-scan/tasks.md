@@ -49,7 +49,7 @@
   - _Boundary: Config_
 
 - [ ] 3. 走査の方式の選択と、失敗したときの切り替え
-- [ ] 3.1 方式を決める規則を作る
+- [x] 3.1 方式を決める規則を作る
   - 設定・対象がローカルの NTFS か・いま管理者か から、方式と理由を返す（対象の小ささの基準は 6.1 で入れる）
   - ローカルの NTFS の判定（ファイルシステム名とドライブの種類。判定できないときは通常の走査）
   - ローカルの NTFS・UNC・NTFS 以外・管理者でない・設定で無効のそれぞれで期待どおりになることを確かめる項目を自己検証に加える（管理者の状態は引数で渡す）。**管理者でないときは通常の走査を選び、昇格を促さない**（要件3.4）
@@ -138,3 +138,5 @@
 - 2.1: **自動の起動確認（`build/Test-Launch.ps1`）は、管理者の権限を持つ利用者の環境では使えなくなった**（標準出力を受け取る方式では昇格の確認を出せず `ERROR_ELEVATION_REQUIRED` で失敗する。マニフェストが効いている証拠でもある）。管理者でない環境では従来どおり通る。管理者の手元では昇格したコマンドプロンプトから実行すれば通る見込み。代わりに**発行した exe の埋め込みマニフェストを読む自己検証**を置いた。以後のタスクの完了の条件から「起動確認のスクリプトが通る」を外す
 - 2.1: selfcheck は 155→158 件
 - 2.2: `Config.UseMftScan`（既定 true）と同梱の `Config.txt` の行・日英の説明。`ConfigValues` に欄を1つ足し、既存の期待値も更新（実装の式を共有せず直接書く方針は維持）。まだどこからも読まれていない（読むのは 3.1）。selfcheck は 159 件
+- 3.1: `Services/ScanMethodSelector.cs`（public。`Decide(rootPath, useMftScan, isElevated)` → `ScanMethodDecision(Method, Reason)`、`IsLocalNtfsVolume`）と `Models/ScanMethod.cs`。判定の順は 設定 → ローカルの NTFS か → 管理者か。判定できないときは通常の走査に倒す。**昇格を促す入口は持たない**（設計からも `CanElevateForFaster`/`canElevate` を削除済み）。ローカルの NTFS の判定はいまは `DriveInfo`（5.1 で `GetVolumeInformation` に寄せるか判断する）。selfcheck は 163 件
+- 3.1: 計測の道具（ScanBench）が動いているとビルドが一時的に失敗する（出力の dll をロックするため）
