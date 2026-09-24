@@ -1,9 +1,12 @@
 # 各項目の説明はReadmeをご確認ください。/ Please refer to the Readme for explanations of each item.
 # ScanThreads は走査の並列度です。0 は自動（ネットワークとローカルで既定値が違う）、1 以上でその値に固定します（大きすぎる値は上限に丸めます）。UseParallelScan: false のときは、この値に関わらず逐次で走査します。
 # ScanThreads is the scan parallelism. 0 means automatic (the default differs between network and local targets), and 1 or more fixes the worker count (values that are too large are capped). When UseParallelScan is false, the scan runs sequentially regardless of this value.
+# UseMftScan は、管理者として動いているときにドライブの目録（NTFS の MFT）をまとめて読む速い方式で走査するかどうかです。管理者でないときは、この値に関わらず通常の走査になります。
+# UseMftScan controls whether the scan uses the fast method that reads the drive index (the NTFS MFT) in bulk while running as an administrator. When not running as an administrator, the normal scan is used regardless of this value.
 
 UseParallelScan: true
 ScanThreads: 0
+UseMftScan: true
 SkipFolderCount: false
 MaxDepthForCount: 3
 UsePhysicalSize: true

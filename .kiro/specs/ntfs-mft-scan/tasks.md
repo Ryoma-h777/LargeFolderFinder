@@ -42,7 +42,7 @@
   - 完了の状態: その項目が通り、ビルドが警告なしで通る。**発行した exe を起動すると、管理者の権限を持つ利用者では権限の確認が出る**（自動の起動確認のスクリプトは権限の確認を扱えないため、**この確認は利用者の作業＝タスク8**。スクリプトが失敗する場合はその旨を記録する）
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 2.2 (P) 目録の走査を使うかどうかの設定を `Config.txt` に足す
+- [x] 2.2 (P) 目録の走査を使うかどうかの設定を `Config.txt` に足す
   - 設定を1つ足す（既定は有効。管理者でなければ使われない）。同梱の `Config.txt` に行と短い説明（日英）を足す
   - 完了の状態: 同梱の `Config.txt` が解析の失敗なしに読め、既定値が有効になることを確かめる項目が通る
   - _Requirements: 2.4_
@@ -137,3 +137,4 @@
 - 2.1: `app.manifest`（`highestAvailable`・`uiAccess=false` のみ。`requireAdministrator`・`longPathAware`・DPI・テーマ・`supportedOS` は宣言しない）と `LargeFolderFinder.csproj` の `ApplicationManifest`。`Helpers/AdminRights.cs` は `IsElevated` だけ。**.NET の既定のマニフェストは `assemblyIdentity` と `trustInfo(asInvoker)` だけ**なので、引き継ぐべき項目は無かった
 - 2.1: **自動の起動確認（`build/Test-Launch.ps1`）は、管理者の権限を持つ利用者の環境では使えなくなった**（標準出力を受け取る方式では昇格の確認を出せず `ERROR_ELEVATION_REQUIRED` で失敗する。マニフェストが効いている証拠でもある）。管理者でない環境では従来どおり通る。管理者の手元では昇格したコマンドプロンプトから実行すれば通る見込み。代わりに**発行した exe の埋め込みマニフェストを読む自己検証**を置いた。以後のタスクの完了の条件から「起動確認のスクリプトが通る」を外す
 - 2.1: selfcheck は 155→158 件
+- 2.2: `Config.UseMftScan`（既定 true）と同梱の `Config.txt` の行・日英の説明。`ConfigValues` に欄を1つ足し、既存の期待値も更新（実装の式を共有せず直接書く方針は維持）。まだどこからも読まれていない（読むのは 3.1）。selfcheck は 159 件

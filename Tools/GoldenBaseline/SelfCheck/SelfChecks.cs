@@ -5675,8 +5675,8 @@ internal static class SelfChecks
             SelfAssert.That(o.TakeAfterOther && o.OtherTakeError == o.OtherError, "内容の違う失敗が取り出せません。");
 
             // 成功で記録が消え、その後の同じ失敗は再び通知する
-            // 末尾の 0 は ScanThreads。正しい内容にこのキーが無くても解析は失敗せず既定値になること（古い Config.txt との互換）も兼ねて確かめる
-            SelfAssert.That(o.ValidValues == new ConfigValues(7, false, true, false, 12, 0), $"正しい設定の値が読めていません（{o.ValidValues}）。");
+            // 末尾の 0 は ScanThreads、true は UseMftScan。正しい内容にこれらのキーが無くても解析は失敗せず既定値になること（古い Config.txt との互換）も兼ねて確かめる
+            SelfAssert.That(o.ValidValues == new ConfigValues(7, false, true, false, 12, 0, true), $"正しい設定の値が読めていません（{o.ValidValues}）。");
             SelfAssert.That(o.ErrorAfterValid == null, $"正しい設定を読んだ後も失敗の理由が残っています（{o.ErrorAfterValid}）。");
             SelfAssert.That(!o.TakeAfterValid, "正しい設定を読んだ後に未通知の失敗が取り出せました。");
             SelfAssert.That(o.TakeAfterSuccessThenBroken && o.ReTakeError == o.BrokenError, "成功の後に同じ壊れ方を読んでも、再び通知の対象になりません。");
@@ -5721,6 +5721,33 @@ internal static class SelfChecks
                 comments.Contains("ScanThreads", StringComparison.Ordinal) &&
                 comments.Contains("UseParallelScan", StringComparison.Ordinal),
                 "同梱の設定ファイルの説明に、並列度の決め方（ScanThreads と UseParallelScan の関係）が書かれていません。");
+        });
+
+        runner.Add("同梱の Config.txt に目録の走査を使うかどうかの行があって既定は有効で、管理者のときだけ使われる説明が日英で添えてある（ntfs-mft-scan 要件2.4）", () =>
+        {
+            BundledConfigOutcome o = ConfigLoadProbe.ReadBundled();
+
+            SelfAssert.That(o.Exists, $"同梱の設定ファイルが見つかりません（{o.Path}）。");
+            SelfAssert.That(o.Error == null, $"同梱の設定ファイルを解析できませんでした（{o.Error}）。");
+            SelfAssert.That(o.Unchanged, "同梱の設定ファイルが読み込みで書き換えられました。");
+
+            string[] lines = o.Text.Split('\n').Select(line => line.Trim()).ToArray();
+
+            // 利用者が値を見つけて直せるよう、説明のコメントではなく設定の行そのものがあること
+            SelfAssert.That(
+                lines.Any(line => !line.StartsWith("#", StringComparison.Ordinal) && line.StartsWith("UseMftScan:", StringComparison.Ordinal)),
+                "同梱の設定ファイルに UseMftScan の行がありません（利用者が目録の走査を使うかどうかを確かめられません）。");
+            SelfAssert.That(
+                o.Values.UseMftScan,
+                "同梱の設定ファイルを読んだ結果、目録の走査が既定で有効になっていません。");
+
+            // 管理者でなければ使われないことが、日英の両方の説明から読み取れること
+            string comments = string.Join("\n", lines.Where(line => line.StartsWith("#", StringComparison.Ordinal)));
+            SelfAssert.That(
+                comments.Contains("UseMftScan", StringComparison.Ordinal) &&
+                comments.Contains("管理者", StringComparison.Ordinal) &&
+                comments.Contains("administrator", StringComparison.OrdinalIgnoreCase),
+                "同梱の設定ファイルの説明に、目録の走査が管理者のときだけ使われることが日英で書かれていません。");
         });
     }
 

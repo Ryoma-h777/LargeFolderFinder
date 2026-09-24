@@ -212,7 +212,8 @@ public sealed record ConfigValues(
     bool SkipFolderCount,
     bool UsePhysicalSize,
     int OldDataThresholdDays,
-    int ScanThreads)
+    int ScanThreads,
+    bool UseMftScan)
 {
     /// <summary>本体の設定から各欄の値を写す。</summary>
     public static ConfigValues From(global::LargeFolderFinder.Config config) => new(
@@ -221,7 +222,8 @@ public sealed record ConfigValues(
         config.SkipFolderCount,
         config.UsePhysicalSize,
         config.OldDataThresholdDays,
-        config.ScanThreads);
+        config.ScanThreads,
+        config.UseMftScan);
 }
 
 /// <summary><see cref="ConfigLoadProbe.ReadBundled"/> の結果。</summary>

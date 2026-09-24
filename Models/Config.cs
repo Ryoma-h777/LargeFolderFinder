@@ -19,6 +19,12 @@ namespace LargeFolderFinder
         /// <see cref="UseParallelScan"/> が false のときは、この値に関わらず逐次で走査する。
         /// </summary>
         public int ScanThreads { get; set; } = 0;
+
+        /// <summary>
+        /// ドライブの目録（NTFS の MFT）をまとめて読む速い方式で走査するかどうか。
+        /// この方式は管理者として動いているときしか使えないため、管理者でなければこの値に関わらず通常の走査になる。
+        /// </summary>
+        public bool UseMftScan { get; set; } = true;
         public bool SkipFolderCount { get; set; } = false;
         public bool UsePhysicalSize { get; set; } = true;
         public int OldDataThresholdDays { get; set; } = 30;
