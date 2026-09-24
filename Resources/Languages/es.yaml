@@ -78,6 +78,9 @@ FinishedStatus: "Finalizado"
 NotFoundMessage: "No se encontraron carpetas que coincidan."
 FolderCountStatus: "Contando carpetas/archivos:"
 RenderingStatus: "Renderizando..."
+# scan method
+ScanMethodNormal: "Análisis estándar"
+ScanMethodVolumeLayout: "Desde el índice del disco"
 Unknown: "Desconocido" # Barra de progreso: Se muestra cuando el total es desconocido.
 LabelError: "Error"
 UnitFolder: " carpetas"

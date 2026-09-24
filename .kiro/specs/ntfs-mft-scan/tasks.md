@@ -57,7 +57,7 @@
   - _Depends: 2.1_
   - _Requirements: 1.1, 2.1, 2.4, 3.4, 3.5_
 
-- [ ] 3.2 走査の入口に方式の分岐と、方式の指定・記録・切り替えを足す
+- [x] 3.2 走査の入口に方式の分岐と、方式の指定・記録・切り替えを足す
   - 走査の入口で方式を決める。走査の調整値に**方式の指定**（試験と計測のため。画面からは渡さない）を足す
   - 目録の走査を選んだ、または指定されたときは目録の経路を呼ぶ。**この時点では目録の経路は「ボリュームを開こうとして失敗したら理由をログに記録して通常の走査へ切り替える」だけの最小の形**にする（中身は4で作る）
   - 最後の報告に**実際に結果を作った方式**を載せ、走査の終わりのログと完了の状態表示に方式を含める
@@ -140,3 +140,7 @@
 - 2.2: `Config.UseMftScan`（既定 true）と同梱の `Config.txt` の行・日英の説明。`ConfigValues` に欄を1つ足し、既存の期待値も更新（実装の式を共有せず直接書く方針は維持）。まだどこからも読まれていない（読むのは 3.1）。selfcheck は 159 件
 - 3.1: `Services/ScanMethodSelector.cs`（public。`Decide(rootPath, useMftScan, isElevated)` → `ScanMethodDecision(Method, Reason)`、`IsLocalNtfsVolume`）と `Models/ScanMethod.cs`。判定の順は 設定 → ローカルの NTFS か → 管理者か。判定できないときは通常の走査に倒す。**昇格を促す入口は持たない**（設計からも `CanElevateForFaster`/`canElevate` を削除済み）。ローカルの NTFS の判定はいまは `DriveInfo`（5.1 で `GetVolumeInformation` に寄せるか判断する）。selfcheck は 163 件
 - 3.1: 計測の道具（ScanBench）が動いているとビルドが一時的に失敗する（出力の dll をロックするため）
+- 3.2: `Scanner.RunScan` が `ResolveScanMethod`（指定があればそれ、無ければ `ScanMethodSelector.Decide(path, Config.Instance.UseMftScan, AdminRights.IsElevated)`）で方式を決め、`BeginVolumeLayoutScan`（いまは必ず失敗の理由を返す。5.1 でこの中身だけを本来の形にする）→ 失敗なら理由をログに残して通常の走査。最後の報告とログと完了の表示は**実際に結果を作った方式**
+- 3.2: `ScanTuning.ForcedMethod`（画面からは渡さない）、`ScanProgress.Method`、`LanguageKey.ScanMethodNormal`/`ScanMethodVolumeLayout`（13言語。キー84）
+- 3.2: 方式の判断は `Config.Instance.UseMftScan`（起動時に読む静的な設定）を使うので、**アプリを動かしたまま `Config.txt` を書き換えても次の起動まで効かない**（管理者かどうかも起動時に決まるので整合している）
+- 3.2: 走査の方式は保存しないため、**読み戻したセッションの状態表示には方式が付かない**。切り替えの自己検証は管理者のときは飛ばす（管理者では目録を開けてしまい、切り替えの場面を作れないため）。selfcheck は 166 件

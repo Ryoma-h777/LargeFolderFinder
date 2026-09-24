@@ -78,6 +78,9 @@ FinishedStatus: "Завершено"
 NotFoundMessage: "Совпадающие папки не найдены."
 FolderCountStatus: "Подсчет папок/файлов:"
 RenderingStatus: "Отображение..."
+# scan method
+ScanMethodNormal: "Обычное сканирование"
+ScanMethodVolumeLayout: "Из индекса диска"
 Unknown: "Неизвестно" # Шкала прогресса: отображается, когда общее количество неизвестно.
 LabelError: "Ошибка"
 UnitFolder: " папок"

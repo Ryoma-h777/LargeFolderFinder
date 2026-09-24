@@ -78,6 +78,9 @@ FinishedStatus: "完了"
 NotFoundMessage: "該当するフォルダは見つかりませんでした。"
 FolderCountStatus: "フォルダ/ファイル数:"
 RenderingStatus: "描画中..."
+# scan method
+ScanMethodNormal: "通常の走査"
+ScanMethodVolumeLayout: "目録から"
 Unknown: "不明" # 進捗率表示用: 総数を把握していない時に表示されます。
 LabelError: "エラー"
 UnitFolder: " フォルダ"

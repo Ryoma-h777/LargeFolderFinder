@@ -78,6 +78,9 @@ FinishedStatus: "Terminé"
 NotFoundMessage: "Aucun dossier correspondant trouvé."
 FolderCountStatus: "Comptage dossiers/fichiers :"
 RenderingStatus: "Rendu en cours..."
+# scan method
+ScanMethodNormal: "Analyse standard"
+ScanMethodVolumeLayout: "Depuis l'index du disque"
 Unknown: "Inconnu" # Barre de progression : affiché quand le total est inconnu.
 LabelError: "Erreur"
 UnitFolder: " dossiers"

@@ -78,6 +78,9 @@ FinishedStatus: "已完成"
 NotFoundMessage: "未找到匹配的資料夾。"
 FolderCountStatus: "正在確認資料夾/檔案數量:"
 RenderingStatus: "正在繪製..."
+# scan method
+ScanMethodNormal: "一般掃描"
+ScanMethodVolumeLayout: "來自磁碟目錄"
 Unknown: "未知" # 進捗率表示用: 総数を把握していない時に表示されます。
 LabelError: "錯誤"
 UnitFolder: " 資料夾"

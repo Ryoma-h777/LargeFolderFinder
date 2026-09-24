@@ -78,6 +78,9 @@ FinishedStatus: "已完成"
 NotFoundMessage: "未找到匹配的文件夹。"
 FolderCountStatus: "正在确认文件夹/文件数量:"
 RenderingStatus: "正在渲染..."
+# scan method
+ScanMethodNormal: "常规扫描"
+ScanMethodVolumeLayout: "来自磁盘目录"
 Unknown: "未知" # 进度条显示：总数未知时显示。
 LabelError: "错误"
 UnitFolder: " 文件夹"

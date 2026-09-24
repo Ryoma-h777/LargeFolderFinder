@@ -78,6 +78,9 @@ FinishedStatus: "Finalizado"
 NotFoundMessage: "Nenhuma pasta correspondente encontrada."
 FolderCountStatus: "Contando pastas/arquivos:"
 RenderingStatus: "Renderizando..."
+# scan method
+ScanMethodNormal: "Varredura padrão"
+ScanMethodVolumeLayout: "Do índice do disco"
 Unknown: "Desconhecido" # Barra de progresso: exibido quando o total é desconhecido.
 LabelError: "Erro"
 UnitFolder: " pastas"

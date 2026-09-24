@@ -78,6 +78,9 @@ FinishedStatus: "पूरा हुआ"
 NotFoundMessage: "कोई मिलान करने वाला फ़ोल्डर नहीं मिला।"
 FolderCountStatus: "फ़ोल्डर/फ़ाइल गिनती की जाँच:"
 RenderingStatus: "रेंडर किया जा रहा है..."
+# scan method
+ScanMethodNormal: "सामान्य स्कैन"
+ScanMethodVolumeLayout: "ड्राइव सूची से"
 Unknown: "अज्ञात" # प्रोग्रेस बार डिस्प्ले: दिखाया जाता है जब कुल संख्या ज्ञात नहीं होती है।
 LabelError: "त्रुटि"
 UnitFolder: " फ़ोल्डर"

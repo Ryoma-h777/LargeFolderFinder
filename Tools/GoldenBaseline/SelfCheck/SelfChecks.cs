@@ -63,6 +63,7 @@ internal static class SelfChecks
         RegisterSelfCheckSkipChecks(runner);
         RegisterAdminRightsChecks(runner);
         RegisterScanMethodSelectorChecks(runner);
+        RegisterScanMethodFallbackChecks(runner);
     }
 
     /// <summary>
@@ -3477,6 +3478,153 @@ internal static class SelfChecks
         SelfAssert.That(
             ContainsNonAscii(decision.Reason),
             $"方式 {decision.Method} の理由が日本語ではありません（{decision.Reason}）。");
+    }
+
+    /// <summary>
+    /// 走査の入口の方式の分岐（<see cref="global::LargeFolderFinder.Scanner"/>）の検証項目を登録する
+    /// （ntfs-mft-scan タスク3.2、要件2.2, 2.3, 6.3）。
+    /// </summary>
+    /// <remarks>
+    /// 目録の走査はボリュームを開けないと始められないため、**管理者でないことを利用して**
+    /// 「強制しても通常の走査へ切り替わる」ことを確かめる（design.md: Testing Strategy の6）。
+    /// 管理者のときは切り替えの場面を作れないので飛ばす。
+    /// </remarks>
+    private static void RegisterScanMethodFallbackChecks(SelfCheckRunner runner)
+    {
+        runner.Add("走査の方式を指定して目録の走査を強制しても、始められないときは通常の走査に切り替わって結果が出て、理由と切り替えがログに残る（ntfs-mft-scan 要件2.2, 2.3）", () =>
+        {
+            SelfAssert.SkipIf(
+                global::LargeFolderFinder.AdminRights.IsElevated,
+                "管理者として動いているため、目録の走査を始められずに通常の走査へ切り替わる場面を作れません。管理者でないアカウントで実行すると確かめられます。");
+
+            WithStandardFixture(root =>
+            {
+                var scanRunner = new ScanRunner();
+
+                var forced = scanRunner.RunWithForcedMethod(root, global::LargeFolderFinder.ScanMethodKind.VolumeLayout);
+
+                // 要件2.2: 切り替えた先の通常の走査で結果が出ること（走査が失敗しない）
+                SelfAssert.That(forced.Root != null, "目録の走査を強制した走査が結果の木を返しませんでした。");
+                SelfAssert.That(
+                    forced.FinalReportCount == 1,
+                    $"最後の報告（IsFinal）がちょうど1回届きませんでした（届いた回数: {forced.FinalReportCount}）。切り替えても報告の規約は変わらないはずです。");
+
+                var final = forced.FinalProgress!;
+
+                // 要件2.3: 最後の報告に載るのは、実際に結果を作った方式（切り替えたので通常の走査）
+                SelfAssert.That(
+                    final.Method == global::LargeFolderFinder.ScanMethodKind.NormalEnumeration,
+                    $"最後の報告の方式が、実際に結果を作った方式になっていません（実際: {final.Method}）。目録の走査を始められず通常の走査に切り替えたため、通常の走査が載るはずです。");
+                SelfAssert.That(
+                    final.ProcessedFolders > 0,
+                    $"最後の報告のフォルダ数が0です（実際: {final.ProcessedFolders}）。切り替えた先の走査が何も数えていません。");
+                SelfAssert.That(
+                    final.WorkerCount >= 1,
+                    $"最後の報告のワーカー数が1以上になりません（実際: {final.WorkerCount}）。切り替えた先は通常の走査のはずです。");
+
+                // 切り替えても集計値が変わらないこと（方式を指定しない走査の結果と突き合わせる）
+                var plain = scanRunner.RunWithForcedMethod(root, null);
+                SelfAssert.That(plain.Root != null, "方式を指定しない走査が結果の木を返しませんでした。");
+                AssertSameFlattenedTree(
+                    FlattenScanTree(plain.Root!),
+                    FlattenScanTree(forced.Root!),
+                    "方式の指定なし",
+                    "目録の走査を強制（切り替え後）",
+                    "フィクスチャ");
+
+                // 要件2.2: 切り替えた理由がログに残ること
+                string log = forced.AddedLogText;
+                SelfAssert.That(
+                    log.Length > 0,
+                    "走査の間に本体のログへ何も増えませんでした（切り替えの記録を確かめられません）。");
+                SelfAssert.That(
+                    log.Contains("目録の走査", StringComparison.Ordinal),
+                    $"ログに目録の走査を試みた記録がありません。増えたログ: {log}");
+                SelfAssert.That(
+                    log.Contains("通常の走査に切り替え", StringComparison.Ordinal),
+                    $"ログに通常の走査へ切り替えた記録がありません。増えたログ: {log}");
+                SelfAssert.That(
+                    log.Contains("理由", StringComparison.Ordinal),
+                    $"ログに切り替えた理由がありません。増えたログ: {log}");
+
+                // 要件2.3: 走査の終わりのログに、結果を作った方式が残ること
+                SelfAssert.That(
+                    log.Contains("走査の終わり", StringComparison.Ordinal),
+                    $"走査の終わりのログがありません。増えたログ: {log}");
+
+                // 要件6.3: 方式の記録のために進捗の通知を増やさない（途中の報告に方式は載せない）
+                SelfAssert.That(
+                    forced.InterimMethodReportCount == 0,
+                    $"途中の報告に走査の方式が載っています（{forced.InterimMethodReportCount} 件）。方式は最後の報告だけで意味を持つはずです。");
+                SelfAssert.That(
+                    plain.InterimMethodReportCount == 0,
+                    $"方式を指定しない走査の途中の報告に方式が載っています（{plain.InterimMethodReportCount} 件）。");
+            });
+        });
+
+        runner.Add("走査の方式の指定は走査の調整値にあり、既定は「指定なし」で、既存の調整値の並びを変えない（ntfs-mft-scan 要件2.2、design.md Models > ScanTuning）", () =>
+        {
+            // 画面からは方式を渡さないため、既定は「指定なし」でなければならない
+            var defaults = new global::LargeFolderFinder.ScanTuning();
+            SelfAssert.That(
+                defaults.ForcedMethod == null,
+                $"走査の調整値の方式の指定の既定が「指定なし」ではありません（実際: {defaults.ForcedMethod}）。");
+
+            // 既存の呼び出し（並列度だけを渡す画面と検証ツール）を壊さないよう、並びと名前を固定する
+            string[] expectedParameters = { "ThreadCount", "EnumerationBufferSize", "ForcedMethod" };
+            var constructors = typeof(global::LargeFolderFinder.ScanTuning)
+                .GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+            SelfAssert.That(
+                constructors.Length == 1,
+                $"走査の調整値の作り方が1つではありません（{constructors.Length} 個）。");
+
+            string[] actualParameters = constructors[0].GetParameters().Select(p => p.Name!).ToArray();
+            SelfAssert.That(
+                actualParameters.SequenceEqual(expectedParameters),
+                $"走査の調整値の項目の並びが想定と異なります（期待: {string.Join(", ", expectedParameters)} / 実際: {string.Join(", ", actualParameters)}）。");
+
+            PropertyInfo? forcedMethod = typeof(global::LargeFolderFinder.ScanTuning)
+                .GetProperty("ForcedMethod", BindingFlags.Public | BindingFlags.Instance);
+            SelfAssert.That(
+                forcedMethod != null && forcedMethod.PropertyType == typeof(global::LargeFolderFinder.ScanMethodKind?),
+                "走査の調整値の方式の指定が「指定なし」を表せる形（ScanMethodKind?）ではありません。");
+
+            // 最後の報告の方式は、途中の報告では意味を持たないため既定が通常の走査であること
+            var progress = new global::LargeFolderFinder.ScanProgress();
+            SelfAssert.That(
+                progress.Method == global::LargeFolderFinder.ScanMethodKind.NormalEnumeration,
+                $"進捗の報告の方式の既定が通常の走査ではありません（実際: {progress.Method}）。");
+        });
+
+        runner.Add("走査の方式には、利用者に見せる短い文言が方式ごとに用意されている（ntfs-mft-scan 要件2.3）", () =>
+        {
+            var lm = global::LargeFolderFinder.LocalizationManager.Instance;
+            var texts = new Dictionary<global::LargeFolderFinder.ScanMethodKind, string>();
+
+            foreach (global::LargeFolderFinder.ScanMethodKind method in
+                Enum.GetValues(typeof(global::LargeFolderFinder.ScanMethodKind)))
+            {
+                global::LargeFolderFinder.LanguageKey key =
+                    global::LargeFolderFinder.LocalizationManager.GetScanMethodKey(method);
+                string text = lm.GetText(key);
+
+                SelfAssert.That(
+                    !string.IsNullOrWhiteSpace(text),
+                    $"走査の方式 {method} の文言が空です（キー: {key}）。");
+                SelfAssert.That(
+                    text != key.ToString(),
+                    $"走査の方式 {method} の文言が言語ファイルにありません（キー名 {key} がそのまま返りました）。");
+
+                texts[method] = text;
+            }
+
+            SelfAssert.That(
+                texts.Count >= 2,
+                $"走査の方式の文言が2つ以上ありません（{texts.Count} 件）。");
+            SelfAssert.That(
+                texts.Values.Distinct(StringComparer.Ordinal).Count() == texts.Count,
+                $"走査の方式の文言が重なっています（{string.Join(" / ", texts.Select(t => $"{t.Key}: {t.Value}"))}）。利用者がどちらの方式か見分けられません。");
+        });
     }
 
     /// <summary>

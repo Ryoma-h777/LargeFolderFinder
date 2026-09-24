@@ -78,6 +78,9 @@ FinishedStatus: "Finito"
 NotFoundMessage: "Nessuna cartella corrispondente trovata."
 FolderCountStatus: "Conteggio cartelle/file:"
 RenderingStatus: "Rendering in corso..."
+# scan method
+ScanMethodNormal: "Scansione standard"
+ScanMethodVolumeLayout: "Dall'indice del disco"
 Unknown: "Sconosciuto" # Barra di avanzamento: mostrato quando il totale è sconosciuto.
 LabelError: "Errore"
 UnitFolder: " cartelle"

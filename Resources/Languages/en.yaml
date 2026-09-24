@@ -78,6 +78,9 @@ FinishedStatus: "Finished"
 NotFoundMessage: "No matching folders found."
 FolderCountStatus: "Checking folder/file count:"
 RenderingStatus: "Rendering..."
+# scan method
+ScanMethodNormal: "Standard scan"
+ScanMethodVolumeLayout: "From drive index"
 Unknown: "Unknown" # Progress bar display: Shown when the total count is unknown.
 LabelError: "Error"
 UnitFolder: " folders"

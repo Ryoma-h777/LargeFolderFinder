@@ -51,8 +51,11 @@ namespace LargeFolderFinder
         /// 指定したパスを走査し、結果の木のルートノードを返す。
         /// </summary>
         /// <remarks>
-        /// 末尾の tuning は走査の調整値（ワーカー数・列挙のバッファの大きさ）で、省略時は自動と .NET の既定。
-        /// 走査は決まった数の専用ワーカーが共有の作業の列からフォルダを取り出して行う（<see cref="DirectoryWalker"/>）。
+        /// 末尾の tuning は走査の調整値（ワーカー数・列挙のバッファの大きさ・走査の方式の指定）で、
+        /// 省略時は自動と .NET の既定、方式は <see cref="ScanMethodSelector"/> の決め方に委ねる。
+        /// 通常の走査は決まった数の専用ワーカーが共有の作業の列からフォルダを取り出して行う（<see cref="DirectoryWalker"/>）。
+        /// 目録の走査を選んだ（または指定された）ときは、始められなければ理由をログに記録して
+        /// 通常の走査でやり直す（要件2.2）。
         /// </remarks>
         public static async Task<FolderInfo?> RunScan(string path, long thresholdBytes, int totalFolders, int maxDepth, bool useParallel, bool usePhysicalSize, IProgress<ScanProgress> progress, CancellationToken token, ScanTuning? tuning = null)
         {
@@ -68,6 +71,9 @@ namespace LargeFolderFinder
                 clusterSize = GetClusterSize(path);
             }
 
+            // 走査の方式を決める（要件1.1, 2.1, 2.4, 3.4）。試験と計測のための指定があればそれに従う
+            ScanMethodKind requestedMethod = ResolveScanMethod(path, tuning);
+
             // 並列度は設定と対象（ネットワークかローカルか）から決める。逐次の設定が最優先
             int workerCount = ScanParallelism.Resolve(path, useParallel, tuning?.ThreadCount ?? 0);
             int enumerationBufferSize = tuning?.EnumerationBufferSize ?? 0;
@@ -79,6 +85,17 @@ namespace LargeFolderFinder
             {
                 return await Task.Run(() =>
                 {
+                    if (requestedMethod == ScanMethodKind.VolumeLayout)
+                    {
+                        // 要件2.2: 目録の走査を始められないときは、理由をログに記録して通常の走査でやり直す。
+                        // 利用者には結果と方式だけが見えるため、ここで走査を止めない
+                        string failureReason = BeginVolumeLayoutScan();
+
+                        Logger.Log(
+                            $"{DescribeScanMethod(ScanMethodKind.VolumeLayout)}を始められないため、" +
+                            $"{DescribeScanMethod(ScanMethodKind.NormalEnumeration)}に切り替えます。理由: {failureReason}");
+                    }
+
                     var dir = new DirectoryInfo(path);
                     // ルートノードを先行作成
                     var rootNode = new FolderInfo(dir.FullName, 0, false, dir.LastWriteTime);
@@ -99,6 +116,9 @@ namespace LargeFolderFinder
                     // 並列度の事実は、スキップの書き出しと同じく走査の終わりに1回だけログへ書く
                     Logger.Log($"走査の並列度: ワーカー数 {walkResult.WorkerCount}、同時の列挙の最大 {walkResult.PeakConcurrentEnumerations}");
 
+                    // 要件2.3: 実際に結果を作った方式と件数を、走査の終わりに1回だけログへ書く
+                    Logger.Log($"走査の終わり: 方式 {DescribeScanMethod(ScanMethodKind.NormalEnumeration)}、数えたフォルダ {progressCounter.Value} 件");
+
                     // 正常に完了したときだけ、完了の印・最後の数・スキップの一覧・並列度を載せた進捗を1回報告する。
                     // 取り消し・例外のときは上の呼び出しから例外が伝わるため、ここには来ない。
                     // この報告は走査のスレッドで送る。UI の同期コンテキストへ投げられる報告が、
@@ -109,7 +129,8 @@ namespace LargeFolderFinder
                         skipRecorder,
                         progress,
                         walkResult.WorkerCount,
-                        walkResult.PeakConcurrentEnumerations);
+                        walkResult.PeakConcurrentEnumerations,
+                        ScanMethodKind.NormalEnumeration);
 
                     return rootNode; // 閾値に関わらずルートノードを返す
                 }, token);
@@ -118,6 +139,54 @@ namespace LargeFolderFinder
             {
                 skipRecorder.Flush(path);
             }
+        }
+
+        /// <summary>
+        /// この走査で使う方式を決める（要件1.1, 2.1, 2.4, 3.4）。決めた方式と理由は走査の始めに1回だけログへ書く。
+        /// </summary>
+        /// <param name="path">走査の起点のパス</param>
+        /// <param name="tuning">走査の調整値。方式の指定があればそれに従う（試験と計測のため。画面からは渡らない）</param>
+        private static ScanMethodKind ResolveScanMethod(string path, ScanTuning? tuning)
+        {
+            if (tuning?.ForcedMethod is ScanMethodKind forced)
+            {
+                Logger.Log($"走査の方式の指定: {DescribeScanMethod(forced)}（試験と計測のための指定）");
+                return forced;
+            }
+
+            var decision = ScanMethodSelector.Decide(path, Config.Instance.UseMftScan, AdminRights.IsElevated);
+            Logger.Log($"走査の方式の決定: {DescribeScanMethod(decision.Method)}。理由: {decision.Reason}");
+            return decision.Method;
+        }
+
+        /// <summary>
+        /// 目録の走査を始める（ボリュームを開いて目録の列挙を始める）。始められなければその理由を返す（要件2.2）。
+        /// </summary>
+        /// <returns>始められなかった理由（1行の日本語）。呼び出し側はこれをログに記録して通常の走査へ切り替える</returns>
+        /// <remarks>
+        /// いまはボリュームを開いて目録を列挙する部品が無いため、常に「始められない」を返す。
+        /// 読み取りの部品と木の組み立てが入ると、この関数が開いて列挙し、成功した場合の経路が増える。
+        /// 失敗したときの扱い（理由を記録して通常の走査でやり直す）は、そのときも変わらない。
+        /// </remarks>
+        private static string BeginVolumeLayoutScan()
+        {
+            return "ボリュームを開いて目録を読み出す部品がまだ無いため、目録の列挙を始められませんでした。";
+        }
+
+        /// <summary>
+        /// 走査の方式を、ログに出す短い日本語の言葉で表す。
+        /// </summary>
+        /// <remarks>
+        /// 画面の表示は言語ファイルの文言（<see cref="LocalizationManager.GetScanMethodKey"/>）を使う。
+        /// ログは日本語で残す決まりなので、ここでは翻訳を通さない。
+        /// </remarks>
+        private static string DescribeScanMethod(ScanMethodKind method)
+        {
+            return method switch
+            {
+                ScanMethodKind.VolumeLayout => "目録の走査",
+                _ => "通常の走査",
+            };
         }
 
         /// <summary>
@@ -221,8 +290,9 @@ namespace LargeFolderFinder
         /// <remarks>
         /// 結果の木（CurrentResult）は載せない。完了後の木は RunScan の戻り値で渡るため、
         /// ここで載せると受け手が同じ木の描画を二重に始めてしまう。
+        /// <paramref name="method"/> には**実際に結果を作った方式**を載せる（要件2.3）。
         /// </remarks>
-        private static void ReportFinalProgress(int processed, int total, ScanSkipRecorder skipRecorder, IProgress<ScanProgress> progress, int workerCount, int peakConcurrentEnumerations)
+        private static void ReportFinalProgress(int processed, int total, ScanSkipRecorder skipRecorder, IProgress<ScanProgress> progress, int workerCount, int peakConcurrentEnumerations, ScanMethodKind method)
         {
             progress?.Report(new ScanProgress
             {
@@ -233,7 +303,8 @@ namespace LargeFolderFinder
                 IsFinal = true,
                 Skipped = skipRecorder.Snapshot(),
                 WorkerCount = workerCount,
-                PeakConcurrentEnumerations = peakConcurrentEnumerations
+                PeakConcurrentEnumerations = peakConcurrentEnumerations,
+                Method = method
             });
         }
 

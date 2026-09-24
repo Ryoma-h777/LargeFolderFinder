@@ -86,6 +86,9 @@ namespace LargeFolderFinder
         NotFoundMessage,
         FolderCountStatus,
         RenderingStatus,
+        // # 走査の方式（完了の状態表示に短く添える）
+        ScanMethodNormal,
+        ScanMethodVolumeLayout,
         Unknown, // 進捗率表示用: 総数を把握していない時に表示されます。
         LabelError,
         UnitFolder,
@@ -288,6 +291,24 @@ namespace LargeFolderFinder
         public List<LanguageConfig> GetAvailableLanguages()
         {
             return _availableLanguages;
+        }
+
+        /// <summary>
+        /// 走査の方式に対応する文言のキーを返す（ntfs-mft-scan 要件2.3）。
+        /// 走査の完了の状態表示に、どちらの方式で走査したかを短く添えるために使う。
+        /// </summary>
+        /// <param name="method">走査の方式</param>
+        /// <remarks>
+        /// 方式が増えたときに文言を用意し忘れないよう、対応付けをここに1箇所だけ置く。
+        /// 知らない方式は通常の走査の文言に倒す（表示が空になるより無害なため）。
+        /// </remarks>
+        public static LanguageKey GetScanMethodKey(ScanMethodKind method)
+        {
+            return method switch
+            {
+                ScanMethodKind.VolumeLayout => LanguageKey.ScanMethodVolumeLayout,
+                _ => LanguageKey.ScanMethodNormal,
+            };
         }
 
         public string GetText(LanguageKey key)

@@ -78,6 +78,9 @@ FinishedStatus: "Fertig"
 NotFoundMessage: "Keine passenden Ordner gefunden."
 FolderCountStatus: "Zählen von Ordnern/Dateien:"
 RenderingStatus: "Rendern..."
+# scan method
+ScanMethodNormal: "Standardscan"
+ScanMethodVolumeLayout: "Aus dem Laufwerksindex"
 Unknown: "Unbekannt" # Fortschrittsanzeige: Wird angezeigt, wenn die Gesamtzahl unbekannt ist.
 LabelError: "Fehler"
 UnitFolder: " Ordner"

@@ -78,6 +78,9 @@ FinishedStatus: "Tamamlandı"
 NotFoundMessage: "Eşleşen klasör bulunamadı."
 FolderCountStatus: "Klasör/Dosya sayma:"
 RenderingStatus: "Oluşturuluyor..."
+# scan method
+ScanMethodNormal: "Standart tarama"
+ScanMethodVolumeLayout: "Sürücü dizininden"
 Unknown: "Bilinmiyor" # İlerleme çubuğu ekranı: Toplam sayı bilinmediğinde gösterilir.
 LabelError: "Hata"
 UnitFolder: " klasör"

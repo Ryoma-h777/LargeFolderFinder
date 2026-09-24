@@ -23,6 +23,13 @@ namespace LargeFolderFinder.ViewModels
         private readonly IMainLayoutView _view; // Viewへの参照（MVP/Controllerパターン的利用）
         private readonly ResultFormatter _formatter = new ResultFormatter();
 
+        /// <summary>
+        /// 直前の走査で**実際に結果を作った方式**（ntfs-mft-scan 要件2.3）。
+        /// 走査の最後の報告で受け取り、完了の状態表示に短く添える。
+        /// まだ走査していない・読み戻した結果を見ているときは null で、方式を添えない。
+        /// </summary>
+        private ScanMethodKind? _lastScanMethod;
+
         public SessionData Model => _model;
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -131,6 +138,9 @@ namespace LargeFolderFinder.ViewModels
                 // 走査に実際に使ったワーカー数。最後の報告で受け取り、完了のログに載せる
                 int scanWorkerCount = 0;
 
+                // 前回の走査の方式の表示を持ち越さない（この走査の最後の報告で入れ直す）
+                _lastScanMethod = null;
+
                 var progress = new Progress<ScanProgress>(p =>
                 {
                     try
@@ -142,8 +152,9 @@ namespace LargeFolderFinder.ViewModels
                         // 最終結果の描画は成功の経路の RenderResult（最新の要求だけを反映する仕組み）に任せる
                         if (p.IsFinal)
                         {
-                            // 並列度は最後の報告だけで意味を持つ
+                            // 並列度と走査の方式は最後の報告だけで意味を持つ
                             scanWorkerCount = p.WorkerCount;
+                            _lastScanMethod = p.Method;
 
                             if (hasTotal)
                             {
@@ -277,9 +288,12 @@ namespace LargeFolderFinder.ViewModels
                 if (_view != null)
                 {
                     _view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} " +
-                        $"{string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(sw.Elapsed))}";
+                        $"{string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(sw.Elapsed))}" +
+                        FormatScanMethodSuffix(lm);
                 }
-                Logger.Log(string.Format(AppConstants.LogScanSuccess, _formatter.FormatDuration(sw.Elapsed), scanWorkerCount));
+                Logger.Log(
+                    string.Format(AppConstants.LogScanSuccess, _formatter.FormatDuration(sw.Elapsed), scanWorkerCount) +
+                    $", Method: {_lastScanMethod}");
 
                 // SaveCache is skipped here as per Plan
 
@@ -319,6 +333,25 @@ namespace LargeFolderFinder.ViewModels
                 _model.Cts?.Dispose();
                 _model.Cts = null;
             }
+        }
+
+        /// <summary>
+        /// 完了の状態表示に添える、走査の方式の短い文言を返す（ntfs-mft-scan 要件2.3）。
+        /// どちらの方式で走査したかを利用者が確かめられるようにする。
+        /// </summary>
+        /// <param name="lm">文言を引く先</param>
+        /// <returns>方式が分かっているときは括弧に入れた短い文言。分からないときは空文字列</returns>
+        /// <remarks>
+        /// 方式は走査の最後の報告で分かるため、読み戻した結果を見ているときは添えない（空文字列）。
+        /// </remarks>
+        private string FormatScanMethodSuffix(LocalizationManager lm)
+        {
+            if (_lastScanMethod is not ScanMethodKind method)
+            {
+                return string.Empty;
+            }
+
+            return $" ({lm.GetText(LocalizationManager.GetScanMethodKey(method))})";
         }
 
         /// <summary>
@@ -426,7 +459,7 @@ namespace LargeFolderFinder.ViewModels
                 else if (_model.LastScanDuration != TimeSpan.Zero || _model.TotalFilesScanned > 0)
                 {
                     string countText = _model.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {(_model.Result?.CountFolderRecursive() ?? 0):N0}";
-                    _view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(_model.LastScanDuration))} ({_model.TotalFilesScanned:N0} files){countText}";
+                    _view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(_model.LastScanDuration))} ({_model.TotalFilesScanned:N0} files){countText}{FormatScanMethodSuffix(lm)}";
                 }
                 else
                 {
@@ -643,7 +676,7 @@ namespace LargeFolderFinder.ViewModels
                     else if (session.LastScanDuration != TimeSpan.Zero || session.TotalFilesScanned > 0)
                     {
                         string countText = session.IsCounting ? "" : $" {lm.GetText(LanguageKey.FolderCountStatus)}: {root.CountFolderRecursive():N0}";
-                        view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(session.LastScanDuration))} ({session.TotalFilesScanned:N0} files){countText}";
+                        view.StatusTextBlock.Text = $"{lm.GetText(LanguageKey.FinishedStatus)} {string.Format(lm.GetText(LanguageKey.ProcessingTime), _formatter.FormatDuration(session.LastScanDuration))} ({session.TotalFilesScanned:N0} files){countText}{FormatScanMethodSuffix(lm)}";
                     }
                     else
                     {

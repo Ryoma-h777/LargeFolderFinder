@@ -144,6 +144,24 @@ public sealed class FinalProgressOutcome
 }
 
 /// <summary>
+/// <see cref="ScanRunner.RunWithForcedMethod"/> の結果。走査の方式を指定して走らせたときの結果・最後の報告と、
+/// その走査の間に本体のログへ増えた文字列を持つ（ntfs-mft-scan 要件2.2, 2.3）。
+/// </summary>
+/// <param name="Root">本体の RunScan の戻り値（走査結果のルートノード）</param>
+/// <param name="FinalProgress">受け取った最後の報告（<c>IsFinal</c> が真）。1件も届かなければ null</param>
+/// <param name="FinalReportCount">受け取った最後の報告の件数。正常な完了なら1になるはず</param>
+/// <param name="ProgressReportCount">受け取った途中の報告の件数</param>
+/// <param name="InterimMethodReportCount">途中の報告に既定でない走査の方式が載っていた回数</param>
+/// <param name="AddedLogText">この走査の間に本体のログへ増えた文字列（読めなければ空文字列）</param>
+public sealed record ForcedMethodOutcome(
+    global::LargeFolderFinder.FolderInfo? Root,
+    global::LargeFolderFinder.ScanProgress? FinalProgress,
+    int FinalReportCount,
+    int ProgressReportCount,
+    int InterimMethodReportCount,
+    string AddedLogText);
+
+/// <summary>
 /// <see cref="ScanRunner.RunUntilCancelled"/> の結果。走査がどう終わったかと、届いた報告の件数を持つ
 /// （scan-performance 要件1.6）。
 /// </summary>
@@ -418,6 +436,89 @@ public sealed class ScanRunner : IScanRunner
     }
 
     /// <summary>
+    /// 本体の走査（<see cref="global::LargeFolderFinder.Scanner.RunScan"/>）を、走査の方式を指定して走らせ、
+    /// 最後の報告と、その走査の間に本体のログへ増えた文字列を返す（ntfs-mft-scan 要件2.2, 2.3）。
+    /// 本体に触れる呼び出しをこの層に閉じ込めるための入口であり、報告もログの文言も加工しない。
+    /// </summary>
+    /// <remarks>
+    /// 方式の指定は走査の調整値（<c>ScanTuning.ForcedMethod</c>）で渡す。試験と計測のための指定であり、
+    /// 画面からは渡らない。<paramref name="forcedMethod"/> に null を渡すと、方式は本体の決め方に委ねられる。
+    /// ログは走査の前後の中身を比べ、増えた分だけを返す（この走査が書いた行だけを見られるようにするため）。
+    /// 報告は <see cref="Progress{T}"/> ではなく同期の受け手で受ける。理由は
+    /// <see cref="RunForFinalProgress"/> と同じ（スレッドプールへ投げると届く時点が競合する）。
+    /// </remarks>
+    /// <param name="rootPath">走査の起点のフォルダのパス。実在している必要がある。</param>
+    /// <param name="forcedMethod">指定する走査の方式。null なら指定しない（本体の決め方に従う）。</param>
+    public ForcedMethodOutcome RunWithForcedMethod(
+        string rootPath,
+        global::LargeFolderFinder.ScanMethodKind? forcedMethod)
+    {
+        if (string.IsNullOrEmpty(rootPath))
+        {
+            throw new ArgumentException("基準フォルダのパスが空です。", nameof(rootPath));
+        }
+
+        if (!Directory.Exists(rootPath))
+        {
+            throw new DirectoryNotFoundException($"基準フォルダが見つかりません: {rootPath}");
+        }
+
+        var recorder = new MethodAwareProgressRecorder();
+        string logBefore = ReadCurrentLogText();
+
+        // 他の入口と同じく、呼び出し元のコンテキストに関わらずデッドロックしないようスレッドプール上に切り離して待つ
+        var scanTask = Task.Run(() => global::LargeFolderFinder.Scanner.RunScan(
+            rootPath,
+            thresholdBytes: 0L,
+            totalFolders: 0,
+            maxDepth: int.MaxValue,
+            useParallel: true,
+            usePhysicalSize: false,
+            progress: recorder,
+            token: CancellationToken.None,
+            tuning: new global::LargeFolderFinder.ScanTuning(0, 0, forcedMethod)));
+
+        global::LargeFolderFinder.FolderInfo? root = scanTask.GetAwaiter().GetResult();
+
+        string logAfter = ReadCurrentLogText();
+        string addedLog = logAfter.StartsWith(logBefore, StringComparison.Ordinal)
+            ? logAfter.Substring(logBefore.Length)
+            : logAfter;
+
+        return new ForcedMethodOutcome(
+            root,
+            recorder.LastFinal,
+            recorder.FinalCount,
+            recorder.ProgressCount,
+            recorder.InterimMethodReportCount,
+            addedLog);
+    }
+
+    /// <summary>
+    /// 本体の現在のログファイルの中身を、書き込み中でも読める共有の指定で読む。読めなければ空文字列を返す。
+    /// </summary>
+    private static string ReadCurrentLogText()
+    {
+        string path = global::LargeFolderFinder.Logger.CurrentLogFilePath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        catch (IOException)
+        {
+            // 意図して無視: ログを読めないときは「増えた分が無い」として扱い、判定は呼び出し側（自己検証）に委ねる
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
     /// 本体の走査（<see cref="global::LargeFolderFinder.Scanner.RunScan"/>）を走らせ、
     /// **走査が途中である時点**（最初の途中の報告が届いた時点）で取り消して、その終わり方を返す
     /// （scan-performance 要件1.6）。本体に触れる呼び出しをこの層に閉じ込めるための入口である。
@@ -543,6 +644,74 @@ public sealed class ScanRunner : IScanRunner
             if (Interlocked.Exchange(ref _cancelRequested, 1) == 0)
             {
                 _cts.Cancel();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 進捗の報告をその場で記録し、最後の報告の中身と件数に加えて、
+    /// 途中の報告に走査の方式が載っていた回数も数える受け手（ntfs-mft-scan 要件2.3）。
+    /// </summary>
+    /// <remarks>
+    /// 走査の方式は最後の報告だけで意味を持つ（design.md: Models / ScanProgress）。
+    /// 途中の報告に方式が載っていないことを確かめるため、既定でない方式が載った途中の報告を数える。
+    /// </remarks>
+    private sealed class MethodAwareProgressRecorder : IProgress<global::LargeFolderFinder.ScanProgress>
+    {
+        /// <summary>並列の走査から並行に呼ばれうるため、記録をこのロックで守る</summary>
+        private readonly object _gate = new object();
+
+        private global::LargeFolderFinder.ScanProgress? _lastFinal;
+        private int _finalCount;
+        private int _progressCount;
+        private int _interimMethodReportCount;
+
+        /// <summary>受け取った最後の報告のうち最新のもの。1件も無ければ null</summary>
+        public global::LargeFolderFinder.ScanProgress? LastFinal
+        {
+            get { lock (_gate) { return _lastFinal; } }
+        }
+
+        /// <summary>受け取った最後の報告（<c>IsFinal</c>）の件数</summary>
+        public int FinalCount
+        {
+            get { lock (_gate) { return _finalCount; } }
+        }
+
+        /// <summary>受け取った途中の報告の件数</summary>
+        public int ProgressCount
+        {
+            get { lock (_gate) { return _progressCount; } }
+        }
+
+        /// <summary>途中の報告に既定でない走査の方式が載っていた回数</summary>
+        public int InterimMethodReportCount
+        {
+            get { lock (_gate) { return _interimMethodReportCount; } }
+        }
+
+        /// <inheritdoc />
+        public void Report(global::LargeFolderFinder.ScanProgress value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                if (value.IsFinal)
+                {
+                    _lastFinal = value;
+                    _finalCount++;
+                    return;
+                }
+
+                _progressCount++;
+                if (value.Method != global::LargeFolderFinder.ScanMethodKind.NormalEnumeration)
+                {
+                    _interimMethodReportCount++;
+                }
             }
         }
     }

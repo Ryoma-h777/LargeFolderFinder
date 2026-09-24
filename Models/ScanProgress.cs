@@ -33,5 +33,15 @@ namespace LargeFolderFinder
         /// 意味を持ち、途中の報告では 0
         /// </summary>
         public int PeakConcurrentEnumerations { get; set; }
+
+        /// <summary>
+        /// 実際に結果を作った走査の方式（ntfs-mft-scan 要件2.3）。
+        /// 最後の報告（<see cref="IsFinal"/> が真）だけで意味を持ち、途中の報告では既定の
+        /// <see cref="ScanMethodKind.NormalEnumeration"/> のまま。
+        /// </summary>
+        /// <remarks>
+        /// 目録の走査を始められずに通常の走査へ切り替えたときは、切り替えた先の方式（通常の走査）が入る。
+        /// </remarks>
+        public ScanMethodKind Method { get; set; }
     }
 }
