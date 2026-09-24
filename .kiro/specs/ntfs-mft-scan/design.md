@@ -6,7 +6,7 @@
 
 **Users**: ローカルのドライブの容量の原因を調べる利用者。速さの主張を確かめる開発者。
 
-**Impact**: 走査の入口に方式を選ぶ判断を加え、新しい走査の経路（目録を読む → 木を組み立てる）を並べる。管理者への昇格を尋ねる処理と、起動時に管理者で開く設定を加える。通常の走査の処理（`DirectoryWalker`）と結果の木の形・保存形式には手を入れない。
+**Impact**: 走査の入口に方式を選ぶ判断を加え、新しい走査の経路（目録を読む → 木を組み立てる）を並べる。**アプリのマニフェストを `highestAvailable` にし、管理者の権限を持つ利用者は起動のときに昇格する**（走査のたびに尋ねる処理は持たない）。通常の走査の処理（`DirectoryWalker`）と結果の木の形・保存形式には手を入れない。
 
 ### Goals
 - ローカルの NTFS を管理者として走査するとき、WizTree 以下の所要時間になる
@@ -26,7 +26,7 @@
 ### This Spec Owns
 - 目録をまとめて読む走査の経路（ボリュームを開く、目録を列挙する、木を組み立てる、対象のフォルダへ絞る）
 - 走査の方式を決める判断（ローカルか、NTFS か、管理者か、設定、対象の小ささ）と、通常の走査への切り替え
-- 管理者の権限の判定（いま管理者か、昇格できるか）、走査のたびの昇格の確認、起動時に管理者で開く設定、昇格して開き直したあとに走査を続ける仕組み
+- 起動時の昇格（マニフェストの `highestAvailable`）と、いま管理者かどうかの判定
 - 走査の方式の記録と最小限の表示（完了時にどちらで走査したか）
 - ハードリンクにより合計がディスクの実使用量より大きく出ることの記載（README・同梱の Readme）
 - 目録の走査の集計値を通常の走査と突き合わせる検証と、WizTree との比較の計測の手順・記録
@@ -84,8 +84,8 @@ graph TB
 |---|---|---|---|
 | 目録の読み取り | `FSCTL_QUERY_FILE_LAYOUT`（Windows 8.1 以降、NTFS 専用） | 名前・親・属性・ストリームのサイズを連続で列挙 | 指定は `INCLUDE_NAMES | INCLUDE_STREAMS | INCLUDE_STREAMS_WITH_NO_CLUSTERS_ALLOCATED | INCLUDE_EXTRA_INFO`。範囲の情報は含めない |
 | ボリュームの判定 | `GetVolumeInformation` のファイルシステム名、`DriveInfo` | NTFS か、ローカルか | 一次の判定。失敗したら通常の走査 |
-| 権限の判定 | `WindowsIdentity`/`WindowsPrincipal`、トークンの昇格の種類 | いま管理者か、昇格できるか | 昇格できない利用者には尋ねない（要件3.2） |
-| 昇格 | `Process.Start` の `runas` と起動の引数 | 開き直して走査を続ける | 既存のメニューの仕組みを使い、対象のパスを引数で渡す |
+| 権限の判定 | `WindowsIdentity`/`WindowsPrincipal` | いま管理者として動いているか | 方式の選択に使う |
+| 起動時の昇格 | アプリのマニフェスト（`requestedExecutionLevel level="highestAvailable"`） | 管理者の権限を持つ利用者は起動のときに昇格する | `requireAdministrator` は採らない（管理者でない利用者が起動できなくなるため）。走査のたびに尋ねる処理は持たない |
 
 ## File Structure Plan
 
@@ -100,18 +100,16 @@ Models/
 └── VolumeFileEntry.cs      # 目録の1件（ファイル参照番号、親の参照番号、名前、属性、論理サイズ、更新日時）
 Helpers/
 ├── Win32Volume.cs          # ボリュームを開く・目録を列挙する・ファイルシステム名を得る OS の直接呼び出し
-└── AdminRights.cs          # いま管理者か、昇格できるか、昇格して開き直す
-Models/
-└── StartupOptions.cs       # 起動の引数（走査の対象のパス）
+└── AdminRights.cs          # いま管理者として動いているか
+app.manifest                # requestedExecutionLevel を highestAvailable にする（新設）
 ```
 
 ### Modified Files
 - `Services/Scanner.cs` — 走査の方式を決め、目録の経路か通常の経路のどちらかを実行する。進捗と最後の報告の規約は変えない
 - `Models/ScanProgress.cs` — 最後の報告に使った走査の方式を載せる
-- `Models/Config.cs` と `Config.txt` — `UseMftScan`（既定 true）、`AskToElevateForMftScan`（既定 true）、`OpenAsAdminOnStartup`（既定 false）
-- `ViewModels/SessionViewModel.cs` — 走査の開始時に昇格を尋ね、断られたら続ける。完了のログと状態表示に走査の方式を含める
-- `App.xaml.cs` — 起動の引数の解釈、起動時に管理者で開く設定の処理
-- `Views/MainWindow.xaml.cs` — 起動の引数で指定された対象の走査を始める。既存の「管理者として開き直す」から対象を引き継ぐ
+- `Models/Config.cs` と `Config.txt` — `UseMftScan`（既定 true。目録の走査を使うかどうか）
+- `ViewModels/SessionViewModel.cs` — 完了のログと状態表示に走査の方式を含める
+- `LargeFolderFinder.csproj` — マニフェストを組み込む設定（`ApplicationManifest`）
 - `Services/LocalizationManager.cs` と `Resources/Languages/*.yaml`（13言語） — 昇格を尋ねる文言、走査の方式の表示の文言
 - `README.md`・`Resources/Readme/Readme_*.txt`（13言語） — 新しい設定と、ハードリンクにより合計が大きく出ること
 - `Tools/GoldenBaseline/Scan/`・`SelfCheck/SelfChecks.cs` — 目録の走査の検証（管理者でなければ飛ばす）
@@ -128,21 +126,16 @@ graph TB
     Cfg -- はい --> Local{対象はローカルの NTFS か}
     Local -- いいえ --> Normal
     Local -- はい --> Admin{いま管理者か}
+    Admin -- いいえ --> Normal
     Admin -- はい --> Small{対象が小さいか}
     Small -- はい --> Normal
     Small -- いいえ --> Mft[目録の走査]
-    Admin -- いいえ --> CanElev{昇格できる利用者か}
-    CanElev -- いいえ --> Normal
-    CanElev -- はい --> Ask{尋ねる設定か}
-    Ask -- いいえ --> Normal
-    Ask -- はい --> Dialog[管理者で開き直すか尋ねる]
-    Dialog -- 断る/拒否 --> Normal
-    Dialog -- 開き直す --> Restart[対象を引数に渡して昇格して起動]
     Mft -- 読み取りに失敗 --> Normal
 ```
 
-- 「対象が小さいか」の基準は実測で決める（目録はボリューム全体を読むため、小さなフォルダでは通常の走査のほうが速い）
-- 昇格して開き直した新しいプロセスは、引数の対象の走査を自動で始める
+- 管理者かどうかは起動のときに決まる（マニフェストの `highestAvailable`）。**走査の途中で昇格を促さない**
+- 管理者でない利用者には、速い方式が使えないことを知らせる表示もしない（要件3.4・3.5）
+- 「対象が小さいか」の基準は、まず暫定の値を入れ、管理者での計測（利用者の作業）の結果で確定する
 
 ### 目録の走査
 ```mermaid
@@ -182,9 +175,9 @@ sequenceDiagram
 | 2.2 | 失敗したら切り替えて完了させる | Scanner（切り替え）、MftScanner（失敗の伝え方） | 方式の決定 |
 | 2.3 | どちらの方式で走査したか分かる | ScanProgress（方式）、SessionViewModel（表示とログ） | — |
 | 2.4 | 使わない設定 | Config、ScanMethodSelector | 方式の決定 |
-| 3.1〜3.5 | 昇格を尋ねる条件と断られたときの動き | AdminRights、SessionViewModel、Config、LocalizationManager | 方式の決定 |
-| 3.6, 3.7 | 起動時に管理者で開く設定 | App、AdminRights、Config | — |
-| 3.8 | 管理者でなくても起動できる | マニフェストで要求しない（変更しない） | — |
+| 3.1, 3.2 | 起動時の昇格（管理者を持つ人だけ） | app.manifest（`highestAvailable`） | — |
+| 3.3 | 管理者でない利用者も起動できる | app.manifest（`requireAdministrator` を使わない） | — |
+| 3.4, 3.5 | 走査のたびに昇格を促さない | ScanMethodSelector（管理者でなければ通常の走査） | 方式の決定 |
 | 4.1, 4.2 | アクセス権の無い場所とハードリンクの数え方 | MftScanner | 目録の走査 |
 | 4.3 | ハードリンクの注意の記載 | README、同梱の Readme 13言語 | — |
 | 4.4, 4.5 | 同じ大きさ・同じ換算 | MftScanner（無名のストリームの論理サイズ、換算の式） | — |
@@ -201,14 +194,14 @@ sequenceDiagram
 
 | Component | Layer | Intent | Req Coverage | Key Dependencies |
 |---|---|---|---|---|
-| ScanMethodSelector | Services | 走査の方式を決める | 1.1, 2.1, 2.4, 5.3 | AdminRights, Win32Volume (P0) |
+| ScanMethodSelector | Services | 走査の方式を決める | 1.1, 2.1, 2.4, 3.4, 5.3 | AdminRights, Win32Volume (P0) |
 | VolumeLayoutReader | Services | 目録を連続して列挙する | 1.2〜1.5 | Win32Volume (P0) |
 | MftScanner | Services | 木を組み立て、絞り、合計する | 1.3, 4.1〜4.6, 5.1, 5.2, 6.1〜6.3, 6.5 | VolumeLayoutReader, FolderInfo, ScanSkipRecorder (P0) |
-| AdminRights | Helpers | 権限の判定と昇格 | 3.1〜3.7 | なし |
+| AdminRights | Helpers | いま管理者として動いているかの判定 | 3.4 | なし |
 | Win32Volume | Helpers | OS の直接呼び出し | 1.2〜1.4, 2.1 | なし |
 | Scanner（変更） | Services | 方式の選択・切り替え・進捗・最後の報告 | 1.1, 2.2, 2.3, 6.3 | ScanMethodSelector, MftScanner, DirectoryWalker (P0) |
-| Config（変更） | Models | 3つの設定 | 2.4, 3.5, 3.6 | なし |
-| App / StartupOptions（変更・新設） | Views / Models | 起動の引数と起動時の昇格 | 3.6, 3.7 | AdminRights (P0) |
+| Config（変更） | Models | 目録の走査を使うかどうかの設定 | 2.4 | なし |
+| app.manifest（新設） | 配布 | 起動時の昇格 | 3.1, 3.2, 3.3 | なし |
 
 ### Services
 
@@ -284,15 +277,10 @@ public static class AdminRights
 {
     /// <summary>いま管理者として動いているか。</summary>
     public static bool IsElevated { get; }
-
-    /// <summary>いまの利用者が管理者として開き直せるか（管理者の一員か）。</summary>
-    public static bool CanElevate { get; }
-
-    /// <summary>管理者として開き直す。走査の対象を引数で渡す。成功したら true（呼び出し側が終了する）。</summary>
-    public static bool TryRestartAsAdmin(string? scanTargetPath);
 }
 ```
-- `CanElevate` はトークンの昇格の種類（制限つき＝昇格できる）と管理者の一員かの両方で判断する。判断が付かないときは false（尋ねない）
+- 起動時の昇格はマニフェストが行うので、アプリの中で昇格を試みる処理は持たない
+- 既存の「管理者として開き直す」メニューは `architecture-refactoring` の担当（本フィーチャーでは触らない）
 
 #### Win32Volume
 - `CreateFile`（ボリュームのハンドル、読み取りのみ）、`DeviceIoControl`（`FSCTL_QUERY_FILE_LAYOUT`）、`GetVolumeInformation`（ファイルシステム名）
@@ -303,20 +291,18 @@ public static class AdminRights
 - `VolumeFileEntry.cs`: **public**（検証ツールが並びを作って渡すため）。`readonly record struct VolumeFileEntry(ulong FileId, ulong ParentFileId, string Name, bool IsDirectory, long LogicalSize, DateTime LastWriteTime)`
 - `ScanProgress`（変更）: `ScanMethodKind Method`（最後の報告だけで意味を持つ）
 - `ScanTuning`（変更）: `ScanMethodKind? ForcedMethod = null` を足す。**試験と計測のために方式を指定できる**（目録の走査を強制して失敗の切り替えを確かめる、計測で方式を比べる）。画面からは渡さない
-- `Config`（変更）: `UseMftScan = true`、`AskToElevateForMftScan = true`、`OpenAsAdminOnStartup = false`
+- `Config`（変更）: `UseMftScan = true`（目録の走査を使うかどうか。管理者でなければ使われない）
 - `StartupOptions.cs`: 起動の引数（`--scan <path>`）の解釈
 
 ### 利用者への提示
 - 走査の完了時: 状態表示に方式を短く示す（既存の完了の文言に添える）。ログには方式・件数・はぐれの件数
-- 昇格の確認: 「速い方式（ドライブの目録を読む）を使うには管理者で開き直す必要があります。開き直しますか」。断る選択肢と、次回から尋ねない選択肢
 - ハードリンクの注意: README と同梱の Readme の設定の説明に、「複数の名前を持つファイル（Windows の更新の一部など）は名前ごとに数えるため、合計がディスクの実使用量より大きく出ることがあります」を添える
 
 ## Error Handling
 - ボリュームを開けない・目録の列挙が失敗した → 理由をログに記録し、**その走査を通常の走査で最初からやり直す**（要件2.2）。利用者には結果と方式だけが見える
 - 目録の中の壊れた項目・到達できないはぐれ → 結果に含めず件数を記録する（走査は止めない）
 - 取り消し → `OperationCanceledException`。通常の走査と同じ経路
-- 昇格の拒否 → そのまま通常の走査（要件3.4）
-- 管理者で開き直す起動に失敗 → ログに記録し、いまのプロセスで通常の走査を続ける
+- 起動のときの昇格が拒否された → Windows がアプリを起動しない（要件3.2）
 
 ## Testing Strategy
 
@@ -352,5 +338,6 @@ public static class AdminRights
 
 ## Migration Strategy
 - 保存形式・木の形は変えないので、既存の履歴はそのまま読める
-- 新しい設定は3つとも既定で今までの動きを変えない（`UseMftScan` は true だが、管理者でなければ使われない）
+- 新しい設定は1つだけで、既定で今までの動きを変えない（`UseMftScan` は true だが、管理者でなければ使われない）
+- **マニフェストの変更で、管理者の権限を持つ利用者は起動のたびに UAC の確認が出るようになる**（これまでは出なかった）。README と同梱の Readme で知らせる
 - 新しい `Config.txt` を古い版のアプリが読むと未知のキーで解析に失敗して既定に戻る（`scan-performance` と同じ性質。README に記載済みの注意を更新する）
