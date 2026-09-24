@@ -225,31 +225,41 @@ public static class ScanMethodSelector
 }
 ```
 - `CanElevateForFaster` は「いま通常の走査だが、管理者になれば目録の走査が使える」ことを示す（画面が昇格を尋ねる判断に使う）
-- 対象の小ささの基準は実現性の確認で決める（暫定: 対象がドライブのルートでなく、かつ配下のフォルダ数が明らかに少ないと分かる場合。判断が付かないときは目録の走査を選ぶ）
+- 対象の小ささの基準は、まず暫定の値を入れ（対象がドライブのルートでなく、配下のフォルダ数が明らかに少ないと分かる場合。判断が付かないときは目録の走査を選ぶ）、**管理者での計測（利用者の作業）の結果で確定する**
 
 #### VolumeLayoutReader
 ```csharp
 internal sealed class VolumeLayoutReader : IDisposable
 {
-    /// <summary>ボリュームを読み取りだけで開く。NTFS でない・開けないときは例外。</summary>
+    /// <summary>ボリュームを読み取りだけで開く。NTFS でない・開けない（管理者でない）ときは例外。</summary>
     public static VolumeLayoutReader Open(string volumeRoot);
 
-    /// <summary>目録を連続して列挙する。1件はファイルまたはフォルダで、名前ごとに1件返す。</summary>
+    /// <summary>目録を連続して列挙する。1件はファイルまたはフォルダの1つの名前。</summary>
     public IEnumerable<VolumeFileEntry> EnumerateEntries(CancellationToken token);
+
+    /// <summary>指定したパスのファイル参照番号を求める（対象のフォルダへの絞り込みに使う）。</summary>
+    public static ulong GetFileId(string path);
 }
 ```
+- **管理者が必要なのはこの部品だけ**。ここから先（木の組み立て）は `MftScanner` が受け取った並びだけで動く
+- この部品は internal のままでよい（検証ツールから呼ぶのは `MftScanner.Build` と `ScanMethodSelector.Decide`）
 - 指定は `INCLUDE_NAMES | INCLUDE_STREAMS | INCLUDE_STREAMS_WITH_NO_CLUSTERS_ALLOCATED | INCLUDE_EXTRA_INFO`
 - 短縮名（DOS の印）は返さない。無名のストリームの論理サイズだけを `LogicalSize` に入れる（ADS は数えない）
 - 予約レコード（索引 0〜15。ただしルートの 5 は除く）は返さない
 - 読み取りだけで開き、書き込みの呼び出しを使わない
 
 #### MftScanner
+**目録の読み取りと木の組み立てを分ける。** `MftScanner` は「目録の1件の並び」を受け取るだけの純粋な処理にし、ボリュームを開く部分（管理者が必要）を持たない。これにより、**木の組み立て・ハードリンクの数え方・はぐれ・予約の項目の除外・対象のフォルダへの絞り込み・物理サイズ換算・進み具合・取り消しを、管理者でなくても作った並びで確かめられる**（要件4.1〜4.6、5.1、5.2、6.1〜6.3 の検証が自動で回る）。
+
 ```csharp
-internal static class MftScanner
+// 検証ツールから直接呼べるよう public（ScanParallelism・ScanTuning と同じ扱い。InternalsVisibleTo は使わない）
+public static class MftScanner
 {
-    /// <summary>目録から木を組み立て、対象のパスの配下だけを返す。</summary>
-    public static MftScanResult Scan(
+    /// <summary>目録の並びから木を組み立て、対象のパスの配下だけを返す。ボリュームは開かない。</summary>
+    public static MftScanResult Build(
         string rootPath,
+        ulong rootFileId,
+        IEnumerable<VolumeFileEntry> entries,
         bool usePhysicalSize,
         long clusterSize,
         ScanSkipRecorder skipRecorder,
@@ -257,8 +267,10 @@ internal static class MftScanner
         CancellationToken token);
 }
 
-internal readonly record struct MftScanResult(FolderInfo? Root, int EntryCount, int OrphanCount);
+public readonly record struct MftScanResult(FolderInfo? Root, int EntryCount, int OrphanCount);
 ```
+- `rootFileId` は対象のパスのファイル参照番号（ドライブのルートなら索引5）。呼び出し側（`Scanner`）が求めて渡す
+- 検証では、作った `VolumeFileEntry` の並び（ハードリンク・短縮名・はぐれ・予約の項目・深い階層を含む）を渡して結果を確かめる
 - 物理サイズ換算は通常の走査と同じ式（クラスタの大きさへの切り上げ）
 - ルートのノードの `Name` は完全パス、子は `Parent` を設定してから `lock (Children)` の下で一括追加（`scan-performance` の規約）
 - 対象がドライブのルートでないときは、対象のファイル参照番号を求め、その配下だけを木にする
@@ -288,8 +300,9 @@ public static class AdminRights
 
 ### Models
 - `ScanMethod.cs`: `ScanMethodKind` と `ScanMethodDecision`（上記）
-- `VolumeFileEntry.cs`: `readonly record struct VolumeFileEntry(ulong FileId, ulong ParentFileId, string Name, bool IsDirectory, long LogicalSize, DateTime LastWriteTime)`
+- `VolumeFileEntry.cs`: **public**（検証ツールが並びを作って渡すため）。`readonly record struct VolumeFileEntry(ulong FileId, ulong ParentFileId, string Name, bool IsDirectory, long LogicalSize, DateTime LastWriteTime)`
 - `ScanProgress`（変更）: `ScanMethodKind Method`（最後の報告だけで意味を持つ）
+- `ScanTuning`（変更）: `ScanMethodKind? ForcedMethod = null` を足す。**試験と計測のために方式を指定できる**（目録の走査を強制して失敗の切り替えを確かめる、計測で方式を比べる）。画面からは渡さない
 - `Config`（変更）: `UseMftScan = true`、`AskToElevateForMftScan = true`、`OpenAsAdminOnStartup = false`
 - `StartupOptions.cs`: 起動の引数（`--scan <path>`）の解釈
 
@@ -309,14 +322,20 @@ public static class AdminRights
 
 **自動の試験は管理者ではない状態で走る**ため、目録の走査そのものは自動では確かめられない。次の形にする。
 
-### 自己検証に加える項目（管理者でなければ「飛ばした理由」を残して飛ばす）
+### 検証の足場（先に用意する）
+- **自己検証に「飛ばした」の状態を足す**（いまは成功か失敗の2つだけ）。飛ばした項目は名前と理由を出し、**失敗として数えない**（`dotnet test` は緑のまま）
+- **既存の自己検証のうち、管理者では成り立たない項目を逆に飛ばす**。`scan-golden-baseline` の「アクセス拒否の付与・解除は管理者権限を必要としない」は管理者でないことを前提にしているため、管理者で実行すると必ず落ちる
+- **`MftScanner` は目録の並びを受け取る形**なので、木の組み立ての検証は管理者でなくても回る。管理者が必要なのは `VolumeLayoutReader` の実機確認だけ
+
+### 自己検証に加える項目
 1. **方式の決定（1.1, 2.1, 2.4, 5.3）**: ローカルの NTFS・UNC・NTFS 以外・管理者でない・設定で無効のそれぞれで、`ScanMethodSelector.Decide` が期待どおりの方式と `CanElevateForFaster` を返す（管理者の状態は引数で渡すので、管理者でなくても確かめられる）
 2. **権限の判定（3.1, 3.2）**: `AdminRights.IsElevated` と `CanElevate` が例外を投げず、いまの環境の実際の状態と矛盾しない
-3. **目録の走査と通常の走査の一致（4.4, 4.5, 7.1）**: 一時フォルダに作ったフィクスチャを両方の方式で走査し、パスとサイズの一覧が一致する（アクセス権の無いフォルダを除いた比較）。**管理者のときだけ実行**
-4. **アクセス権の無い場所（1.3, 4.1）**: アクセス拒否のフォルダを含むフィクスチャで、目録の走査では中身が数えられ、通常の走査では数えられないことを確かめる。**管理者のときだけ**
-5. **予約レコードとはぐれ（4.6）**: 結果の木に `$MFT` などの管理用の項目が含まれない。**管理者のときだけ**
-6. **対象がフォルダのとき（5.1, 5.2）**: フィクスチャの中のフォルダを対象にして、配下だけが結果になる。**管理者のときだけ**
-7. **取り消しと進み具合（6.1〜6.3）**: 目録の走査を途中で取り消すと取り消しの例外になり、最後の報告が送られない。**管理者のときだけ**
+3. **木の組み立て（4.2, 4.6, 5.1, 5.2, 6.5）**: 作った目録の並び（ハードリンクの別名・短縮名・はぐれ・予約の項目・深い階層）を `MftScanner.Build` に渡し、ノードの集合・合計・はぐれの件数・絞り込みが期待どおりになる。**管理者は不要**
+4. **物理サイズ換算（4.5）**: 同じ並びを換算あり・なしで組み立て、通常の走査と同じ式になる。**管理者は不要**
+5. **進み具合と取り消し（6.1〜6.3）**: 件数の報告が届くこと、途中で取り消すと取り消しの例外になり最後の報告が送られないこと。**管理者は不要**
+6. **失敗したときの切り替え（2.2, 2.3）**: 方式を指定して目録の走査を強制し、ボリュームを開けない（管理者でない）ときに通常の走査へ切り替わって結果が出て、理由がログに残る。**管理者でないことを利用して確かめる**
+7. **通常の走査との一致（4.4, 7.1）**: 一時フォルダのフィクスチャを両方の方式で走査し、パスとサイズの一覧が一致する（アクセス権の無い場所を除く）。**管理者のときだけ実行（そうでなければ飛ばす）**
+8. **アクセス権の無い場所（1.3, 4.1）**: アクセス拒否のフォルダを含むフィクスチャで、目録の走査では中身が数えられることを確かめる。**管理者のときだけ**
 
 ### 管理者での確認の手順（利用者が行う）
 - 管理者のコマンドプロンプトから検証ツールの `selfcheck` を実行すると、飛ばしていた項目が実際に走る
