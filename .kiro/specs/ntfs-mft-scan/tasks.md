@@ -136,3 +136,6 @@
 ## Implementation Notes
 - 1.1: 自己検証に「飛ばした」を足した（`CheckStatus`、`CheckOutcome.Pass/Fail/Skip`、`SelfAssert.Skip/SkipIf`、`SelfCheckRunner.BuildReport`）。まとめは「N 件中 M 件が失敗、K 件を飛ばしました。」で、飛ばしは終了コードに影響しない。既存の「Deny ACE の付与・解除は管理者を必要としない」の項目は**管理者のときだけ飛ばす**（以前は管理者では必ず落ちていた）。selfcheck は 152→155 件
 - 1.1: 開発中は**利用者のアプリが起動していると本体のビルドが失敗する**（出力の exe がロックされる）。勝手に終了させず、利用者に閉じてもらう
+- 1.2: **`FSCTL_QUERY_FILE_LAYOUT` は管理者が必須**と実測で確定した。ボリュームを権限なし・`FILE_READ_ATTRIBUTES` だけで開くと「デバイスを直接開いた」形になり、ファイルシステムまで届かない（エラー1）。`FILE_READ_DATA` を求めると非管理者では開けない（エラー5）。フォルダのハンドルでは通らない（エラー87）。Microsoft 純正の `fsutil file layout` も非管理者では拒否される
+- 1.2: 制御コードとフラグの正しい値（Windows SDK のヘッダで確認）: `FSCTL_QUERY_FILE_LAYOUT = 0x00090277`、`RESTART=0x01`・`INCLUDE_NAMES=0x02`・`INCLUDE_STREAMS=0x04`・`INCLUDE_EXTRA_INFO=0x10`・`INCLUDE_STREAMS_WITH_NO_CLUSTERS_ALLOCATED=0x20`。`RESTART` は**最初と再開のときだけ**付ける（毎回付けると先頭から繰り返す）。入力は 8 バイト境界に揃える（`METHOD_NEITHER` のため）
+- 1.2: 使い捨ての確認用コマンド `Tools/ScanBench/LayoutProbe.cs`（`ScanBench.exe layout-probe C:`）。管理者で実行すれば、全件の列挙の時間・取れる値・`FileInfo.Length` との一致・アクセス権の無い場所の扱いが出る。**目録の出力を読み解く処理は非管理者では1件も返らないため、一度も動いていない**（正しさは管理者での実行で初めて分かる）。再開するときはここから

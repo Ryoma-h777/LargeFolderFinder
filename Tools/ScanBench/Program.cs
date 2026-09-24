@@ -308,6 +308,9 @@ internal static class Program
     /// <summary>引数や前提の誤りで計測できないことを表す終了コード。</summary>
     private const int ExitCodeInvalidUsage = 2;
 
+    /// <summary>目録の読み取りを試す使い捨ての下位コマンドの名前（tasks.md 1.2）。</summary>
+    private const string LayoutProbeCommand = "layout-probe";
+
     /// <summary>1バイトを MB に直す割る数。</summary>
     private const double BytesPerMegabyte = 1024.0 * 1024.0;
 
@@ -332,6 +335,19 @@ internal static class Program
 
         try
         {
+            // layout-probe は tasks.md 1.2 の早い段階の確認のための使い捨ての下位コマンド。
+            // 5.1 と 6.1 で本来の部品ができたら、この分岐ごと取り除く。
+            if (args[0] == LayoutProbeCommand)
+            {
+                if (args.Length >= 2 && args[1] == "--help")
+                {
+                    LayoutProbe.PrintUsage();
+                    return ExitCodeSuccess;
+                }
+
+                return LayoutProbe.Run(args[1..]);
+            }
+
             return RunBenchCore(args);
         }
         catch (Exception ex)
@@ -597,6 +613,11 @@ internal static class Program
         Console.WriteLine("                     数百万ファイルの対象でメモリの列を比べるときに使う");
         Console.WriteLine("  --label TEXT       出力に載せる対象の説明（例: 「システムドライブ全体」）。省略時は「(ラベルなし)」");
         Console.WriteLine("  --help             この使い方を表示する");
+        Console.WriteLine();
+        Console.WriteLine("下位コマンド:");
+        Console.WriteLine("  layout-probe <drive> [--help]");
+        Console.WriteLine("                     ボリュームの目録をまとめて読む方式（FSCTL_QUERY_FILE_LAYOUT）が使えるかを確かめる。");
+        Console.WriteLine("                     tasks.md 1.2 の早い段階の確認のための使い捨てで、5.1 と 6.1 で取り除く");
         Console.WriteLine();
         Console.WriteLine("出力: タブ区切りの1行ずつ。1回目は「初回」、2回目以降は「温まった」と区別する。");
         Console.WriteLine("      パスそのものは出さない。対象は --label で表す");
